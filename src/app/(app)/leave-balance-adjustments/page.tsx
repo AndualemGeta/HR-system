@@ -1,16 +1,20 @@
 import { LeaveType } from "@prisma/client";
 import { AsyncForm } from "@/components/phase2/async-form";
 import { Badge } from "@/components/ui/badge";
+import { canViewLeaveBalanceForEmployee } from "@/lib/phase5-access";
 import { prisma } from "@/lib/prisma";
 import { hasPermission } from "@/lib/rbac";
+import { employeeScopeSelect, filterEmployeeIdLinkedRecords, filterVisibleEmployees } from "@/lib/scope";
 import { requirePagePermission } from "@/lib/security/page-auth";
 
 export default async function LeaveBalanceAdjustmentsPage() {
   const principal = await requirePagePermission("leave_balance.view");
-  const [adjustments, employees] = await Promise.all([
+  const [allAdjustments, allEmployees] = await Promise.all([
     prisma.leaveBalanceAdjustment.findMany({ orderBy: { createdAt: "desc" }, take: 200 }),
-    prisma.employee.findMany({ orderBy: { employeeId: "asc" }, take: 500 })
+    prisma.employee.findMany({ select: employeeScopeSelect, orderBy: { employeeId: "asc" }, take: 500 })
   ]);
+  const adjustments = filterEmployeeIdLinkedRecords(principal, allAdjustments, allEmployees, canViewLeaveBalanceForEmployee);
+  const employees = filterVisibleEmployees(principal, allEmployees, canViewLeaveBalanceForEmployee);
   return (
     <>
       <header className="page-header"><div className="page-title"><h2>Leave Balance Adjustments</h2><p>Approved corrections to employee leave balances.</p></div></header>

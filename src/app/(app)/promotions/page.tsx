@@ -3,17 +3,21 @@ import { EmployeeLevel, EmployeeRole } from "@prisma/client";
 import { AsyncForm } from "@/components/phase2/async-form";
 import { Badge } from "@/components/ui/badge";
 import { prisma } from "@/lib/prisma";
-import { canViewLifecycleRecord } from "@/lib/phase3-access";
+import { canCreateLifecycleRecord, canViewLifecycleRecord } from "@/lib/phase3-access";
 import { employeeToScope } from "@/lib/phase2-access";
 import { canUpdateSalary, hasPermission } from "@/lib/rbac";
+import { employeeScopeSelect, filterVisibleEmployees } from "@/lib/scope";
 import { requirePagePermission } from "@/lib/security/page-auth";
 
 export default async function PromotionsPage() {
   const principal = await requirePagePermission("promotion.view");
-  const [employees, promotions] = await Promise.all([
-    prisma.employee.findMany({ orderBy: { fullName: "asc" }, take: 200 }),
+  const [allEmployees, promotions] = await Promise.all([
+    prisma.employee.findMany({ select: employeeScopeSelect, orderBy: { fullName: "asc" }, take: 200 }),
     prisma.promotionRequest.findMany({ include: { employee: true }, orderBy: { createdAt: "desc" }, take: 100 })
   ]);
+  const employees = filterVisibleEmployees(principal, allEmployees, (user, employee) =>
+    canCreateLifecycleRecord(user, employee, "promotion.create")
+  );
   const visiblePromotions = promotions.filter((promotion) =>
     canViewLifecycleRecord(principal, employeeToScope(promotion.employee), "promotion.view")
   );

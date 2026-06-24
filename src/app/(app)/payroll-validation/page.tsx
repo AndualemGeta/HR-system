@@ -1,12 +1,17 @@
 import { AsyncForm } from "@/components/phase2/async-form";
 import { Badge } from "@/components/ui/badge";
+import { canViewPayrollInput, canViewRestrictedCompensation } from "@/lib/phase45-access";
 import { prisma } from "@/lib/prisma";
 import { hasPermission } from "@/lib/rbac";
+import { employeeScopeSelect, toEmployeeScope } from "@/lib/scope";
 import { requirePagePermission } from "@/lib/security/page-auth";
 
 export default async function PayrollValidationPage() {
   const principal = await requirePagePermission("payroll_validation.view");
-  const issues = await prisma.payrollValidationIssue.findMany({ include: { employee: { select: { employeeId: true, fullName: true } }, payrollBatch: { select: { batchName: true } } }, orderBy: [{ status: "asc" }, { severity: "asc" }, { createdAt: "desc" }], take: 200 });
+  const allIssues = await prisma.payrollValidationIssue.findMany({ include: { employee: { select: employeeScopeSelect }, payrollBatch: { select: { batchName: true } } }, orderBy: [{ status: "asc" }, { severity: "asc" }, { createdAt: "desc" }], take: 200 });
+  const issues = allIssues.filter((issue) =>
+    issue.employee ? canViewPayrollInput(principal, toEmployeeScope(issue.employee)) : canViewRestrictedCompensation(principal)
+  );
   return (
     <>
       <header className="page-header"><div className="page-title"><h2>Payroll Validation</h2><p>Payroll blockers, warnings, and review issues from readiness and calculation checks.</p></div></header>

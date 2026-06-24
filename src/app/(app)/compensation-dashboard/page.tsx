@@ -1,15 +1,25 @@
 import { Badge } from "@/components/ui/badge";
+import { canViewCommissionForEmployee, canViewPayrollInput, canViewRestrictedCompensation, canViewSalaryReviewForEmployee } from "@/lib/phase45-access";
 import { prisma } from "@/lib/prisma";
+import { employeeScopeSelect, filterEmployeeIdLinkedRecords, visibleEmployeeIds } from "@/lib/scope";
 import { requirePagePermission } from "@/lib/security/page-auth";
 
 export default async function CompensationDashboardPage() {
-  await requirePagePermission("compensation_dashboard.view");
-  const [salaryReviews, commissionCalculations, payrollRows, validationIssues] = await Promise.all([
+  const principal = await requirePagePermission("compensation_dashboard.view");
+  const [allSalaryReviews, allCommissionCalculations, allPayrollRows, allValidationIssues, employees] = await Promise.all([
     prisma.salaryReview.findMany({ take: 1000 }),
     prisma.commissionCalculation.findMany({ take: 1000 }),
     prisma.payrollPreparationRow.findMany({ take: 1000 }),
-    prisma.payrollValidationIssue.findMany({ take: 1000 })
+    prisma.payrollValidationIssue.findMany({ take: 1000 }),
+    prisma.employee.findMany({ select: employeeScopeSelect, orderBy: { employeeId: "asc" }, take: 1000 })
   ]);
+  const salaryReviews = filterEmployeeIdLinkedRecords(principal, allSalaryReviews, employees, canViewSalaryReviewForEmployee);
+  const commissionCalculations = filterEmployeeIdLinkedRecords(principal, allCommissionCalculations, employees, canViewCommissionForEmployee);
+  const payrollRows = filterEmployeeIdLinkedRecords(principal, allPayrollRows, employees, canViewPayrollInput);
+  const payrollEmployeeIds = visibleEmployeeIds(principal, employees, canViewPayrollInput);
+  const validationIssues = allValidationIssues.filter((issue) =>
+    issue.employeeId ? payrollEmployeeIds.has(issue.employeeId) : canViewRestrictedCompensation(principal)
+  );
 
   return (
     <>

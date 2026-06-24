@@ -1,16 +1,20 @@
 import { AttendanceStatus } from "@prisma/client";
 import { AsyncForm } from "@/components/phase2/async-form";
 import { Badge } from "@/components/ui/badge";
+import { canViewAttendanceForEmployee } from "@/lib/phase5-access";
 import { prisma } from "@/lib/prisma";
 import { hasPermission } from "@/lib/rbac";
+import { employeeScopeSelect, filterEmployeeIdLinkedRecords, filterVisibleEmployees } from "@/lib/scope";
 import { requirePagePermission } from "@/lib/security/page-auth";
 
 export default async function AttendanceRecordsPage() {
   const principal = await requirePagePermission("attendance.view");
-  const [records, employees] = await Promise.all([
+  const [allRecords, allEmployees] = await Promise.all([
     prisma.attendanceRecord.findMany({ orderBy: [{ attendanceDate: "desc" }, { createdAt: "desc" }], take: 300 }),
-    prisma.employee.findMany({ orderBy: { employeeId: "asc" }, take: 500 })
+    prisma.employee.findMany({ select: employeeScopeSelect, orderBy: { employeeId: "asc" }, take: 500 })
   ]);
+  const records = filterEmployeeIdLinkedRecords(principal, allRecords, allEmployees, canViewAttendanceForEmployee);
+  const employees = filterVisibleEmployees(principal, allEmployees, canViewAttendanceForEmployee);
   return (
     <>
       <header className="page-header"><div className="page-title"><h2>Attendance Records</h2><p>Manual attendance foundation for HR/payroll until future biometric integrations are approved.</p></div></header>

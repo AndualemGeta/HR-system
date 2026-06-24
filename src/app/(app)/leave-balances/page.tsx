@@ -1,10 +1,16 @@
 import { Badge } from "@/components/ui/badge";
+import { canViewLeaveBalanceForEmployee } from "@/lib/phase5-access";
 import { prisma } from "@/lib/prisma";
+import { employeeScopeSelect, filterEmployeeIdLinkedRecords } from "@/lib/scope";
 import { requirePagePermission } from "@/lib/security/page-auth";
 
 export default async function LeaveBalancesPage() {
-  await requirePagePermission("leave_balance.view");
-  const balances = await prisma.leaveBalance.findMany({ orderBy: [{ periodStart: "desc" }], take: 300 });
+  const principal = await requirePagePermission("leave_balance.view");
+  const [allBalances, employees] = await Promise.all([
+    prisma.leaveBalance.findMany({ orderBy: [{ periodStart: "desc" }], take: 300 }),
+    prisma.employee.findMany({ select: employeeScopeSelect, orderBy: { employeeId: "asc" }, take: 500 })
+  ]);
+  const balances = filterEmployeeIdLinkedRecords(principal, allBalances, employees, canViewLeaveBalanceForEmployee);
   return (
     <>
       <header className="page-header"><div className="page-title"><h2>Leave Balances</h2><p>Employee leave balance tracking for approved leave and adjustments.</p></div></header>

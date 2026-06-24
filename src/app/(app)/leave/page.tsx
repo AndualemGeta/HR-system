@@ -4,11 +4,12 @@ import { Badge } from "@/components/ui/badge";
 import { prisma } from "@/lib/prisma";
 import { canViewScopedEmployee, employeeToScope } from "@/lib/phase2-access";
 import { hasPermission } from "@/lib/rbac";
+import { employeeScopeSelect, filterVisibleEmployees } from "@/lib/scope";
 import { requirePagePermission } from "@/lib/security/page-auth";
 
 export default async function LeavePage() {
   const principal = await requirePagePermission("leave.view");
-  const [leaveRecords, employees] = await Promise.all([
+  const [leaveRecords, allEmployees] = await Promise.all([
     prisma.leaveRecord.findMany({
       include: {
         employee: {
@@ -29,11 +30,12 @@ export default async function LeavePage() {
       take: 100
     }),
     prisma.employee.findMany({
-      select: { id: true, employeeId: true, fullName: true },
+      select: employeeScopeSelect,
       orderBy: { fullName: "asc" },
       take: 200
     })
   ]);
+  const employees = filterVisibleEmployees(principal, allEmployees, canViewScopedEmployee);
 
   const visibleLeaveRecords = leaveRecords.filter((record) =>
     canViewScopedEmployee(principal, employeeToScope(record.employee))

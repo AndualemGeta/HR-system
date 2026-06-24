@@ -4,11 +4,12 @@ import { Badge } from "@/components/ui/badge";
 import { prisma } from "@/lib/prisma";
 import { canCreateAchievementFor, canViewScopedEmployee, employeeToScope } from "@/lib/phase2-access";
 import { hasPermission } from "@/lib/rbac";
+import { employeeScopeSelect, filterVisibleEmployees } from "@/lib/scope";
 import { requirePagePermission } from "@/lib/security/page-auth";
 
 export default async function AchievementsPage() {
   const principal = await requirePagePermission("achievement.view");
-  const [achievements, employees] = await Promise.all([
+  const [achievements, allEmployees] = await Promise.all([
     prisma.achievement.findMany({
       include: {
         employee: {
@@ -32,11 +33,12 @@ export default async function AchievementsPage() {
       take: 100
     }),
     prisma.employee.findMany({
-      select: { id: true, employeeId: true, fullName: true },
+      select: employeeScopeSelect,
       orderBy: { fullName: "asc" },
       take: 200
     })
   ]);
+  const employees = filterVisibleEmployees(principal, allEmployees, canCreateAchievementFor);
 
   const visibleAchievements = achievements.filter((achievement) =>
     achievement.approvalStatus === "APPROVED"

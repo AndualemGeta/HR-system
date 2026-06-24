@@ -4,12 +4,13 @@ import { AsyncForm } from "@/components/phase2/async-form";
 import { Badge } from "@/components/ui/badge";
 import { prisma } from "@/lib/prisma";
 import { canViewDocument, employeeToScope } from "@/lib/phase2-access";
-import { hasPermission } from "@/lib/rbac";
+import { canViewEmployee, hasPermission } from "@/lib/rbac";
+import { employeeScopeSelect, filterVisibleEmployees } from "@/lib/scope";
 import { requirePagePermission } from "@/lib/security/page-auth";
 
 export default async function DocumentsPage() {
   const principal = await requirePagePermission("document.view");
-  const [documents, employees] = await Promise.all([
+  const [documents, allEmployees] = await Promise.all([
     prisma.employeeDocument.findMany({
       where: { isActive: true },
       include: {
@@ -31,11 +32,12 @@ export default async function DocumentsPage() {
       take: 100
     }),
     prisma.employee.findMany({
-      select: { id: true, employeeId: true, fullName: true },
+      select: employeeScopeSelect,
       orderBy: { fullName: "asc" },
       take: 200
     })
   ]);
+  const employees = filterVisibleEmployees(principal, allEmployees, canViewEmployee);
 
   const visibleDocuments = documents.filter((document) =>
     canViewDocument(principal, {

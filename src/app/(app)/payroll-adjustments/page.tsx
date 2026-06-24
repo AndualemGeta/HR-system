@@ -1,16 +1,20 @@
 import { PayrollAdjustmentType } from "@prisma/client";
 import { AsyncForm } from "@/components/phase2/async-form";
 import { Badge } from "@/components/ui/badge";
+import { canViewPayrollInput } from "@/lib/phase45-access";
 import { prisma } from "@/lib/prisma";
 import { hasPermission } from "@/lib/rbac";
+import { employeeScopeSelect, filterEmployeeIdLinkedRecords, filterVisibleEmployees } from "@/lib/scope";
 import { requirePagePermission } from "@/lib/security/page-auth";
 
 export default async function PayrollAdjustmentsPage() {
   const principal = await requirePagePermission("payroll_adjustment.view");
-  const [adjustments, employees] = await Promise.all([
+  const [allAdjustments, allEmployees] = await Promise.all([
     prisma.payrollAdjustment.findMany({ orderBy: { createdAt: "desc" }, take: 200 }),
-    prisma.employee.findMany({ orderBy: { employeeId: "asc" }, take: 500 })
+    prisma.employee.findMany({ select: employeeScopeSelect, orderBy: { employeeId: "asc" }, take: 500 })
   ]);
+  const adjustments = filterEmployeeIdLinkedRecords(principal, allAdjustments, allEmployees, canViewPayrollInput);
+  const employees = filterVisibleEmployees(principal, allEmployees, canViewPayrollInput);
   return (
     <>
       <header className="page-header"><div className="page-title"><h2>Payroll Adjustments</h2><p>Record corrections for future payroll without silently overwriting locked periods.</p></div></header>

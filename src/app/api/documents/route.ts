@@ -8,6 +8,7 @@ import { prisma } from "@/lib/prisma";
 import { isApiError, requirePermission } from "@/lib/api";
 import { canUploadDocument, canViewDocument, employeeToScope } from "@/lib/phase2-access";
 import { writeAuditLog } from "@/lib/audit";
+import { canViewEmployee } from "@/lib/rbac";
 
 export const runtime = "nodejs";
 
@@ -96,6 +97,9 @@ export async function POST(request: Request) {
     where: { OR: [{ id: parsed.data.employeeId }, { employeeId: parsed.data.employeeId }] }
   });
   if (!employee) return NextResponse.json({ error: "Employee not found." }, { status: 404 });
+  if (!canViewEmployee(principal, employeeToScope(employee))) {
+    return NextResponse.json({ error: "Employee is outside your document upload scope." }, { status: 403 });
+  }
 
   const uploadDir = path.join(process.cwd(), "uploads", "employee-documents", employee.employeeId);
   await mkdir(uploadDir, { recursive: true });

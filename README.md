@@ -47,6 +47,35 @@ npm.cmd run dev
 
 Open `http://127.0.0.1:3000`.
 
+## Review Package Hygiene
+
+Keep `.env.example` in the shared package, but do not include local secrets, generated dependencies, build output, coverage output, Git metadata, or uploaded files.
+
+Exclude these paths from any HR/Finance review ZIP:
+
+- `.env`
+- `.git/`
+- `node_modules/`
+- `.next/`
+- `dist/`
+- `build/`
+- `coverage/`
+- `uploads/`
+- `storage/uploads/`
+
+Create review packages from a clean checkout or staging directory, then verify the package installs and builds with:
+
+```bash
+npm ci
+npm run prisma:generate
+npm run test
+npm run typecheck
+npm run lint
+npm run build
+```
+
+For the full controlled user-review flow, see `USER_REVIEW_GUIDE.md`.
+
 ## Default Local Users
 
 All seeded users use `ChangeMe123!`.

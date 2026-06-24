@@ -1,18 +1,22 @@
 import { SalaryReviewStatus } from "@prisma/client";
 import { AsyncForm } from "@/components/phase2/async-form";
 import { Badge } from "@/components/ui/badge";
-import { canViewRestrictedCompensation, redactMoney } from "@/lib/phase45-access";
+import { canViewRestrictedCompensation, canViewSalaryReviewForEmployee, redactMoney } from "@/lib/phase45-access";
 import { prisma } from "@/lib/prisma";
-import { hasPermission } from "@/lib/rbac";
+import { canViewEmployee, hasPermission } from "@/lib/rbac";
+import { employeeScopeSelect, filterEmployeeLinkedRecords, filterVisibleEmployees } from "@/lib/scope";
 import { requirePagePermission } from "@/lib/security/page-auth";
 
 export default async function SalaryReviewsPage() {
   const principal = await requirePagePermission("salary_review.view");
-  const [reviews, employees, evaluations] = await Promise.all([
-    prisma.salaryReview.findMany({ include: { employee: { select: { employeeId: true, fullName: true } }, relatedEvaluation: true }, orderBy: { createdAt: "desc" }, take: 100 }),
-    prisma.employee.findMany({ select: { id: true, employeeId: true, fullName: true }, orderBy: { employeeId: "asc" }, take: 300 }),
-    prisma.employeeEvaluation.findMany({ where: { status: "APPROVED" }, include: { employee: { select: { employeeId: true, fullName: true } } }, orderBy: { updatedAt: "desc" }, take: 100 })
+  const [allReviews, allEmployees, allEvaluations] = await Promise.all([
+    prisma.salaryReview.findMany({ include: { employee: { select: employeeScopeSelect }, relatedEvaluation: true }, orderBy: { createdAt: "desc" }, take: 100 }),
+    prisma.employee.findMany({ select: employeeScopeSelect, orderBy: { employeeId: "asc" }, take: 300 }),
+    prisma.employeeEvaluation.findMany({ where: { status: "APPROVED" }, include: { employee: { select: employeeScopeSelect } }, orderBy: { updatedAt: "desc" }, take: 100 })
   ]);
+  const reviews = filterEmployeeLinkedRecords(principal, allReviews, canViewSalaryReviewForEmployee);
+  const employees = filterVisibleEmployees(principal, allEmployees, canViewEmployee);
+  const evaluations = filterEmployeeLinkedRecords(principal, allEvaluations, canViewSalaryReviewForEmployee);
 
   return (
     <>

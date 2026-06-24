@@ -4,17 +4,21 @@ import { TerminationType } from "@prisma/client";
 import { AsyncForm } from "@/components/phase2/async-form";
 import { Badge } from "@/components/ui/badge";
 import { prisma } from "@/lib/prisma";
-import { canViewLifecycleRecord } from "@/lib/phase3-access";
+import { canCreateLifecycleRecord, canViewLifecycleRecord } from "@/lib/phase3-access";
 import { employeeToScope } from "@/lib/phase2-access";
 import { hasPermission } from "@/lib/rbac";
+import { employeeScopeSelect, filterVisibleEmployees } from "@/lib/scope";
 import { requirePagePermission } from "@/lib/security/page-auth";
 
 export default async function TerminationPage() {
   const principal = await requirePagePermission("termination.view");
-  const [employees, terminations] = await Promise.all([
-    prisma.employee.findMany({ orderBy: { fullName: "asc" }, take: 200 }),
+  const [allEmployees, terminations] = await Promise.all([
+    prisma.employee.findMany({ select: employeeScopeSelect, orderBy: { fullName: "asc" }, take: 200 }),
     prisma.terminationCase.findMany({ include: { employee: true, exitItems: true }, orderBy: { createdAt: "desc" }, take: 100 })
   ]);
+  const employees = filterVisibleEmployees(principal, allEmployees, (user, employee) =>
+    canCreateLifecycleRecord(user, employee, "termination.create")
+  );
   const visibleTerminations = terminations.filter((termination) =>
     canViewLifecycleRecord(principal, employeeToScope(termination.employee), "termination.view")
   );

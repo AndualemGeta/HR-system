@@ -1,15 +1,19 @@
 import { AsyncForm } from "@/components/phase2/async-form";
 import { Badge } from "@/components/ui/badge";
+import { canViewPayrollInput } from "@/lib/phase45-access";
 import { prisma } from "@/lib/prisma";
 import { hasPermission } from "@/lib/rbac";
+import { employeeScopeSelect, filterEmployeeLinkedRecords, filterVisibleEmployees } from "@/lib/scope";
 import { requirePagePermission } from "@/lib/security/page-auth";
 
 export default async function PayrollAttendancePage() {
   const principal = await requirePagePermission("payroll_attendance.view");
-  const [inputs, employees] = await Promise.all([
-    prisma.payrollAttendanceInput.findMany({ include: { employee: { select: { employeeId: true, fullName: true } } }, orderBy: { createdAt: "desc" }, take: 100 }),
-    prisma.employee.findMany({ select: { id: true, employeeId: true, fullName: true }, orderBy: { employeeId: "asc" }, take: 300 })
+  const [allInputs, allEmployees] = await Promise.all([
+    prisma.payrollAttendanceInput.findMany({ include: { employee: { select: employeeScopeSelect } }, orderBy: { createdAt: "desc" }, take: 100 }),
+    prisma.employee.findMany({ select: employeeScopeSelect, orderBy: { employeeId: "asc" }, take: 300 })
   ]);
+  const inputs = filterEmployeeLinkedRecords(principal, allInputs, canViewPayrollInput);
+  const employees = filterVisibleEmployees(principal, allEmployees, canViewPayrollInput);
   return (
     <>
       <header className="page-header"><div className="page-title"><h2>Payroll Attendance</h2><p>Approved attendance inputs for salary proration and overtime.</p></div></header>

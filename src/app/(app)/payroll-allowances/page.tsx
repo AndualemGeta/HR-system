@@ -1,16 +1,20 @@
 import { AllowanceType } from "@prisma/client";
 import { AsyncForm } from "@/components/phase2/async-form";
 import { Badge } from "@/components/ui/badge";
+import { canViewPayrollInput } from "@/lib/phase45-access";
 import { prisma } from "@/lib/prisma";
 import { hasPermission } from "@/lib/rbac";
+import { employeeScopeSelect, filterEmployeeLinkedRecords, filterVisibleEmployees } from "@/lib/scope";
 import { requirePagePermission } from "@/lib/security/page-auth";
 
 export default async function PayrollAllowancesPage() {
   const principal = await requirePagePermission("payroll_allowance.view");
-  const [allowances, employees] = await Promise.all([
-    prisma.payrollAllowance.findMany({ include: { employee: { select: { employeeId: true, fullName: true } } }, orderBy: { createdAt: "desc" }, take: 100 }),
-    prisma.employee.findMany({ select: { id: true, employeeId: true, fullName: true }, orderBy: { employeeId: "asc" }, take: 300 })
+  const [allAllowances, allEmployees] = await Promise.all([
+    prisma.payrollAllowance.findMany({ include: { employee: { select: employeeScopeSelect } }, orderBy: { createdAt: "desc" }, take: 100 }),
+    prisma.employee.findMany({ select: employeeScopeSelect, orderBy: { employeeId: "asc" }, take: 300 })
   ]);
+  const allowances = filterEmployeeLinkedRecords(principal, allAllowances, canViewPayrollInput);
+  const employees = filterVisibleEmployees(principal, allEmployees, canViewPayrollInput);
   return (
     <>
       <header className="page-header"><div className="page-title"><h2>Payroll Allowances</h2><p>Approved allowances included in payroll gross salary.</p></div></header>

@@ -3,19 +3,23 @@ import { EmployeeLevel, EmployeeRole } from "@prisma/client";
 import { AsyncForm } from "@/components/phase2/async-form";
 import { Badge } from "@/components/ui/badge";
 import { prisma } from "@/lib/prisma";
-import { canViewLifecycleRecord } from "@/lib/phase3-access";
+import { canCreateLifecycleRecord, canViewLifecycleRecord } from "@/lib/phase3-access";
 import { employeeToScope } from "@/lib/phase2-access";
 import { hasPermission } from "@/lib/rbac";
+import { employeeScopeSelect, filterVisibleEmployees } from "@/lib/scope";
 import { requirePagePermission } from "@/lib/security/page-auth";
 
 export default async function TransfersPage() {
   const principal = await requirePagePermission("transfer.view");
-  const [employees, transfers, departments, locations] = await Promise.all([
-    prisma.employee.findMany({ orderBy: { fullName: "asc" }, take: 200 }),
+  const [allEmployees, transfers, departments, locations] = await Promise.all([
+    prisma.employee.findMany({ select: employeeScopeSelect, orderBy: { fullName: "asc" }, take: 200 }),
     prisma.transferRequest.findMany({ include: { employee: true }, orderBy: { createdAt: "desc" }, take: 100 }),
     prisma.department.findMany({ orderBy: { name: "asc" } }),
     prisma.location.findMany({ orderBy: { name: "asc" } })
   ]);
+  const employees = filterVisibleEmployees(principal, allEmployees, (user, employee) =>
+    canCreateLifecycleRecord(user, employee, "transfer.create")
+  );
   const visibleTransfers = transfers.filter((transfer) =>
     canViewLifecycleRecord(principal, employeeToScope(transfer.employee), "transfer.view")
   );

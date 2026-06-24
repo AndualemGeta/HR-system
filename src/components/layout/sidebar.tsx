@@ -2,10 +2,12 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { navGroups } from "@/components/layout/nav";
+import { getNavGroupsForPrincipal } from "@/components/layout/nav";
+import type { Principal } from "@/lib/rbac";
 
-export function Sidebar() {
+export function Sidebar({ principal }: Readonly<{ principal: Principal }>) {
   const pathname = usePathname();
+  const navGroups = getNavGroupsForPrincipal(principal);
 
   return (
     <aside className="sidebar">

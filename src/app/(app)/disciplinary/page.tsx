@@ -4,17 +4,21 @@ import { AsyncForm } from "@/components/phase2/async-form";
 import { Badge } from "@/components/ui/badge";
 import { disciplinaryIncidentTypes, warningLevels } from "@/lib/constants";
 import { prisma } from "@/lib/prisma";
-import { canViewLifecycleRecord } from "@/lib/phase3-access";
+import { canCreateLifecycleRecord, canViewLifecycleRecord } from "@/lib/phase3-access";
 import { employeeToScope } from "@/lib/phase2-access";
 import { hasPermission } from "@/lib/rbac";
+import { employeeScopeSelect, filterVisibleEmployees } from "@/lib/scope";
 import { requirePagePermission } from "@/lib/security/page-auth";
 
 export default async function DisciplinaryPage() {
   const principal = await requirePagePermission("disciplinary.view");
-  const [employees, records] = await Promise.all([
-    prisma.employee.findMany({ orderBy: { fullName: "asc" }, take: 200 }),
+  const [allEmployees, records] = await Promise.all([
+    prisma.employee.findMany({ select: employeeScopeSelect, orderBy: { fullName: "asc" }, take: 200 }),
     prisma.disciplinaryRecord.findMany({ include: { employee: true }, orderBy: { createdAt: "desc" }, take: 100 })
   ]);
+  const employees = filterVisibleEmployees(principal, allEmployees, (user, employee) =>
+    canCreateLifecycleRecord(user, employee, "disciplinary.create")
+  );
   const visibleRecords = records.filter((record) =>
     canViewLifecycleRecord(principal, employeeToScope(record.employee), "disciplinary.view")
   );

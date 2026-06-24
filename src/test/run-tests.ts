@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { getNavGroupsForPrincipal } from "../components/layout/nav";
 import { formatEmployeeId, isValidEmployeeId, nextEmployeeId, parseEmployeeSequence } from "../lib/employee-id";
 import { defaultLevelForRole, normalizeEmploymentType, normalizeRole } from "../lib/import/normalize";
 import { detectImportTargetField, validateImportRows } from "../lib/import/validator";
@@ -65,11 +67,16 @@ import {
   validateUnlockRequest
 } from "../lib/phase5-validation";
 import { canManageIntegrationTokens, canManagePayrollLock, canViewLeaveBalanceForEmployee, canViewManagerDashboard } from "../lib/phase5-access";
+import { filterEmployeeIdLinkedRecords, filterEmployeeLinkedRecords, type EmployeeScopeRecord } from "../lib/scope";
 
 type TestCase = {
   name: string;
   run: () => void;
 };
+
+function navHrefsFor(principal: Principal): Set<string> {
+  return new Set(getNavGroupsForPrincipal(principal).flatMap((group) => group.items.map((item) => item.href)));
+}
 
 const tests: TestCase[] = [
   {
@@ -213,6 +220,90 @@ const tests: TestCase[] = [
       assert.equal(canViewEmployee(employeeUser, { id: "emp-other", currentRole: "EMPLOYEE" }), false);
       assert.equal(canViewEmployee(managerUser, { id: "emp-report", currentRole: "EMPLOYEE" }), true);
       assert.equal(canViewEmployee(managerUser, { id: "emp-outside", currentRole: "EMPLOYEE" }), false);
+    }
+  },
+  {
+    name: "filters navigation links by role and permission",
+    run: () => {
+      const employeeLinks = navHrefsFor({ id: "employee", employeeId: "emp-1", systemRoles: ["EMPLOYEE"], employeeRole: "EMPLOYEE" });
+      assert.equal(employeeLinks.has("/self-service"), true);
+      assert.equal(employeeLinks.has("/payroll-preparation"), false);
+      assert.equal(employeeLinks.has("/security-settings"), false);
+      assert.equal(employeeLinks.has("/audit"), false);
+
+      const financeLinks = navHrefsFor({ id: "finance", systemRoles: ["FINANCE_PAYROLL"] });
+      assert.equal(financeLinks.has("/payroll-preparation"), true);
+      assert.equal(financeLinks.has("/salary-reviews"), true);
+      assert.equal(financeLinks.has("/paye-tax-brackets"), true);
+      assert.equal(financeLinks.has("/users"), false);
+
+      const auditorLinks = navHrefsFor({ id: "auditor", systemRoles: ["AUDITOR"] });
+      assert.equal(auditorLinks.has("/audit"), true);
+      assert.equal(auditorLinks.has("/employees/new"), false);
+      assert.equal(auditorLinks.has("/disciplinary"), false);
+      assert.equal(auditorLinks.has("/payroll-preparation"), false);
+    }
+  },
+  {
+    name: "guards employee pages with explicit page permissions",
+    run: () => {
+      const employeeListPage = readFileSync("src/app/(app)/employees/page.tsx", "utf8");
+      const createEmployeePage = readFileSync("src/app/(app)/employees/new/page.tsx", "utf8");
+
+      assert.match(employeeListPage, /requirePagePermission\("employee\.view"\)/);
+      assert.match(createEmployeePage, /requirePagePermission\("employee\.create"\)/);
+    }
+  },
+  {
+    name: "filters direct-rendered employee-linked records by reporting scope",
+    run: () => {
+      const manager: Principal = {
+        id: "manager",
+        employeeId: "mgr-1",
+        systemRoles: ["SHOP_MANAGER"],
+        employeeRole: "SHOP_MANAGER",
+        directReportIds: ["emp-direct"],
+        shopIds: ["shop-1"]
+      };
+      const employees: EmployeeScopeRecord[] = [
+        {
+          id: "emp-direct",
+          currentRole: "EMPLOYEE",
+          currentDepartmentId: null,
+          currentRegionId: null,
+          currentShopId: null,
+          currentClusterId: null,
+          directManagerId: "mgr-1"
+        },
+        {
+          id: "emp-shop",
+          currentRole: "DSA",
+          currentDepartmentId: null,
+          currentRegionId: null,
+          currentShopId: "shop-1",
+          currentClusterId: null,
+          directManagerId: null
+        },
+        {
+          id: "emp-outside",
+          currentRole: "EMPLOYEE",
+          currentDepartmentId: "other-dept",
+          currentRegionId: null,
+          currentShopId: "shop-2",
+          currentClusterId: null,
+          directManagerId: null
+        }
+      ];
+
+      const attendanceRows = [
+        { id: "row-direct", employeeId: "emp-direct" },
+        { id: "row-shop", employeeId: "emp-shop" },
+        { id: "row-outside", employeeId: "emp-outside" }
+      ];
+      assert.deepEqual(filterEmployeeIdLinkedRecords(manager, attendanceRows, employees).map((row) => row.id), ["row-direct", "row-shop"]);
+
+      const linkedRows = employees.map((employee) => ({ id: `linked-${employee.id}`, employee }));
+      assert.deepEqual(filterEmployeeLinkedRecords(manager, linkedRows).map((row) => row.id), ["linked-emp-direct", "linked-emp-shop"]);
     }
   },
   {

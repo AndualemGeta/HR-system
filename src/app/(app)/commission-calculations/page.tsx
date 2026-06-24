@@ -1,18 +1,22 @@
 import { AsyncForm } from "@/components/phase2/async-form";
 import { Badge } from "@/components/ui/badge";
-import { redactMoney } from "@/lib/phase45-access";
+import { canViewCommissionForEmployee, redactMoney } from "@/lib/phase45-access";
 import { prisma } from "@/lib/prisma";
 import { hasPermission } from "@/lib/rbac";
+import { employeeScopeSelect, filterEmployeeLinkedRecords, filterVisibleEmployees } from "@/lib/scope";
 import { requirePagePermission } from "@/lib/security/page-auth";
 
 export default async function CommissionCalculationsPage() {
   const principal = await requirePagePermission("commission_calculation.view");
-  const [calculations, employees, plans, evaluations] = await Promise.all([
-    prisma.commissionCalculation.findMany({ include: { employee: { select: { employeeId: true, fullName: true } }, commissionPlan: true }, orderBy: { createdAt: "desc" }, take: 100 }),
-    prisma.employee.findMany({ select: { id: true, employeeId: true, fullName: true }, orderBy: { employeeId: "asc" }, take: 300 }),
+  const [allCalculations, allEmployees, plans, allEvaluations] = await Promise.all([
+    prisma.commissionCalculation.findMany({ include: { employee: { select: employeeScopeSelect }, commissionPlan: true }, orderBy: { createdAt: "desc" }, take: 100 }),
+    prisma.employee.findMany({ select: employeeScopeSelect, orderBy: { employeeId: "asc" }, take: 300 }),
     prisma.commissionPlan.findMany({ where: { activeStatus: true }, orderBy: { name: "asc" }, take: 100 }),
-    prisma.employeeEvaluation.findMany({ where: { status: "APPROVED" }, include: { employee: { select: { employeeId: true } } }, orderBy: { updatedAt: "desc" }, take: 100 })
+    prisma.employeeEvaluation.findMany({ where: { status: "APPROVED" }, include: { employee: { select: employeeScopeSelect } }, orderBy: { updatedAt: "desc" }, take: 100 })
   ]);
+  const calculations = filterEmployeeLinkedRecords(principal, allCalculations, canViewCommissionForEmployee);
+  const employees = filterVisibleEmployees(principal, allEmployees, canViewCommissionForEmployee);
+  const evaluations = filterEmployeeLinkedRecords(principal, allEvaluations, canViewCommissionForEmployee);
   return (
     <>
       <header className="page-header"><div className="page-title"><h2>Commission Calculations</h2><p>Calculated commission is included in payroll only after approval.</p></div></header>

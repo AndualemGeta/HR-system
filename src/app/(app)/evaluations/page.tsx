@@ -3,12 +3,13 @@ import Link from "next/link";
 import { AsyncForm } from "@/components/phase2/async-form";
 import { Badge } from "@/components/ui/badge";
 import { prisma } from "@/lib/prisma";
-import { canViewEmployee, hasPermission } from "@/lib/rbac";
+import { canEvaluateEmployee, canViewEmployee, hasPermission } from "@/lib/rbac";
+import { employeeScopeSelect, filterVisibleEmployees } from "@/lib/scope";
 import { requirePagePermission } from "@/lib/security/page-auth";
 
 export default async function EvaluationsPage() {
   const principal = await requirePagePermission("evaluation.view");
-  const [evaluations, employees] = await Promise.all([
+  const [evaluations, allEmployees] = await Promise.all([
     prisma.employeeEvaluation.findMany({
       include: {
         employee: {
@@ -30,11 +31,12 @@ export default async function EvaluationsPage() {
       take: 100
     }),
     prisma.employee.findMany({
-      select: { id: true, employeeId: true, fullName: true },
+      select: employeeScopeSelect,
       orderBy: { fullName: "asc" },
       take: 200
     })
   ]);
+  const employees = filterVisibleEmployees(principal, allEmployees, canEvaluateEmployee);
 
   const visibleEvaluations = evaluations.filter((evaluation) =>
     hasPermission(principal, "evaluation.view_all")

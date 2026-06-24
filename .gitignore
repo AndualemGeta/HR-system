@@ -1,12 +1,15 @@
 node_modules
 .next
 dist
+build
 coverage
 .env
 .env.local
+.git
 *.log
 *.err
 *.tsbuildinfo
 uploads
 storage
+storage/uploads
 prisma/dev.db

@@ -3,142 +3,183 @@ import {
   BadgeDollarSign,
   BarChart3,
   BriefcaseBusiness,
-  Building2,
   ClipboardCheck,
   ClipboardList,
   CircleUserRound,
   FileArchive,
   FileCog,
   FileSpreadsheet,
-  GitBranch,
   Inbox,
   History,
   LayoutDashboard,
   ListChecks,
-  Network,
   ShieldCheck,
   ShieldAlert,
-  Star,
   Activity,
   LockKeyhole,
   Mail,
   TrendingUp,
-  UserCheck,
   Users,
   UserRoundCog
 } from "lucide-react";
+import type { PermissionKey, SystemRoleValue } from "../../lib/constants";
+import { hasAnySystemRole, hasPermission, type Principal } from "../../lib/rbac";
+
+type NavItem = {
+  href: string;
+  label: string;
+  icon: typeof LayoutDashboard;
+  anyPermissions?: readonly PermissionKey[];
+  roles?: readonly SystemRoleValue[];
+};
+
+type NavGroup = {
+  label: string;
+  defaultOpen?: boolean;
+  roles?: readonly SystemRoleValue[];
+  anyPermissions?: readonly PermissionKey[];
+  items: readonly NavItem[];
+};
+
+const employeeRoles = ["EMPLOYEE"] as const;
+const managerRoles = [
+  "SHOP_MANAGER",
+  "AREA_SALES_MANAGER",
+  "SALES_HEAD",
+  "DISTRIBUTION_MANAGER",
+  "DISTRIBUTION_OFFICER",
+  "TECHNOLOGY_MANAGER",
+  "TREASURY_MANAGER",
+  "FINANCIAL_CONTROL_REPORTING_MANAGER",
+  "SUPER_ADMIN"
+] as const;
+const hrRoles = ["HR_ADMIN", "HR_MANAGER", "HR_OFFICER", "SUPER_ADMIN"] as const;
+const financeRoles = ["FINANCE_DIRECTOR", "FINANCE_PAYROLL", "SUPER_ADMIN"] as const;
+const adminAuditRoles = ["SUPER_ADMIN", "HR_ADMIN", "AUDITOR"] as const;
 
 export const navGroups = [
   {
-    label: "Start Here",
+    label: "Employee",
     defaultOpen: true,
+    roles: employeeRoles,
     items: [
-      { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-      { href: "/employees", label: "Employee List", icon: Users },
-      { href: "/employees/new", label: "Create Employee", icon: UserRoundCog },
-      { href: "/self-service", label: "Self Service", icon: CircleUserRound },
-      { href: "/manager-dashboard", label: "Manager Tools", icon: Users }
+      { href: "/self-service", label: "Self Service", icon: CircleUserRound, anyPermissions: ["self_service.view"] },
+      { href: "/documents", label: "My Documents", icon: FileArchive, anyPermissions: ["document.view"] },
+      { href: "/leave", label: "My Leave", icon: BriefcaseBusiness, anyPermissions: ["leave.view"] },
+      { href: "/evaluations", label: "My Evaluations", icon: ClipboardCheck, anyPermissions: ["evaluation.view"] },
+      { href: "/notifications", label: "Notifications", icon: Inbox, anyPermissions: ["notification.view"] }
     ]
   },
   {
-    label: "People Setup",
+    label: "Shop Manager / Area Manager",
     defaultOpen: true,
+    roles: managerRoles,
     items: [
-      { href: "/organization", label: "Organization Structure", icon: Network },
-      { href: "/departments", label: "Departments", icon: Building2 },
-      { href: "/assignments", label: "Assignments", icon: GitBranch },
-      { href: "/onboarding", label: "Onboarding", icon: ListChecks },
-      { href: "/documents", label: "Documents", icon: FileArchive },
-      { href: "/required-document-rules", label: "Document Rules", icon: ShieldCheck }
+      { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, anyPermissions: ["employee.view"] },
+      { href: "/manager-dashboard", label: "Manager Tools", icon: Users, anyPermissions: ["manager_dashboard.view"] },
+      { href: "/team-attendance", label: "Team Attendance", icon: ListChecks, anyPermissions: ["team_attendance.view"] },
+      { href: "/team-leave", label: "Team Leave", icon: BriefcaseBusiness, anyPermissions: ["team_leave.view"] },
+      { href: "/evaluations", label: "Evaluations", icon: ClipboardCheck, anyPermissions: ["evaluation.view"] },
+      { href: "/achievements", label: "Achievements", icon: Award, anyPermissions: ["achievement.view"] },
+      { href: "/notifications", label: "Notifications", icon: Inbox, anyPermissions: ["notification.view"] }
     ]
   },
   {
-    label: "HR Workflows",
+    label: "HR",
+    roles: hrRoles,
     items: [
-      { href: "/leave", label: "Leave Records", icon: BriefcaseBusiness },
-      { href: "/leave-policies", label: "Leave Policies", icon: BriefcaseBusiness },
-      { href: "/leave-balances", label: "Leave Balances", icon: BriefcaseBusiness },
-      { href: "/achievements", label: "Achievements", icon: Award },
-      { href: "/evaluations", label: "Evaluations", icon: ClipboardCheck },
-      { href: "/evaluation-criteria", label: "Criteria Setup", icon: Star },
-      { href: "/disciplinary", label: "Disciplinary", icon: ShieldAlert },
-      { href: "/termination", label: "Termination & Exit", icon: ClipboardList },
-      { href: "/transfers", label: "Transfers", icon: GitBranch },
-      { href: "/promotions", label: "Promotions", icon: TrendingUp },
-      { href: "/approvals", label: "Approvals", icon: UserCheck }
+      { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, anyPermissions: ["employee.view"] },
+      { href: "/employees", label: "Employees", icon: Users, anyPermissions: ["employee.view"] },
+      { href: "/employees/new", label: "Create Employee", icon: UserRoundCog, anyPermissions: ["employee.create"] },
+      { href: "/onboarding", label: "Onboarding", icon: ListChecks, anyPermissions: ["onboarding.view"] },
+      { href: "/documents", label: "Documents", icon: FileArchive, anyPermissions: ["document.view"] },
+      { href: "/leave", label: "Leave", icon: BriefcaseBusiness, anyPermissions: ["leave.view"] },
+      { href: "/evaluations", label: "Evaluations", icon: ClipboardCheck, anyPermissions: ["evaluation.view"] },
+      { href: "/salary-reviews", label: "Salary Reviews", icon: TrendingUp, anyPermissions: ["salary_review.view"] },
+      { href: "/disciplinary", label: "Disciplinary", icon: ShieldAlert, anyPermissions: ["disciplinary.view"] },
+      { href: "/termination", label: "Termination", icon: ClipboardList, anyPermissions: ["termination.view"] },
+      { href: "/reports", label: "Reports", icon: BarChart3, anyPermissions: ["reports.view"] },
+      { href: "/compliance", label: "Compliance", icon: ShieldCheck, anyPermissions: ["compliance.view"] },
+      { href: "/data-quality", label: "Data Quality", icon: ShieldAlert, anyPermissions: ["data_quality.view"] }
     ]
   },
   {
-    label: "Attendance & Payroll",
+    label: "Finance / Payroll",
+    roles: financeRoles,
     items: [
-      { href: "/attendance-records", label: "Attendance", icon: ListChecks },
-      { href: "/attendance-import", label: "Attendance Import", icon: FileSpreadsheet },
-      { href: "/payroll-preparation", label: "Payroll Prep", icon: BadgeDollarSign },
-      { href: "/payroll-validation", label: "Payroll Warnings", icon: ShieldAlert },
-      { href: "/compensation-dashboard", label: "Compensation", icon: BadgeDollarSign },
-      { href: "/salary", label: "Salary History", icon: BadgeDollarSign },
-      { href: "/salary-reviews", label: "Salary Reviews", icon: TrendingUp },
-      { href: "/commission-plans", label: "Commission Plans", icon: ClipboardList },
-      { href: "/commission-calculations", label: "Commission Calc", icon: FileSpreadsheet },
-      { href: "/payroll-adjustments", label: "Adjustments", icon: BadgeDollarSign },
-      { href: "/payroll-period-locks", label: "Payroll Locks", icon: LockKeyhole },
-      { href: "/payroll-export-templates", label: "Export Templates", icon: FileCog },
-      { href: "/export-history", label: "Export History", icon: History }
+      { href: "/payroll-preparation", label: "Payroll Preparation", icon: BadgeDollarSign, anyPermissions: ["payroll_preparation.view"] },
+      { href: "/salary-reviews", label: "Salary Reviews", icon: TrendingUp, anyPermissions: ["salary_review.view"] },
+      { href: "/commission-calculations", label: "Commission", icon: FileSpreadsheet, anyPermissions: ["commission_calculation.view"] },
+      { href: "/payroll-rules", label: "Payroll Rules", icon: UserRoundCog, anyPermissions: ["payroll_rule.view"] },
+      { href: "/paye-tax-brackets", label: "PAYE", icon: ShieldCheck, anyPermissions: ["paye_tax.view"] },
+      { href: "/pension-rules", label: "Pension", icon: ShieldCheck, anyPermissions: ["pension_rule.view"] },
+      { href: "/payroll-export-templates", label: "Payroll Export", icon: FileCog, anyPermissions: ["payroll_export_template.view"] },
+      { href: "/reports", label: "Payroll Reports", icon: BarChart3, anyPermissions: ["reports.view"] }
     ]
   },
   {
-    label: "Payroll Setup",
+    label: "Admin / Auditor",
+    roles: adminAuditRoles,
     items: [
-      { href: "/payroll-rules", label: "Payroll Rules", icon: UserRoundCog },
-      { href: "/paye-tax-brackets", label: "PAYE Brackets", icon: ShieldCheck },
-      { href: "/pension-rules", label: "Pension Rules", icon: ShieldCheck },
-      { href: "/payroll-attendance", label: "Attendance Inputs", icon: ListChecks },
-      { href: "/payroll-allowances", label: "Allowances", icon: Award },
-      { href: "/payroll-deductions", label: "Deductions", icon: ShieldAlert }
+      { href: "/users", label: "Users and Roles", icon: UserRoundCog, anyPermissions: ["user.manage", "role.manage"] },
+      { href: "/audit", label: "Audit Logs", icon: History, anyPermissions: ["audit.view"] },
+      { href: "/security-reports", label: "Security Reports", icon: ShieldCheck, anyPermissions: ["security_reports.view"] },
+      { href: "/system-settings", label: "System Settings", icon: UserRoundCog, anyPermissions: ["system_settings.view"] },
+      { href: "/security-settings", label: "Security Settings", icon: ShieldCheck, anyPermissions: ["security_settings.view", "security_settings.manage"] },
+      { href: "/integration-tokens", label: "Integration Tokens", icon: LockKeyhole, anyPermissions: ["integration_token.view", "integration_token.manage"] },
+      { href: "/data-retention-policies", label: "Retention", icon: FileArchive, anyPermissions: ["data_retention.view"] },
+      { href: "/export-history", label: "Export History", icon: History, anyPermissions: ["export_history.view"] }
     ]
   },
   {
-    label: "Performance",
+    label: "Review Setup",
     items: [
-      { href: "/kpi", label: "KPI Foundation", icon: ClipboardCheck },
-      { href: "/kpi-import-templates", label: "KPI Templates", icon: ClipboardCheck },
-      { href: "/kpi-evaluation-linkage", label: "KPI Linkage", icon: TrendingUp },
-      { href: "/team-attendance", label: "Team Attendance", icon: Users },
-      { href: "/team-leave", label: "Team Leave", icon: Users }
-    ]
-  },
-  {
-    label: "Oversight",
-    items: [
-      { href: "/analytics", label: "Analytics", icon: BarChart3 },
-      { href: "/reports", label: "Reports", icon: BarChart3 },
-      { href: "/reports/advanced", label: "Advanced Reports", icon: BarChart3 },
-      { href: "/compliance", label: "Compliance", icon: ShieldCheck },
-      { href: "/data-quality", label: "Data Quality", icon: ShieldAlert },
-      { href: "/reminders", label: "HR Reminders", icon: ListChecks },
-      { href: "/imports", label: "HR File Import", icon: FileSpreadsheet },
-      { href: "/imports/preview", label: "Validation Preview", icon: ShieldCheck }
-    ]
-  },
-  {
-    label: "Admin & Security",
-    items: [
-      { href: "/notifications", label: "Notifications", icon: Inbox },
-      { href: "/notification-preferences", label: "Notification Prefs", icon: Inbox },
-      { href: "/profile-change-requests", label: "Profile Requests", icon: CircleUserRound },
-      { href: "/email-templates", label: "Email Templates", icon: Mail },
-      { href: "/email-delivery-logs", label: "Email Logs", icon: Mail },
-      { href: "/security-settings", label: "Security Settings", icon: ShieldCheck },
-      { href: "/security-reports", label: "Security Reports", icon: ShieldCheck },
-      { href: "/data-retention-policies", label: "Retention", icon: FileArchive },
-      { href: "/integration-tokens", label: "Integration Tokens", icon: LockKeyhole },
-      { href: "/integration-event-logs", label: "Integration Events", icon: Activity },
-      { href: "/production-readiness", label: "Production Checklist", icon: ClipboardList },
-      { href: "/system-health", label: "System Health", icon: Activity },
-      { href: "/api-documentation", label: "API Documentation", icon: FileCog },
-      { href: "/system-settings", label: "System Settings", icon: UserRoundCog },
-      { href: "/users", label: "Users & Roles", icon: UserRoundCog },
-      { href: "/audit", label: "Audit Logs", icon: History }
+      { href: "/attendance-records", label: "Attendance Foundation", icon: ListChecks, anyPermissions: ["attendance.view"], roles: hrRoles },
+      { href: "/attendance-import", label: "Attendance Import Preview", icon: FileSpreadsheet, anyPermissions: ["attendance.import"], roles: hrRoles },
+      { href: "/leave-policies", label: "Leave Policy Setup", icon: BriefcaseBusiness, anyPermissions: ["leave_policy.view"], roles: hrRoles },
+      { href: "/leave-balances", label: "Leave Balances", icon: BriefcaseBusiness, anyPermissions: ["leave_balance.view"], roles: [...hrRoles, ...financeRoles] },
+      { href: "/payroll-attendance", label: "Payroll Attendance Inputs", icon: ListChecks, anyPermissions: ["payroll_attendance.view"], roles: [...hrRoles, ...financeRoles] },
+      { href: "/payroll-allowances", label: "Payroll Allowances", icon: Award, anyPermissions: ["payroll_allowance.view"], roles: [...hrRoles, ...financeRoles] },
+      { href: "/payroll-deductions", label: "Payroll Deductions", icon: ShieldAlert, anyPermissions: ["payroll_deduction.view"], roles: [...hrRoles, ...financeRoles] },
+      { href: "/payroll-adjustments", label: "Payroll Adjustments", icon: BadgeDollarSign, anyPermissions: ["payroll_adjustment.view"], roles: [...hrRoles, ...financeRoles] },
+      { href: "/payroll-period-locks", label: "Payroll Locks", icon: LockKeyhole, anyPermissions: ["payroll_lock.view"], roles: [...hrRoles, ...financeRoles] },
+      { href: "/commission-plans", label: "Commission Plans", icon: ClipboardList, anyPermissions: ["commission_plan.view"], roles: [...hrRoles, ...financeRoles] },
+      { href: "/kpi", label: "KPI Foundation", icon: ClipboardCheck, anyPermissions: ["kpi.view"], roles: hrRoles },
+      { href: "/kpi-import-templates", label: "KPI Templates", icon: ClipboardCheck, anyPermissions: ["kpi_import_template.view"], roles: hrRoles },
+      { href: "/kpi-evaluation-linkage", label: "KPI Linkage", icon: TrendingUp, anyPermissions: ["kpi_evaluation_linkage.manage"], roles: hrRoles },
+      { href: "/imports", label: "HR File Import", icon: FileSpreadsheet, anyPermissions: ["import.view"], roles: hrRoles },
+      { href: "/reminders", label: "HR Reminders", icon: ListChecks, anyPermissions: ["reminder.view"], roles: hrRoles },
+      { href: "/email-templates", label: "Email Templates", icon: Mail, anyPermissions: ["email_template.view"], roles: adminAuditRoles },
+      { href: "/email-delivery-logs", label: "Email Logs", icon: Mail, anyPermissions: ["email_log.view"], roles: adminAuditRoles },
+      { href: "/integration-event-logs", label: "Integration Events", icon: Activity, anyPermissions: ["integration_event.view"], roles: adminAuditRoles },
+      { href: "/production-readiness", label: "Production Checklist", icon: ClipboardList, anyPermissions: ["production_readiness.view"], roles: adminAuditRoles },
+      { href: "/system-health", label: "System Health", icon: Activity, anyPermissions: ["system_health.view"], roles: adminAuditRoles },
+      { href: "/api-documentation", label: "API Documentation", icon: FileCog, anyPermissions: ["production_readiness.view"], roles: adminAuditRoles }
     ]
   }
-] as const;
+] as const satisfies readonly NavGroup[];
+
+export function getNavGroupsForPrincipal(principal: Principal): NavGroup[] {
+  return navGroups
+    .map((group) => ({
+      ...group,
+      items: group.items.filter((item) => canShowNavItem(principal, item))
+    }))
+    .filter((group) => group.items.length > 0 && canShowNavGroup(principal, group));
+}
+
+function canShowNavGroup(principal: Principal, group: NavGroup): boolean {
+  return matchesRoles(principal, group.roles) && matchesAnyPermission(principal, group.anyPermissions);
+}
+
+function canShowNavItem(principal: Principal, item: NavItem): boolean {
+  return matchesRoles(principal, item.roles) && matchesAnyPermission(principal, item.anyPermissions);
+}
+
+function matchesRoles(principal: Principal, roles?: readonly SystemRoleValue[]): boolean {
+  return !roles || hasAnySystemRole(principal, [...roles]);
+}
+
+function matchesAnyPermission(principal: Principal, permissions?: readonly PermissionKey[]): boolean {
+  return !permissions || permissions.some((permission) => hasPermission(principal, permission));
+}

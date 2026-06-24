@@ -1,9 +1,15 @@
+import { canViewAttendanceForEmployee } from "@/lib/phase5-access";
 import { prisma } from "@/lib/prisma";
+import { employeeScopeSelect, filterEmployeeIdLinkedRecords } from "@/lib/scope";
 import { requirePagePermission } from "@/lib/security/page-auth";
 
 export default async function TeamAttendancePage() {
   const principal = await requirePagePermission("team_attendance.view");
-  const records = await prisma.attendanceRecord.findMany({ where: { employeeId: { in: principal.directReportIds ?? [] } }, orderBy: { attendanceDate: "desc" }, take: 200 });
+  const [allRecords, employees] = await Promise.all([
+    prisma.attendanceRecord.findMany({ orderBy: { attendanceDate: "desc" }, take: 200 }),
+    prisma.employee.findMany({ select: employeeScopeSelect, orderBy: { employeeId: "asc" }, take: 500 })
+  ]);
+  const records = filterEmployeeIdLinkedRecords(principal, allRecords, employees, canViewAttendanceForEmployee);
   return (
     <>
       <header className="page-header"><div className="page-title"><h2>Team Attendance</h2><p>Scope-limited attendance overview for managers.</p></div></header>
