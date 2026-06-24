@@ -1,0 +1,2350 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserStatus {
+  ACTIVE
+  DISABLED
+  LOCKED
+}
+
+enum SystemRole {
+  SUPER_ADMIN
+  CEO
+  CEO_COORDINATOR
+  HR_ADMIN
+  HR_MANAGER
+  HR_OFFICER
+  FINANCE_DIRECTOR
+  FINANCE_PAYROLL
+  TREASURY_MANAGER
+  FINANCIAL_CONTROL_REPORTING_MANAGER
+  DISTRIBUTION_MANAGER
+  DISTRIBUTION_OFFICER
+  TECHNOLOGY_MANAGER
+  SALES_HEAD
+  AREA_SALES_MANAGER
+  SHOP_MANAGER
+  EMPLOYEE
+  AUDITOR
+}
+
+enum Gender {
+  FEMALE
+  MALE
+  OTHER
+  NOT_SPECIFIED
+}
+
+enum EmploymentType {
+  FULL_TIME
+  PART_TIME
+  COMMISSION_BASED
+  CONTRACT
+  INTERN
+  TEMPORARY
+  OTHER
+}
+
+enum EmploymentStatus {
+  DRAFT
+  ONBOARDING
+  ACTIVE
+  ON_PROBATION
+  SUSPENDED
+  ON_LEAVE
+  TRANSFERRED
+  RESIGNED
+  TERMINATED
+  EXITED
+}
+
+enum ProbationStatus {
+  NOT_APPLICABLE
+  PENDING
+  IN_PROGRESS
+  PASSED
+  EXTENDED
+  FAILED
+}
+
+enum EmployeeRole {
+  CEO
+  CEO_COORDINATOR
+  SALES_HEAD
+  AREA_SALES_MANAGER
+  SHOP_MANAGER
+  SHOP_ACCOUNTANT
+  DSA
+  DSP
+  BA_COORDINATOR
+  CLEANING_STAFF
+  SECURITY_STAFF
+  EBU_SUPERVISOR
+  EBU_FTTH_SUPERVISOR
+  EBU_TECHNICAL_SALES_LEAD
+  EBU_FTTH_SALES
+  DISTRIBUTION_MANAGER
+  DISTRIBUTION_OFFICER
+  FINANCE_DIRECTOR
+  TREASURY_MANAGER
+  ACCOUNTANT
+  FINANCIAL_CONTROL_REPORTING_MANAGER
+  HR_MANAGER
+  HR_OFFICER
+  TECHNOLOGY_MANAGER
+  EMPLOYEE
+  OTHER
+}
+
+enum EmployeeLevel {
+  JUNIOR
+  MID
+  SENIOR
+  LEAD
+  MANAGER
+  DIRECTOR
+  EXECUTIVE
+  TO_BE_DEFINED
+}
+
+enum OrgUnitType {
+  COMPANY
+  EXECUTIVE_OFFICE
+  DIVISION
+  DEPARTMENT
+  TEAM
+  UNIT
+}
+
+enum LocationType {
+  DIVISION
+  REGION
+  SHOP
+  CLUSTER
+}
+
+enum ApprovalStatus {
+  DRAFT
+  SUBMITTED
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
+enum EvaluationType {
+  PROBATION_EVALUATION
+  MONTHLY_PERFORMANCE_REVIEW
+  QUARTERLY_PERFORMANCE_REVIEW
+  ANNUAL_REVIEW
+  SHOP_MANAGER_EVALUATION
+  DISCIPLINARY_FOLLOW_UP
+  PROMOTION_READINESS
+  COMMISSION_REVIEW
+  SALARY_REVIEW
+  OTHER
+}
+
+enum EvaluationStatus {
+  DRAFT
+  SUBMITTED
+  REVIEWED
+  APPROVED
+  REJECTED
+}
+
+enum AchievementType {
+  SALES_TARGET_ACHIEVED
+  TOP_PERFORMER
+  ATTENDANCE_EXCELLENCE
+  CUSTOMER_SERVICE_RECOGNITION
+  LEADERSHIP_RECOGNITION
+  TRAINING_COMPLETED
+  DISCIPLINARY_IMPROVEMENT
+  PROCESS_IMPROVEMENT
+  FINANCIAL_COMPLIANCE
+  TECHNOLOGY_SUPPORT
+  OTHER
+}
+
+enum DocumentType {
+  ID
+  CONTRACT
+  CV
+  CERTIFICATE
+  EMERGENCY_CONTACT
+  BANK_OR_PAYMENT_INFORMATION
+  TAX_OR_PAYROLL_INFORMATION
+  COMMISSION_AGREEMENT
+  CONTRACT_OR_SERVICE_AGREEMENT
+  COMMISSION_PLAN_ACKNOWLEDGEMENT
+  ASSIGNMENT_LETTER
+  RESPONSIBILITY_DOCUMENT
+  CONFIDENTIALITY_DOCUMENT
+  WARNING_LETTER
+  TERMINATION_LETTER
+  RESIGNATION_LETTER
+  CLEARANCE
+  EVALUATION_DOCUMENT
+  SALARY_DOCUMENT
+  OTHER
+}
+
+enum DocumentVisibility {
+  STANDARD
+  HR_ONLY
+  FINANCE_ONLY
+  SENIOR_ONLY
+  CONFIDENTIAL
+  PUBLIC_TO_HR
+  MANAGER_VISIBLE
+  EMPLOYEE_VISIBLE
+  SENSITIVE_HR_ONLY
+  SALARY_RESTRICTED
+}
+
+enum DisciplinaryStatus {
+  DRAFT
+  SUBMITTED
+  UNDER_REVIEW
+  APPROVED
+  REJECTED
+  ESCALATED
+  OPEN
+  FOLLOW_UP_REQUIRED
+  RESOLVED
+  CLOSED
+}
+
+enum LeaveType {
+  ANNUAL
+  SICK
+  MATERNITY
+  PATERNITY
+  UNPAID
+  ANNUAL_LEAVE
+  SICK_LEAVE
+  MATERNITY_LEAVE
+  PATERNITY_LEAVE
+  UNPAID_LEAVE
+  EMERGENCY_LEAVE
+  COMPASSIONATE
+  OTHER
+}
+
+enum TerminationType {
+  RESIGNATION
+  TERMINATION_FOR_CAUSE
+  END_OF_CONTRACT
+  REDUNDANCY
+  PROBATION_FAILED
+  ABSCONDING
+  RETIREMENT
+  DEATH
+  OTHER
+}
+
+enum TerminationStatus {
+  DRAFT
+  SUBMITTED
+  UNDER_REVIEW
+  APPROVED
+  REJECTED
+  EXIT_IN_PROGRESS
+  EXIT_COMPLETED
+  CANCELLED
+}
+
+enum FinalPaymentStatus {
+  NOT_STARTED
+  PENDING_REVIEW
+  APPROVED
+  PAID
+  ON_HOLD
+  NOT_APPLICABLE
+}
+
+enum ClearanceStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  COMPLETED
+  BLOCKED
+}
+
+enum TransferRequestStatus {
+  DRAFT
+  SUBMITTED
+  UNDER_REVIEW
+  APPROVED
+  REJECTED
+  CANCELLED
+  COMPLETED
+}
+
+enum PromotionRequestStatus {
+  DRAFT
+  SUBMITTED
+  UNDER_REVIEW
+  APPROVED
+  REJECTED
+  CANCELLED
+  COMPLETED
+}
+
+enum ApprovalWorkflowType {
+  DISCIPLINARY
+  TERMINATION
+  TRANSFER
+  PROMOTION
+  LEAVE
+  ACHIEVEMENT
+  EVALUATION
+  IMPORT
+  OTHER
+}
+
+enum ApprovalRequestStatus {
+  DRAFT
+  SUBMITTED
+  IN_PROGRESS
+  APPROVED
+  REJECTED
+  CHANGES_REQUESTED
+  CANCELLED
+}
+
+enum ApprovalActionType {
+  SUBMIT
+  APPROVE
+  REJECT
+  REQUEST_CHANGES
+  CANCEL
+}
+
+enum NotificationType {
+  APPROVAL_REQUIRED
+  APPROVAL_COMPLETED
+  REQUEST_REJECTED
+  REQUEST_CHANGES
+  STATUS_CHANGED
+  DOCUMENT_UPLOADED
+  TERMINATION_APPROVED
+  TRANSFER_APPROVED
+  PROMOTION_APPROVED
+  DISCIPLINARY_ESCALATED
+  REMINDER
+  OVERDUE_WORKFLOW
+  APPROVAL_ESCALATION
+  DAILY_DIGEST
+  SYSTEM
+}
+
+enum PayrollBatchStatus {
+  DRAFT
+  VALIDATED
+  UNDER_REVIEW
+  APPROVED
+  EXPORTED
+  CANCELLED
+}
+
+enum PayrollReadinessStatus {
+  READY
+  WARNING
+  BLOCKED
+}
+
+enum KpiMetricType {
+  SALES
+  ATTENDANCE
+  CUSTOMER_SERVICE
+  COMPLIANCE
+  OPERATIONAL
+  FINANCE
+  HR
+  TECHNOLOGY
+  OTHER
+}
+
+enum KpiRating {
+  EXCEEDED
+  MET
+  PARTIALLY_MET
+  NOT_MET
+  NOT_APPLICABLE
+}
+
+enum KpiResultStatus {
+  DRAFT
+  SUBMITTED
+  APPROVED
+  REJECTED
+}
+
+enum NotificationCategory {
+  APPROVALS
+  HR_WORKFLOWS
+  PAYROLL
+  KPI
+  DOCUMENTS
+  COMPLIANCE
+  SYSTEM
+}
+
+enum ProfileChangeField {
+  PHONE_NUMBER
+  ADDRESS
+  PERSONAL_EMAIL
+  EMERGENCY_CONTACT
+}
+
+enum ProfileChangeRequestStatus {
+  DRAFT
+  SUBMITTED
+  APPROVED
+  REJECTED
+}
+
+enum DataQualityIssueType {
+  MISSING_FIELD
+  INVALID_ROLE
+  MISSING_MANAGER
+  MISSING_ASSIGNMENT
+  MULTIPLE_ACTIVE_ASSIGNMENTS
+  MISSING_DOCUMENT
+  MISSING_SALARY
+  DUPLICATE_CANDIDATE
+  INVALID_STATUS
+  PAYROLL_BLOCKER
+  OTHER
+}
+
+enum DataQualitySeverity {
+  BLOCKER
+  WARNING
+  REVIEW
+}
+
+enum DataQualityStatus {
+  OPEN
+  ASSIGNED
+  IN_PROGRESS
+  RESOLVED
+  DISMISSED
+}
+
+enum ReminderType {
+  PROBATION_ENDING
+  EVALUATION_DUE
+  CONTRACT_EXPIRY
+  DOCUMENT_EXPIRY
+  DISCIPLINARY_FOLLOW_UP
+  EXIT_CLEARANCE
+  PAYROLL_PREPARATION
+  KPI_REVIEW
+  OTHER
+}
+
+enum ReminderStatus {
+  OPEN
+  COMPLETED
+  CANCELLED
+  OVERDUE
+}
+
+enum SystemSettingValueType {
+  STRING
+  NUMBER
+  BOOLEAN
+  JSON
+}
+
+enum CompensationRecommendation {
+  NO_CHANGE
+  SALARY_INCREASE_RECOMMENDED
+  SALARY_DECREASE_RECOMMENDED
+  BONUS_RECOMMENDED
+  COMMISSION_ADJUSTMENT_RECOMMENDED
+  PROMOTION_RECOMMENDED
+  PERFORMANCE_IMPROVEMENT_PLAN
+  OTHER
+}
+
+enum SalaryReviewStatus {
+  DRAFT
+  SUBMITTED
+  HR_REVIEW
+  FINANCE_REVIEW
+  APPROVED
+  REJECTED
+  CANCELLED
+  COMPLETED
+}
+
+enum CompensationReviewStatus {
+  NOT_REQUIRED
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum PayrollRuleType {
+  PAYE_TAX_BRACKET
+  PENSION_EMPLOYEE_RATE
+  PENSION_EMPLOYER_RATE
+  OVERTIME_SUNDAY_RATE
+  OVERTIME_HOLIDAY_RATE
+  OVERTIME_NIGHT_RATE
+  WORKING_DAYS_DEFAULT
+  COMMISSION_RULE
+  ALLOWANCE_RULE
+  DEDUCTION_RULE
+  PRORATION_RULE
+  OTHER
+}
+
+enum PayrollRuleApprovalStatus {
+  DRAFT
+  SUBMITTED
+  APPROVED
+  REJECTED
+  DEACTIVATED
+}
+
+enum PayrollExportFormat {
+  CSV
+  XLSX
+  JSON
+}
+
+enum PayrollExportTargetSystem {
+  INTERNAL_FINANCE
+  BANK_TEMPLATE
+  ACCOUNTING_SYSTEM
+  PAYROLL_SYSTEM
+  CUSTOM
+}
+
+enum PayrollExportRunStatus {
+  CREATED
+  DOWNLOADED
+  CANCELLED
+  FAILED
+}
+
+enum PayrollLockStatus {
+  UNLOCKED
+  LOCKED
+  UNLOCK_REQUESTED
+  TEMPORARILY_UNLOCKED
+}
+
+enum PayrollAdjustmentType {
+  SALARY_CORRECTION
+  ATTENDANCE_CORRECTION
+  COMMISSION_CORRECTION
+  ALLOWANCE_CORRECTION
+  DEDUCTION_CORRECTION
+  TAX_CORRECTION
+  PENSION_CORRECTION
+  OTHER
+}
+
+enum AttendanceStatus {
+  PRESENT
+  ABSENT
+  LATE
+  HALF_DAY
+  ON_LEAVE
+  HOLIDAY
+  WEEKLY_REST
+  SUSPENDED
+  NOT_SCHEDULED
+}
+
+enum AttendanceSource {
+  MANUAL
+  CSV_IMPORT
+  SYSTEM
+  FUTURE_INTEGRATION
+}
+
+enum LeaveAccrualMethod {
+  ANNUAL_FRONTLOADED
+  MONTHLY_ACCRUAL
+  MANUAL
+  NONE
+}
+
+enum EmailDeliveryStatus {
+  PENDING
+  SENT
+  FAILED
+  SKIPPED
+}
+
+enum DataRetentionEntityType {
+  EMPLOYEE_DOCUMENT
+  AUDIT_LOG
+  PAYROLL_EXPORT
+  TERMINATED_EMPLOYEE_RECORD
+  NOTIFICATION
+  EMAIL_LOG
+  IMPORT_FILE
+  OTHER
+}
+
+enum RetentionAction {
+  ARCHIVE
+  DELETE_IF_ALLOWED
+  REVIEW_REQUIRED
+  KEEP_FOREVER
+}
+
+enum IntegrationEventStatus {
+  CREATED
+  PROCESSED
+  FAILED
+  SKIPPED
+}
+
+enum AllowanceType {
+  KPI_ALLOWANCE
+  TRANSPORT_ALLOWANCE
+  HOUSING_ALLOWANCE
+  POSITION_ALLOWANCE
+  MEAL_ALLOWANCE
+  COMMUNICATION_ALLOWANCE
+  OTHER_ALLOWANCE
+}
+
+enum DeductionType {
+  LOAN_DEDUCTION
+  ADVANCE_DEDUCTION
+  ABSENCE_DEDUCTION
+  DAMAGE_DEDUCTION
+  PENALTY_DEDUCTION
+  OTHER_DEDUCTION
+}
+
+enum CommissionCalculationType {
+  FIXED_AMOUNT
+  PERCENT_OF_SALES
+  TIERED_PERCENT
+  TARGET_BASED
+  MANUAL
+  NONE
+}
+
+enum CommissionCalculationStatus {
+  DRAFT
+  CALCULATED
+  UNDER_REVIEW
+  APPROVED
+  REJECTED
+  EXPORTED
+  CANCELLED
+}
+
+enum PayrollValidationIssueType {
+  MISSING_EMPLOYEE_ID
+  MISSING_FULL_NAME
+  MISSING_EMPLOYMENT_TYPE
+  MISSING_SALARY
+  MISSING_SALARY_EFFECTIVE_DATE
+  MISSING_ATTENDANCE
+  UNAPPROVED_ATTENDANCE
+  ATTENDANCE_DAYS_MISMATCH
+  NEGATIVE_SALARY
+  NEGATIVE_ALLOWANCE
+  NEGATIVE_DEDUCTION
+  INVALID_OVERTIME
+  MISSING_PENSION_RULE
+  MISSING_PAYE_RULE
+  UNAPPROVED_COMMISSION
+  SALARY_REVIEW_PENDING
+  COMMISSION_REVIEW_PENDING
+  EMPLOYEE_NOT_ACTIVE
+  OTHER
+}
+
+enum ImportBatchStatus {
+  UPLOADED
+  VALIDATED
+  APPROVED
+  REJECTED
+  PARTIALLY_IMPORTED
+}
+
+enum ImportRowStatus {
+  CLEAN
+  WARNING
+  REVIEW_REQUIRED
+  BLOCKED
+  IMPORTED
+  REJECTED
+}
+
+enum AuditAction {
+  EMPLOYEE_CREATE
+  EMPLOYEE_UPDATE
+  SALARY_CHANGE
+  STATUS_CHANGE
+  ASSIGNMENT_CHANGE
+  EVALUATOR_CHANGE
+  EMPLOYMENT_TYPE_CHANGE
+  DOCUMENT_UPLOAD
+  DOCUMENT_VIEW
+  ACHIEVEMENT_APPROVAL
+  EVALUATION_SUBMISSION
+  EVALUATION_APPROVAL
+  DISCIPLINARY_ACTION
+  TERMINATION_APPROVAL
+  IMPORT_APPROVAL
+  IMPORT_UPLOAD
+  IMPORT_VALIDATION
+  EMPLOYEE_IMPORT_CREATE
+  USER_PERMISSION_CHANGE
+  DOCUMENT_DOWNLOAD
+  DOCUMENT_UPDATE
+  DOCUMENT_DEACTIVATION
+  LEAVE_CREATE
+  LEAVE_UPDATE
+  LEAVE_APPROVAL
+  LEAVE_REJECTION
+  LEAVE_CANCELLATION
+  ACHIEVEMENT_CREATE
+  ACHIEVEMENT_UPDATE
+  ACHIEVEMENT_SUBMISSION
+  ACHIEVEMENT_REJECTION
+  EVALUATION_CREATE
+  EVALUATION_UPDATE
+  EVALUATION_REVIEW
+  EVALUATION_REJECTION
+  EVALUATION_CRITERIA_CHANGE
+  DISCIPLINARY_CREATE
+  DISCIPLINARY_UPDATE
+  DISCIPLINARY_SUBMISSION
+  DISCIPLINARY_REVIEW
+  DISCIPLINARY_APPROVAL
+  DISCIPLINARY_REJECTION
+  DISCIPLINARY_CLOSE
+  DISCIPLINARY_ESCALATION
+  DISCIPLINARY_ATTACHMENT_UPLOAD
+  DISCIPLINARY_ATTACHMENT_VIEW
+  DISCIPLINARY_ATTACHMENT_DOWNLOAD
+  TERMINATION_CREATE
+  TERMINATION_UPDATE
+  TERMINATION_SUBMISSION
+  TERMINATION_REVIEW
+  TERMINATION_REJECTION
+  TERMINATION_CANCELLATION
+  TERMINATION_COMPLETE_EXIT
+  TERMINATION_FINAL_PAYMENT_CHANGE
+  TERMINATION_CLEARANCE_UPDATE
+  TERMINATION_EXIT_CHECKLIST_UPDATE
+  USER_ACCOUNT_DEACTIVATION
+  TRANSFER_CREATE
+  TRANSFER_UPDATE
+  TRANSFER_SUBMISSION
+  TRANSFER_APPROVAL
+  TRANSFER_REJECTION
+  TRANSFER_COMPLETION
+  PROMOTION_CREATE
+  PROMOTION_UPDATE
+  PROMOTION_SUBMISSION
+  PROMOTION_APPROVAL
+  PROMOTION_REJECTION
+  PROMOTION_COMPLETION
+  APPROVAL_WORKFLOW_CHANGE
+  APPROVAL_ACTION
+  NOTIFICATION_READ
+  EXPORT_CREATE
+  SELF_SERVICE_REQUEST
+  PAYROLL_BATCH_CREATE
+  PAYROLL_BATCH_UPDATE
+  PAYROLL_VALIDATION
+  PAYROLL_ROW_UPDATE
+  PAYROLL_BATCH_APPROVAL
+  PAYROLL_BATCH_EXPORT
+  PAYROLL_FILE_DOWNLOAD
+  SALARY_DATA_ACCESS
+  KPI_METRIC_CHANGE
+  KPI_RESULT_IMPORT
+  KPI_RESULT_CHANGE
+  KPI_RESULT_APPROVAL
+  ANALYTICS_VIEW
+  COMPLIANCE_VIEW
+  NOTIFICATION_PREFERENCE_UPDATE
+  PROFILE_CHANGE_REQUEST_CREATE
+  PROFILE_CHANGE_REQUEST_REVIEW
+  PROFILE_CHANGE_REQUEST_APPROVAL
+  PROFILE_CHANGE_REQUEST_REJECTION
+  APPROVAL_GOVERNANCE_UPDATE
+  DATA_QUALITY_CREATE
+  DATA_QUALITY_ASSIGN
+  DATA_QUALITY_RESOLVE
+  DATA_QUALITY_DISMISS
+  REMINDER_CREATE
+  REMINDER_UPDATE
+  REMINDER_COMPLETE
+  REMINDER_CANCEL
+  SYSTEM_SETTING_UPDATE
+  EVALUATION_COMPENSATION_RECOMMENDATION_UPDATE
+  SALARY_REVIEW_CREATE
+  SALARY_REVIEW_UPDATE
+  SALARY_REVIEW_SUBMISSION
+  SALARY_REVIEW_HR_REVIEW
+  SALARY_REVIEW_FINANCE_REVIEW
+  SALARY_REVIEW_APPROVAL
+  SALARY_REVIEW_REJECTION
+  SALARY_REVIEW_COMPLETION
+  PAYROLL_RULE_CREATE
+  PAYROLL_RULE_UPDATE
+  PAYROLL_RULE_DEACTIVATION
+  PAYE_BRACKET_CREATE
+  PAYE_BRACKET_UPDATE
+  PAYE_BRACKET_DEACTIVATION
+  PENSION_RULE_CREATE
+  PENSION_RULE_UPDATE
+  PENSION_RULE_DEACTIVATION
+  PAYROLL_ATTENDANCE_CREATE
+  PAYROLL_ATTENDANCE_UPDATE
+  PAYROLL_ATTENDANCE_APPROVAL
+  PAYROLL_ATTENDANCE_REJECTION
+  PAYROLL_ALLOWANCE_CREATE
+  PAYROLL_ALLOWANCE_UPDATE
+  PAYROLL_ALLOWANCE_APPROVAL
+  PAYROLL_ALLOWANCE_REJECTION
+  PAYROLL_DEDUCTION_CREATE
+  PAYROLL_DEDUCTION_UPDATE
+  PAYROLL_DEDUCTION_APPROVAL
+  PAYROLL_DEDUCTION_REJECTION
+  COMMISSION_PLAN_CREATE
+  COMMISSION_PLAN_UPDATE
+  COMMISSION_PLAN_DEACTIVATION
+  COMMISSION_CALCULATION_CREATE
+  COMMISSION_CALCULATION_RUN
+  COMMISSION_CALCULATION_REVIEW
+  COMMISSION_CALCULATION_APPROVAL
+  COMMISSION_CALCULATION_REJECTION
+  COMMISSION_CALCULATION_EXPORT
+  COMMISSION_MANUAL_ADJUSTMENT
+  PAYROLL_CALCULATION_RUN
+  PAYROLL_VALIDATION_ISSUE_CREATE
+  PAYROLL_VALIDATION_ISSUE_RESOLVE
+  PAYROLL_VALIDATION_ISSUE_DISMISS
+  PAYROLL_IMPORT_PREVIEW
+  PAYROLL_IMPORT_COMMIT
+  COMPENSATION_REPORT_VIEW
+  PAYROLL_EXPORT_TEMPLATE_CREATE
+  PAYROLL_EXPORT_TEMPLATE_UPDATE
+  PAYROLL_EXPORT_TEMPLATE_DEACTIVATION
+  PAYROLL_EXPORT_RUN_CREATE
+  PAYROLL_EXPORT_RUN_DOWNLOAD
+  PAYROLL_PERIOD_LOCK
+  PAYROLL_PERIOD_UNLOCK_REQUEST
+  PAYROLL_PERIOD_UNLOCK
+  PAYROLL_ADJUSTMENT_CREATE
+  PAYROLL_ADJUSTMENT_APPROVAL
+  ATTENDANCE_CREATE
+  ATTENDANCE_UPDATE
+  ATTENDANCE_IMPORT
+  ATTENDANCE_APPROVAL
+  LEAVE_POLICY_CHANGE
+  LEAVE_BALANCE_ADJUSTMENT
+  KPI_IMPORT_TEMPLATE_CHANGE
+  KPI_EVALUATION_WEIGHT_CHANGE
+  EMAIL_TEMPLATE_CHANGE
+  EMAIL_DELIVERY_ATTEMPT
+  SECURITY_SETTING_UPDATE
+  FAILED_LOGIN
+  DATA_RETENTION_POLICY_CHANGE
+  RETENTION_REVIEW_ACTION
+  INTEGRATION_TOKEN_CREATE
+  INTEGRATION_TOKEN_REVOKE
+  INTEGRATION_TOKEN_USE
+  INTEGRATION_EVENT_CREATE
+  INTEGRATION_EVENT_PROCESS
+  SYSTEM_HEALTH_VIEW
+  LOGIN
+  LOGOUT
+}
+
+model User {
+  id                      String                   @id @default(uuid())
+  email                   String                   @unique
+  name                    String
+  passwordHash            String
+  status                  UserStatus               @default(ACTIVE)
+  employeeId              String?
+  employee                Employee?                @relation("UserEmployee", fields: [employeeId], references: [id])
+  passwordChangeRequired  Boolean                  @default(false)
+  failedLoginCount        Int                      @default(0)
+  lockedUntil             DateTime?
+  lastLoginAt             DateTime?
+  createdAt               DateTime                 @default(now())
+  updatedAt               DateTime                 @updatedAt
+  roles                   UserRole[]
+  auditLogs               AuditLog[]
+  notifications           Notification[]           @relation("NotificationRecipient")
+  notificationPreferences NotificationPreference[]
+  createdEmployees        Employee[]               @relation("EmployeeCreatedBy")
+  updatedEmployees        Employee[]               @relation("EmployeeUpdatedBy")
+
+  @@index([status])
+}
+
+model Role {
+  id          String           @id @default(uuid())
+  name        SystemRole       @unique
+  description String?
+  users       UserRole[]
+  permissions RolePermission[]
+}
+
+model Permission {
+  id          String           @id @default(uuid())
+  key         String           @unique
+  description String?
+  roles       RolePermission[]
+}
+
+model UserRole {
+  userId String
+  roleId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role   Role   @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@id([userId, roleId])
+}
+
+model RolePermission {
+  roleId       String
+  permissionId String
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+}
+
+model OrganizationUnit {
+  id        String             @id @default(uuid())
+  name      String
+  code      String?            @unique
+  type      OrgUnitType
+  parentId  String?
+  parent    OrganizationUnit?  @relation("OrgUnitTree", fields: [parentId], references: [id])
+  children  OrganizationUnit[] @relation("OrgUnitTree")
+  managerId String?
+  manager   Employee?          @relation("OrgUnitManager", fields: [managerId], references: [id])
+  active    Boolean            @default(true)
+  createdAt DateTime           @default(now())
+  updatedAt DateTime           @updatedAt
+
+  @@index([parentId])
+  @@index([type])
+}
+
+model Department {
+  id                   String                @id @default(uuid())
+  name                 String
+  code                 String                @unique
+  parentId             String?
+  parent               Department?           @relation("DepartmentTree", fields: [parentId], references: [id])
+  children             Department[]          @relation("DepartmentTree")
+  headId               String?
+  head                 Employee?             @relation("DepartmentHead", fields: [headId], references: [id])
+  active               Boolean               @default(true)
+  employees            Employee[]            @relation("EmployeeDepartment")
+  assignments          EmployeeAssignment[]
+  evaluationCriteria   EvaluationCriteria[]
+  evaluationScoreItems EvaluationScoreItem[]
+  achievements         Achievement[]
+  requiredDocumentRules RequiredDocumentRule[]
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
+
+  @@index([parentId])
+}
+
+model Location {
+  id                   String               @id @default(uuid())
+  name                 String
+  code                 String               @unique
+  type                 LocationType
+  parentId             String?
+  parent               Location?            @relation("LocationTree", fields: [parentId], references: [id])
+  children             Location[]           @relation("LocationTree")
+  managerId            String?
+  manager              Employee?            @relation("LocationManager", fields: [managerId], references: [id])
+  active               Boolean              @default(true)
+  employeesDivision    Employee[]           @relation("EmployeeDivision")
+  employeesRegion      Employee[]           @relation("EmployeeRegion")
+  employeesShop        Employee[]           @relation("EmployeeShop")
+  employeesCluster     Employee[]           @relation("EmployeeCluster")
+  assignmentDivision   EmployeeAssignment[] @relation("AssignmentDivision")
+  assignmentRegion     EmployeeAssignment[] @relation("AssignmentRegion")
+  assignmentShop       EmployeeAssignment[] @relation("AssignmentShop")
+  assignmentCluster    EmployeeAssignment[] @relation("AssignmentCluster")
+  achievementsDivision Achievement[]        @relation("AchievementDivision")
+  achievementsRegion   Achievement[]        @relation("AchievementRegion")
+  achievementsShop     Achievement[]        @relation("AchievementShop")
+  requiredDocumentRules RequiredDocumentRule[]
+  createdAt            DateTime             @default(now())
+  updatedAt            DateTime             @updatedAt
+
+  @@index([type])
+  @@index([parentId])
+}
+
+model Employee {
+  id                      String                         @id @default(uuid())
+  employeeId              String                         @unique
+  firstName               String
+  middleName              String?
+  lastName                String
+  fullName                String
+  gender                  Gender                         @default(NOT_SPECIFIED)
+  dateOfBirth             DateTime?
+  phoneNumber             String?
+  email                   String?                        @unique
+  address                 String?
+  hireDate                DateTime?
+  employmentType          EmploymentType?
+  employmentStatus        EmploymentStatus               @default(DRAFT)
+  probationStatus         ProbationStatus                @default(NOT_APPLICABLE)
+  currentDepartmentId     String?
+  currentDepartment       Department?                    @relation("EmployeeDepartment", fields: [currentDepartmentId], references: [id])
+  currentDivisionId       String?
+  currentDivision         Location?                      @relation("EmployeeDivision", fields: [currentDivisionId], references: [id])
+  currentRegionId         String?
+  currentRegion           Location?                      @relation("EmployeeRegion", fields: [currentRegionId], references: [id])
+  currentShopId           String?
+  currentShop             Location?                      @relation("EmployeeShop", fields: [currentShopId], references: [id])
+  currentClusterId        String?
+  currentCluster          Location?                      @relation("EmployeeCluster", fields: [currentClusterId], references: [id])
+  currentRole             EmployeeRole                   @default(OTHER)
+  sourceRoleValue         String?
+  currentLevel            EmployeeLevel                  @default(TO_BE_DEFINED)
+  directManagerId         String?
+  directManager           Employee?                      @relation("EmployeeManager", fields: [directManagerId], references: [id])
+  directReports           Employee[]                     @relation("EmployeeManager")
+  currentEvaluatorId      String?
+  currentEvaluator        Employee?                      @relation("EmployeeEvaluator", fields: [currentEvaluatorId], references: [id])
+  evaluatees              Employee[]                     @relation("EmployeeEvaluator")
+  basicSalary             Decimal?                       @db.Decimal(12, 2)
+  salaryEffectiveDate     DateTime?
+  createdById             String?
+  createdBy               User?                          @relation("EmployeeCreatedBy", fields: [createdById], references: [id])
+  updatedById             String?
+  updatedBy               User?                          @relation("EmployeeUpdatedBy", fields: [updatedById], references: [id])
+  user                    User[]                         @relation("UserEmployee")
+  organizationManaged     OrganizationUnit[]             @relation("OrgUnitManager")
+  departmentsLed          Department[]                   @relation("DepartmentHead")
+  locationsManaged        Location[]                     @relation("LocationManager")
+  assignments             EmployeeAssignment[]
+  statusHistory           EmployeeStatusHistory[]
+  evaluationsReceived     EmployeeEvaluation[]           @relation("EvaluationEmployee")
+  evaluationsGiven        EmployeeEvaluation[]           @relation("EvaluationEvaluator")
+  salaries                EmployeeSalary[]
+  documents               EmployeeDocument[]
+  achievements            Achievement[]
+  disciplinaryRecords     DisciplinaryRecord[]
+  leaveRecords            LeaveRecord[]
+  terminations            TerminationCase[]
+  transferRequests        TransferRequest[]
+  promotionRequests       PromotionRequest[]
+  payrollRows             PayrollPreparationRow[]
+  kpiResults              EmployeeKpiResult[]
+  profileChangeRequests   EmployeeProfileChangeRequest[]
+  dataQualityIssues       DataQualityIssue[]
+  reminders               HRReminder[]
+  salaryReviews           SalaryReview[]
+  payrollAttendanceInputs PayrollAttendanceInput[]
+  payrollAllowances       PayrollAllowance[]
+  payrollDeductions       PayrollDeduction[]
+  commissionCalculations  CommissionCalculation[]
+  payrollValidationIssues PayrollValidationIssue[]
+  onboardingChecklist     OnboardingChecklist?
+  createdAt               DateTime                       @default(now())
+  updatedAt               DateTime                       @updatedAt
+
+  @@index([employmentStatus])
+  @@index([currentRole])
+  @@index([currentDepartmentId])
+  @@index([currentRegionId])
+  @@index([currentShopId])
+  @@index([directManagerId])
+}
+
+model RequiredDocumentRule {
+  id                         String          @id @default(uuid())
+  name                       String
+  documentType               DocumentType
+  applicableEmploymentType   EmploymentType?
+  applicableRole             EmployeeRole?
+  applicableDepartmentId     String?
+  applicableDepartment       Department?     @relation(fields: [applicableDepartmentId], references: [id])
+  applicableDivisionId       String?
+  applicableDivision         Location?       @relation(fields: [applicableDivisionId], references: [id])
+  isRequired                 Boolean         @default(true)
+  activeStatus               Boolean         @default(true)
+  createdById                String?
+  createdAt                  DateTime        @default(now())
+  updatedAt                  DateTime        @updatedAt
+
+  @@index([activeStatus, documentType])
+  @@index([applicableEmploymentType, applicableRole])
+  @@index([applicableDepartmentId, applicableDivisionId])
+}
+
+model EmployeeAssignment {
+  id              String        @id @default(uuid())
+  employeeId      String
+  employee        Employee      @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  divisionId      String?
+  division        Location?     @relation("AssignmentDivision", fields: [divisionId], references: [id])
+  departmentId    String?
+  department      Department?   @relation(fields: [departmentId], references: [id])
+  regionId        String?
+  region          Location?     @relation("AssignmentRegion", fields: [regionId], references: [id])
+  shopId          String?
+  shop            Location?     @relation("AssignmentShop", fields: [shopId], references: [id])
+  clusterId       String?
+  cluster         Location?     @relation("AssignmentCluster", fields: [clusterId], references: [id])
+  role            EmployeeRole
+  sourceRoleValue String?
+  level           EmployeeLevel @default(TO_BE_DEFINED)
+  directManagerId String?
+  evaluatorId     String?
+  startDate       DateTime
+  endDate         DateTime?
+  reason          String?
+  approvedById    String?
+  createdAt       DateTime      @default(now())
+
+  @@index([employeeId, endDate])
+  @@index([directManagerId])
+  @@index([evaluatorId])
+}
+
+model EmployeeStatusHistory {
+  id             String            @id @default(uuid())
+  employeeId     String
+  employee       Employee          @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  previousStatus EmploymentStatus?
+  newStatus      EmploymentStatus
+  reason         String
+  effectiveDate  DateTime
+  updatedById    String?
+  approvedById   String?
+  approvalStatus ApprovalStatus    @default(PENDING)
+  createdAt      DateTime          @default(now())
+
+  @@index([employeeId, effectiveDate])
+}
+
+model EmployeeEvaluation {
+  id                         String                     @id @default(uuid())
+  employeeId                 String
+  employee                   Employee                   @relation("EvaluationEmployee", fields: [employeeId], references: [id], onDelete: Cascade)
+  evaluatorId                String
+  evaluator                  Employee                   @relation("EvaluationEvaluator", fields: [evaluatorId], references: [id])
+  evaluationPeriodStart      DateTime
+  evaluationPeriodEnd        DateTime
+  evaluationType             EvaluationType
+  score                      Decimal?                   @db.Decimal(5, 2)
+  rating                     String?
+  comments                   String?
+  strengths                  String?
+  improvementAreas           String?
+  status                     EvaluationStatus           @default(DRAFT)
+  submittedDate              DateTime?
+  reviewedById               String?
+  approvedById               String?
+  attachmentPath             String?
+  compensationRecommendation CompensationRecommendation @default(NO_CHANGE)
+  salaryReviewRequired       Boolean                    @default(false)
+  commissionReviewRequired   Boolean                    @default(false)
+  scoreItems                 EvaluationScoreItem[]
+  salaryReviews              SalaryReview[]
+  commissionCalculations     CommissionCalculation[]
+  createdAt                  DateTime                   @default(now())
+  updatedAt                  DateTime                   @updatedAt
+
+  @@index([employeeId, status])
+  @@index([evaluatorId])
+}
+
+model EvaluationCriteria {
+  id                     String                @id @default(uuid())
+  name                   String
+  description            String?
+  applicableRole         EmployeeRole?
+  applicableDepartmentId String?
+  applicableDepartment   Department?           @relation(fields: [applicableDepartmentId], references: [id])
+  weight                 Decimal               @default(1) @db.Decimal(6, 2)
+  maxScore               Int                   @default(100)
+  activeStatus           Boolean               @default(true)
+  createdById            String?
+  scoreItems             EvaluationScoreItem[]
+  createdAt              DateTime              @default(now())
+  updatedAt              DateTime              @updatedAt
+}
+
+model EvaluationScoreItem {
+  id           String             @id @default(uuid())
+  evaluationId String
+  evaluation   EmployeeEvaluation @relation(fields: [evaluationId], references: [id], onDelete: Cascade)
+  criteriaId   String
+  criteria     EvaluationCriteria @relation(fields: [criteriaId], references: [id])
+  departmentId String?
+  department   Department?        @relation(fields: [departmentId], references: [id])
+  score        Decimal            @db.Decimal(6, 2)
+  comments     String?
+  createdAt    DateTime           @default(now())
+
+  @@unique([evaluationId, criteriaId])
+  @@index([criteriaId])
+}
+
+model EmployeeSalary {
+  id            String   @id @default(uuid())
+  employeeId    String
+  employee      Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  basicSalary   Decimal  @db.Decimal(12, 2)
+  effectiveDate DateTime
+  reason        String
+  approvedById  String?
+  createdById   String?
+  createdAt     DateTime @default(now())
+
+  @@index([employeeId, effectiveDate])
+}
+
+model SalaryReview {
+  id                  String                   @id @default(uuid())
+  employeeId          String
+  employee            Employee                 @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  currentSalary       Decimal?                 @db.Decimal(12, 2)
+  proposedSalary      Decimal                  @db.Decimal(12, 2)
+  changeAmount        Decimal                  @default(0) @db.Decimal(12, 2)
+  changePercent       Decimal                  @default(0) @db.Decimal(8, 2)
+  reason              String
+  relatedEvaluationId String?
+  relatedEvaluation   EmployeeEvaluation?      @relation(fields: [relatedEvaluationId], references: [id], onDelete: SetNull)
+  effectiveDate       DateTime?
+  requestedById       String?
+  reviewedById        String?
+  approvedById        String?
+  status              SalaryReviewStatus       @default(DRAFT)
+  financeReviewStatus CompensationReviewStatus @default(NOT_REQUIRED)
+  hrReviewStatus      CompensationReviewStatus @default(PENDING)
+  notes               String?
+  createdAt           DateTime                 @default(now())
+  updatedAt           DateTime                 @updatedAt
+
+  @@index([employeeId, status])
+  @@index([relatedEvaluationId])
+}
+
+model OnboardingChecklist {
+  id          String                    @id @default(uuid())
+  employeeId  String                    @unique
+  employee    Employee                  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  status      ApprovalStatus            @default(DRAFT)
+  items       OnboardingChecklistItem[]
+  completedAt DateTime?
+  createdAt   DateTime                  @default(now())
+  updatedAt   DateTime                  @updatedAt
+}
+
+model OnboardingChecklistItem {
+  id            String              @id @default(uuid())
+  checklistId   String
+  checklist     OnboardingChecklist @relation(fields: [checklistId], references: [id], onDelete: Cascade)
+  key           String
+  label         String
+  completed     Boolean             @default(false)
+  completedById String?
+  completedAt   DateTime?
+
+  @@unique([checklistId, key])
+}
+
+model EmployeeDocument {
+  id               String             @id @default(uuid())
+  employeeId       String
+  employee         Employee           @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  documentType     DocumentType
+  filePath         String
+  originalFilename String?
+  uploadedById     String?
+  uploadedAt       DateTime           @default(now())
+  visibilityLevel  DocumentVisibility @default(STANDARD)
+  notes            String?
+  isActive         Boolean            @default(true)
+  updatedAt        DateTime           @updatedAt
+
+  @@index([employeeId, documentType])
+  @@index([visibilityLevel, isActive])
+}
+
+model Achievement {
+  id              String          @id @default(uuid())
+  employeeId      String
+  employee        Employee        @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  achievementType AchievementType
+  title           String
+  description     String?
+  achievementDate DateTime
+  divisionId      String?
+  division        Location?       @relation("AchievementDivision", fields: [divisionId], references: [id])
+  departmentId    String?
+  department      Department?     @relation(fields: [departmentId], references: [id])
+  regionId        String?
+  region          Location?       @relation("AchievementRegion", fields: [regionId], references: [id])
+  shopId          String?
+  shop            Location?       @relation("AchievementShop", fields: [shopId], references: [id])
+  createdById     String?
+  approvedById    String?
+  approvalStatus  ApprovalStatus  @default(PENDING)
+  attachmentPath  String?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  @@index([employeeId, approvalStatus])
+}
+
+model DisciplinaryRecord {
+  id             String             @id @default(uuid())
+  employeeId     String
+  employee       Employee           @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  incidentType   String
+  description    String
+  actionTaken    String?
+  warningLevel   String?
+  incidentDate   DateTime
+  issuedById     String?
+  reviewedById   String?
+  approvedById   String?
+  attachmentPath String?
+  followUpDate   DateTime?
+  status         DisciplinaryStatus @default(DRAFT)
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+
+  @@index([employeeId, status])
+  @@index([incidentType])
+}
+
+model LeaveRecord {
+  id             String         @id @default(uuid())
+  employeeId     String
+  employee       Employee       @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  leaveType      LeaveType
+  startDate      DateTime
+  endDate        DateTime
+  totalDays      Decimal?       @db.Decimal(6, 2)
+  reason         String?
+  approvalStatus ApprovalStatus @default(PENDING)
+  requestedById  String?
+  approvedById   String?
+  approvedAt     DateTime?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  @@index([employeeId, startDate])
+  @@index([approvalStatus])
+}
+
+model TerminationCase {
+  id                  String              @id @default(uuid())
+  employeeId          String
+  employee            Employee            @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  terminationType     TerminationType
+  reason              String
+  noticeDate          DateTime?
+  lastWorkingDate     DateTime?
+  initiatedById       String?
+  reviewedById        String?
+  approvedById        String?
+  approvalStatus      ApprovalStatus      @default(PENDING)
+  finalPaymentStatus  FinalPaymentStatus  @default(NOT_STARTED)
+  clearanceStatus     ClearanceStatus     @default(NOT_STARTED)
+  exitInterviewStatus ClearanceStatus     @default(NOT_STARTED)
+  status              TerminationStatus   @default(DRAFT)
+  notes               String?
+  exitItems           ExitChecklistItem[]
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
+
+  @@index([employeeId, approvalStatus])
+  @@index([status])
+}
+
+model ExitChecklistItem {
+  id                String          @id @default(uuid())
+  terminationCaseId String
+  terminationCase   TerminationCase @relation(fields: [terminationCaseId], references: [id], onDelete: Cascade)
+  key               String
+  label             String
+  isRequired        Boolean         @default(true)
+  completed         Boolean         @default(false)
+  completedById     String?
+  completedAt       DateTime?
+
+  @@unique([terminationCaseId, key])
+}
+
+model TransferRequest {
+  id                    String                @id @default(uuid())
+  employeeId            String
+  employee              Employee              @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  currentAssignmentId   String?
+  requestedDivisionId   String?
+  requestedDepartmentId String?
+  requestedRegionId     String?
+  requestedShopId       String?
+  requestedClusterId    String?
+  requestedRole         EmployeeRole?
+  requestedLevel        EmployeeLevel?
+  requestedManagerId    String?
+  reason                String
+  effectiveDate         DateTime?
+  initiatedById         String?
+  reviewedById          String?
+  approvedById          String?
+  status                TransferRequestStatus @default(DRAFT)
+  createdAt             DateTime              @default(now())
+  updatedAt             DateTime              @updatedAt
+
+  @@index([employeeId, status])
+  @@index([status])
+}
+
+model PromotionRequest {
+  id                     String                 @id @default(uuid())
+  employeeId             String
+  employee               Employee               @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  currentRole            EmployeeRole
+  currentLevel           EmployeeLevel
+  proposedRole           EmployeeRole?
+  proposedLevel          EmployeeLevel?
+  proposedSalary         Decimal?               @db.Decimal(12, 2)
+  salaryEffectiveDate    DateTime?
+  reason                 String
+  supportingEvaluationId String?
+  effectiveDate          DateTime?
+  initiatedById          String?
+  reviewedById           String?
+  approvedById           String?
+  status                 PromotionRequestStatus @default(DRAFT)
+  createdAt              DateTime               @default(now())
+  updatedAt              DateTime               @updatedAt
+
+  @@index([employeeId, status])
+  @@index([status])
+}
+
+model ApprovalWorkflow {
+  id           String               @id @default(uuid())
+  name         String
+  workflowType ApprovalWorkflowType
+  activeStatus Boolean              @default(true)
+  createdById  String?
+  steps        ApprovalStep[]
+  requests     ApprovalRequest[]
+  createdAt    DateTime             @default(now())
+  updatedAt    DateTime             @updatedAt
+
+  @@index([workflowType, activeStatus])
+}
+
+model ApprovalStep {
+  id                      String           @id @default(uuid())
+  workflowId              String
+  workflow                ApprovalWorkflow @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  stepOrder               Int
+  approverRole            SystemRole?
+  approverUserId          String?
+  requiredPermission      String?
+  fallbackApproverRole    SystemRole?
+  fallbackApproverUserId  String?
+  escalationRole          SystemRole?
+  escalationAfterDays     Int?
+  preventSelfApproval     Boolean          @default(true)
+  requireCommentsOnReject Boolean          @default(true)
+  requireCommentsOnChange Boolean          @default(true)
+  isRequired              Boolean          @default(true)
+  canReject               Boolean          @default(true)
+  canRequestChanges       Boolean          @default(true)
+  activeStatus            Boolean          @default(true)
+  actions                 ApprovalAction[]
+  createdAt               DateTime         @default(now())
+  updatedAt               DateTime         @updatedAt
+
+  @@unique([workflowId, stepOrder])
+  @@index([workflowId, activeStatus])
+}
+
+model ApprovalRequest {
+  id            String                @id @default(uuid())
+  workflowId    String
+  workflow      ApprovalWorkflow      @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  entityType    String
+  entityId      String
+  requestedById String?
+  currentStep   Int                   @default(1)
+  status        ApprovalRequestStatus @default(SUBMITTED)
+  actions       ApprovalAction[]
+  createdAt     DateTime              @default(now())
+  updatedAt     DateTime              @updatedAt
+
+  @@index([entityType, entityId])
+  @@index([status])
+}
+
+model ApprovalAction {
+  id                String             @id @default(uuid())
+  approvalRequestId String
+  approvalRequest   ApprovalRequest    @relation(fields: [approvalRequestId], references: [id], onDelete: Cascade)
+  stepId            String?
+  step              ApprovalStep?      @relation(fields: [stepId], references: [id])
+  actionById        String?
+  action            ApprovalActionType
+  comments          String?
+  actionDate        DateTime           @default(now())
+
+  @@index([approvalRequestId])
+  @@index([action])
+}
+
+model Notification {
+  id                String           @id @default(uuid())
+  recipientUserId   String
+  recipientUser     User             @relation("NotificationRecipient", fields: [recipientUserId], references: [id], onDelete: Cascade)
+  title             String
+  message           String
+  notificationType  NotificationType
+  relatedEntityType String?
+  relatedEntityId   String?
+  readStatus        Boolean          @default(false)
+  readAt            DateTime?
+  createdAt         DateTime         @default(now())
+
+  @@index([recipientUserId, readStatus])
+  @@index([relatedEntityType, relatedEntityId])
+}
+
+model NotificationPreference {
+  id            String               @id @default(uuid())
+  userId        String
+  user          User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  category      NotificationCategory
+  inAppEnabled  Boolean              @default(true)
+  emailEnabled  Boolean              @default(false)
+  digestEnabled Boolean              @default(false)
+  createdAt     DateTime             @default(now())
+  updatedAt     DateTime             @updatedAt
+
+  @@unique([userId, category])
+  @@index([category])
+}
+
+model PayrollPreparationBatch {
+  id                 String                   @id @default(uuid())
+  batchName          String
+  payrollPeriodStart DateTime
+  payrollPeriodEnd   DateTime
+  createdById        String?
+  reviewedById       String?
+  approvedById       String?
+  status             PayrollBatchStatus       @default(DRAFT)
+  totalEmployees     Int                      @default(0)
+  readyCount         Int                      @default(0)
+  blockedCount       Int                      @default(0)
+  warningCount       Int                      @default(0)
+  notes              String?
+  rows               PayrollPreparationRow[]
+  validationIssues   PayrollValidationIssue[]
+  createdAt          DateTime                 @default(now())
+  updatedAt          DateTime                 @updatedAt
+
+  @@index([status])
+  @@index([payrollPeriodStart, payrollPeriodEnd])
+}
+
+model PayrollPreparationRow {
+  id                          String                   @id @default(uuid())
+  batchId                     String
+  batch                       PayrollPreparationBatch  @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  employeeId                  String
+  employee                    Employee                 @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  employeeCode                String
+  fullName                    String
+  employmentType              String?
+  division                    String?
+  department                  String?
+  region                      String?
+  shop                        String?
+  cluster                     String?
+  role                        String
+  level                       String
+  basicSalary                 Decimal?                 @db.Decimal(12, 2)
+  salaryEffectiveDate         DateTime?
+  workingDays                 Decimal?                 @db.Decimal(8, 2)
+  daysPresent                 Decimal?                 @db.Decimal(8, 2)
+  paidLeaveDays               Decimal?                 @db.Decimal(8, 2)
+  unpaidLeaveDays             Decimal?                 @db.Decimal(8, 2)
+  proratedBasicSalary         Decimal?                 @db.Decimal(12, 2)
+  approvedAllowances          Decimal?                 @db.Decimal(12, 2)
+  approvedCommission          Decimal?                 @db.Decimal(12, 2)
+  approvedDeductions          Decimal?                 @db.Decimal(12, 2)
+  overtimeAmount              Decimal?                 @db.Decimal(12, 2)
+  grossSalary                 Decimal?                 @db.Decimal(12, 2)
+  employeePension             Decimal?                 @db.Decimal(12, 2)
+  employerPension             Decimal?                 @db.Decimal(12, 2)
+  taxableIncome               Decimal?                 @db.Decimal(12, 2)
+  payeTax                     Decimal?                 @db.Decimal(12, 2)
+  netSalary                   Decimal?                 @db.Decimal(12, 2)
+  employerTotalCost           Decimal?                 @db.Decimal(12, 2)
+  manualAdjustments           Decimal?                 @db.Decimal(12, 2)
+  payrollBlockers             Json?
+  payrollWarnings             Json?
+  payrollCalculationBreakdown Json?
+  employmentStatus            String
+  readinessStatus             PayrollReadinessStatus
+  validationIssues            Json?
+  includedInExport            Boolean                  @default(true)
+  payrollValidationIssues     PayrollValidationIssue[]
+  createdAt                   DateTime                 @default(now())
+  updatedAt                   DateTime                 @updatedAt
+
+  @@unique([batchId, employeeId])
+  @@index([readinessStatus])
+}
+
+model PayrollRule {
+  id                 String          @id @default(uuid())
+  ruleType           PayrollRuleType
+  name               String
+  description        String?
+  value              String?
+  rate               Decimal?        @db.Decimal(10, 4)
+  amount             Decimal?        @db.Decimal(12, 2)
+  effectiveStartDate DateTime
+  effectiveEndDate   DateTime?
+  activeStatus       Boolean         @default(true)
+  approvalStatus      PayrollRuleApprovalStatus @default(DRAFT)
+  reviewedById        String?
+  approvedById        String?
+  changeReason        String?
+  isSample            Boolean        @default(false)
+  createdById        String?
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
+
+  @@index([ruleType, activeStatus, approvalStatus])
+  @@index([effectiveStartDate, effectiveEndDate])
+}
+
+model PayeTaxBracket {
+  id                 String    @id @default(uuid())
+  name               String
+  minIncome          Decimal   @db.Decimal(12, 2)
+  maxIncome          Decimal?  @db.Decimal(12, 2)
+  taxRate            Decimal   @db.Decimal(10, 4)
+  deductionAmount    Decimal   @default(0) @db.Decimal(12, 2)
+  effectiveStartDate DateTime
+  effectiveEndDate   DateTime?
+  activeStatus       Boolean   @default(true)
+  approvalStatus      PayrollRuleApprovalStatus @default(DRAFT)
+  reviewedById        String?
+  approvedById        String?
+  changeReason        String?
+  isSample            Boolean   @default(false)
+  createdById        String?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  @@index([activeStatus, approvalStatus, effectiveStartDate, effectiveEndDate])
+}
+
+model PensionRule {
+  id                       String          @id @default(uuid())
+  name                     String
+  employeeRate             Decimal         @db.Decimal(10, 4)
+  employerRate             Decimal         @db.Decimal(10, 4)
+  applicableEmploymentType EmploymentType?
+  applicableRole           EmployeeRole?
+  effectiveStartDate       DateTime
+  effectiveEndDate         DateTime?
+  activeStatus             Boolean         @default(true)
+  approvalStatus           PayrollRuleApprovalStatus @default(DRAFT)
+  reviewedById             String?
+  approvedById             String?
+  changeReason             String?
+  isSample                 Boolean         @default(false)
+  createdById              String?
+  createdAt                DateTime        @default(now())
+  updatedAt                DateTime        @updatedAt
+
+  @@index([activeStatus, approvalStatus, effectiveStartDate, effectiveEndDate])
+  @@index([applicableEmploymentType, applicableRole])
+}
+
+model PayrollAttendanceInput {
+  id                   String         @id @default(uuid())
+  employeeId           String
+  employee             Employee       @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  payrollPeriodStart   DateTime
+  payrollPeriodEnd     DateTime
+  workingDays          Decimal        @db.Decimal(8, 2)
+  daysPresent          Decimal        @default(0) @db.Decimal(8, 2)
+  daysAbsent           Decimal        @default(0) @db.Decimal(8, 2)
+  paidLeaveDays        Decimal        @default(0) @db.Decimal(8, 2)
+  unpaidLeaveDays      Decimal        @default(0) @db.Decimal(8, 2)
+  sundayOvertimeHours  Decimal        @default(0) @db.Decimal(8, 2)
+  holidayOvertimeHours Decimal        @default(0) @db.Decimal(8, 2)
+  nightOvertimeHours   Decimal        @default(0) @db.Decimal(8, 2)
+  attendanceSource     String?
+  uploadedById         String?
+  approvedById         String?
+  approvalStatus       ApprovalStatus @default(DRAFT)
+  notes                String?
+  createdAt            DateTime       @default(now())
+  updatedAt            DateTime       @updatedAt
+
+  @@index([employeeId, payrollPeriodStart, payrollPeriodEnd])
+  @@index([approvalStatus])
+}
+
+model PayrollAllowance {
+  id                 String         @id @default(uuid())
+  employeeId         String
+  employee           Employee       @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  payrollPeriodStart DateTime
+  payrollPeriodEnd   DateTime
+  allowanceType      AllowanceType
+  amount             Decimal        @db.Decimal(12, 2)
+  taxableStatus      Boolean        @default(true)
+  approvalStatus     ApprovalStatus @default(DRAFT)
+  reason             String?
+  createdById        String?
+  approvedById       String?
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+
+  @@index([employeeId, payrollPeriodStart, payrollPeriodEnd])
+  @@index([approvalStatus])
+}
+
+model PayrollDeduction {
+  id                 String         @id @default(uuid())
+  employeeId         String
+  employee           Employee       @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  payrollPeriodStart DateTime
+  payrollPeriodEnd   DateTime
+  deductionType      DeductionType
+  amount             Decimal        @db.Decimal(12, 2)
+  preTaxStatus       Boolean        @default(false)
+  approvalStatus     ApprovalStatus @default(DRAFT)
+  reason             String?
+  createdById        String?
+  approvedById       String?
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+
+  @@index([employeeId, payrollPeriodStart, payrollPeriodEnd])
+  @@index([approvalStatus])
+}
+
+model CommissionPlan {
+  id                     String                    @id @default(uuid())
+  name                   String
+  description            String?
+  applicableRole         EmployeeRole?
+  applicableDepartmentId String?
+  applicableDivisionId   String?
+  employmentType         EmploymentType?
+  calculationType        CommissionCalculationType @default(NONE)
+  rate                   Decimal?                  @db.Decimal(10, 4)
+  thresholdAmount        Decimal?                  @db.Decimal(12, 2)
+  fixedAmount            Decimal?                  @db.Decimal(12, 2)
+  capAmount              Decimal?                  @db.Decimal(12, 2)
+  activeStatus           Boolean                   @default(true)
+  approvalStatus         PayrollRuleApprovalStatus @default(DRAFT)
+  reviewedById           String?
+  approvedById           String?
+  changeReason           String?
+  isSample               Boolean                   @default(false)
+  effectiveStartDate     DateTime
+  effectiveEndDate       DateTime?
+  createdById            String?
+  tiers                  CommissionTier[]
+  calculations           CommissionCalculation[]
+  createdAt              DateTime                  @default(now())
+  updatedAt              DateTime                  @updatedAt
+
+  @@index([activeStatus, approvalStatus, effectiveStartDate, effectiveEndDate])
+  @@index([applicableRole, employmentType])
+}
+
+model CommissionTier {
+  id               String         @id @default(uuid())
+  commissionPlanId String
+  commissionPlan   CommissionPlan @relation(fields: [commissionPlanId], references: [id], onDelete: Cascade)
+  minAmount        Decimal        @db.Decimal(12, 2)
+  maxAmount        Decimal?       @db.Decimal(12, 2)
+  rate             Decimal?       @db.Decimal(10, 4)
+  fixedAmount      Decimal?       @db.Decimal(12, 2)
+  tierOrder        Int
+
+  @@index([commissionPlanId, tierOrder])
+}
+
+model CommissionCalculation {
+  id                     String                      @id @default(uuid())
+  employeeId             String
+  employee               Employee                    @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  commissionPlanId       String?
+  commissionPlan         CommissionPlan?             @relation(fields: [commissionPlanId], references: [id], onDelete: SetNull)
+  periodStart            DateTime
+  periodEnd              DateTime
+  salesAmount            Decimal?                    @db.Decimal(12, 2)
+  targetAmount           Decimal?                    @db.Decimal(12, 2)
+  achievementPercent     Decimal?                    @db.Decimal(8, 2)
+  baseSalary             Decimal?                    @db.Decimal(12, 2)
+  calculatedCommission   Decimal                     @default(0) @db.Decimal(12, 2)
+  manualAdjustment       Decimal                     @default(0) @db.Decimal(12, 2)
+  manualAdjustmentReason String?
+  finalCommission        Decimal                     @default(0) @db.Decimal(12, 2)
+  calculationStatus      CommissionCalculationStatus @default(DRAFT)
+  calculatedById         String?
+  reviewedById           String?
+  approvedById           String?
+  relatedEvaluationId    String?
+  relatedEvaluation      EmployeeEvaluation?         @relation(fields: [relatedEvaluationId], references: [id], onDelete: SetNull)
+  notes                  String?
+  createdAt              DateTime                    @default(now())
+  updatedAt              DateTime                    @updatedAt
+
+  @@index([employeeId, periodStart, periodEnd])
+  @@index([calculationStatus])
+  @@index([relatedEvaluationId])
+}
+
+model PayrollValidationIssue {
+  id             String                     @id @default(uuid())
+  payrollBatchId String?
+  payrollBatch   PayrollPreparationBatch?   @relation(fields: [payrollBatchId], references: [id], onDelete: Cascade)
+  payrollRowId   String?
+  payrollRow     PayrollPreparationRow?     @relation(fields: [payrollRowId], references: [id], onDelete: Cascade)
+  employeeId     String?
+  employee       Employee?                  @relation(fields: [employeeId], references: [id], onDelete: SetNull)
+  issueType      PayrollValidationIssueType
+  severity       DataQualitySeverity
+  fieldName      String?
+  message        String
+  suggestedFix   String?
+  status         DataQualityStatus          @default(OPEN)
+  createdAt      DateTime                   @default(now())
+  resolvedById   String?
+  resolvedAt     DateTime?
+
+  @@index([payrollBatchId, status])
+  @@index([payrollRowId])
+  @@index([employeeId])
+  @@index([issueType, severity])
+}
+
+model KpiMetric {
+  id                     String              @id @default(uuid())
+  name                   String              @unique
+  description            String?
+  metricType             KpiMetricType
+  applicableRole         EmployeeRole?
+  applicableDepartmentId String?
+  applicableDivisionId   String?
+  unit                   String?
+  activeStatus           Boolean             @default(true)
+  createdById            String?
+  results                EmployeeKpiResult[]
+  createdAt              DateTime            @default(now())
+  updatedAt              DateTime            @updatedAt
+
+  @@index([metricType, activeStatus])
+}
+
+model EmployeeKpiResult {
+  id                 String          @id @default(uuid())
+  employeeId         String
+  employee           Employee        @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  metricId           String
+  metric             KpiMetric       @relation(fields: [metricId], references: [id], onDelete: Cascade)
+  periodStart        DateTime
+  periodEnd          DateTime
+  targetValue        Decimal?        @db.Decimal(12, 2)
+  actualValue        Decimal         @db.Decimal(12, 2)
+  achievementPercent Decimal?        @db.Decimal(8, 2)
+  rating             KpiRating       @default(NOT_APPLICABLE)
+  source             String?
+  uploadedById       String?
+  approvedById       String?
+  approvalStatus     KpiResultStatus @default(DRAFT)
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
+
+  @@index([employeeId, periodStart, periodEnd])
+  @@index([metricId])
+  @@index([approvalStatus])
+}
+
+model EmployeeProfileChangeRequest {
+  id             String                     @id @default(uuid())
+  employeeId     String
+  employee       Employee                   @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  requestedField ProfileChangeField
+  oldValue       String?
+  newValue       String
+  reason         String?
+  status         ProfileChangeRequestStatus @default(SUBMITTED)
+  requestedById  String?
+  reviewedById   String?
+  approvedById   String?
+  createdAt      DateTime                   @default(now())
+  updatedAt      DateTime                   @updatedAt
+
+  @@index([employeeId, status])
+}
+
+model DataQualityIssue {
+  id                String               @id @default(uuid())
+  issueType         DataQualityIssueType
+  severity          DataQualitySeverity
+  employeeId        String?
+  employee          Employee?            @relation(fields: [employeeId], references: [id], onDelete: SetNull)
+  relatedEntityType String?
+  relatedEntityId   String?
+  description       String
+  suggestedFix      String?
+  status            DataQualityStatus    @default(OPEN)
+  detectedById      String?
+  assignedToId      String?
+  resolvedById      String?
+  resolvedAt        DateTime?
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
+
+  @@index([issueType, severity])
+  @@index([status])
+  @@index([employeeId])
+}
+
+model HRReminder {
+  id                String         @id @default(uuid())
+  title             String
+  description       String?
+  reminderType      ReminderType
+  relatedEmployeeId String?
+  relatedEmployee   Employee?      @relation(fields: [relatedEmployeeId], references: [id], onDelete: SetNull)
+  relatedEntityType String?
+  relatedEntityId   String?
+  dueDate           DateTime
+  assignedToId      String?
+  status            ReminderStatus @default(OPEN)
+  createdById       String?
+  completedById     String?
+  completedAt       DateTime?
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+
+  @@index([dueDate, status])
+  @@index([relatedEmployeeId])
+}
+
+model SystemSetting {
+  id          String                 @id @default(uuid())
+  key         String                 @unique
+  value       String
+  valueType   SystemSettingValueType @default(STRING)
+  description String?
+  isSensitive Boolean                @default(false)
+  updatedById String?
+  updatedAt   DateTime               @updatedAt
+}
+
+model ExportHistory {
+  id          String   @id @default(uuid())
+  exportType  String
+  format      String
+  rowCount    Int
+  fileName    String?
+  createdById String?
+  metadata    Json?
+  createdAt   DateTime @default(now())
+
+  @@index([exportType])
+  @@index([createdAt])
+}
+
+model PayrollExportTemplate {
+  id           String                    @id @default(uuid())
+  name         String
+  description  String?
+  exportFormat PayrollExportFormat
+  targetSystem PayrollExportTargetSystem
+  fieldMapping Json
+  activeStatus Boolean                   @default(true)
+  createdById  String?
+  createdAt    DateTime                  @default(now())
+  updatedAt    DateTime                  @updatedAt
+
+  @@index([activeStatus, targetSystem])
+}
+
+model PayrollExportRun {
+  id             String                 @id @default(uuid())
+  payrollBatchId String
+  templateId     String?
+  exportFormat   PayrollExportFormat
+  exportedById   String?
+  exportedAt     DateTime               @default(now())
+  rowCount       Int                    @default(0)
+  fileName       String?
+  status         PayrollExportRunStatus @default(CREATED)
+  notes          String?
+  metadata       Json?
+  createdAt      DateTime               @default(now())
+
+  @@index([payrollBatchId])
+  @@index([templateId])
+  @@index([status, exportedAt])
+}
+
+model PayrollPeriodLock {
+  id                 String            @id @default(uuid())
+  payrollPeriodStart DateTime
+  payrollPeriodEnd   DateTime
+  lockedById         String?
+  lockedAt           DateTime?
+  unlockRequestedById String?
+  unlockedById       String?
+  unlockedAt         DateTime?
+  lockStatus         PayrollLockStatus @default(UNLOCKED)
+  reason             String?
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+
+  @@unique([payrollPeriodStart, payrollPeriodEnd])
+  @@index([lockStatus])
+}
+
+model PayrollAdjustment {
+  id                 String                @id @default(uuid())
+  employeeId         String
+  payrollPeriodStart DateTime
+  payrollPeriodEnd   DateTime
+  adjustmentType     PayrollAdjustmentType
+  amount             Decimal               @db.Decimal(12, 2)
+  reason             String
+  requestedById      String?
+  reviewedById       String?
+  approvedById       String?
+  approvalStatus     ApprovalStatus        @default(DRAFT)
+  appliedToBatchId   String?
+  createdAt          DateTime              @default(now())
+  updatedAt          DateTime              @updatedAt
+
+  @@index([employeeId, payrollPeriodStart, payrollPeriodEnd])
+  @@index([approvalStatus])
+}
+
+model AttendanceRecord {
+  id              String           @id @default(uuid())
+  employeeId      String
+  attendanceDate  DateTime
+  status          AttendanceStatus
+  checkInTime     DateTime?
+  checkOutTime    DateTime?
+  hoursWorked     Decimal?         @db.Decimal(8, 2)
+  overtimeHours   Decimal?         @db.Decimal(8, 2)
+  source          AttendanceSource @default(MANUAL)
+  recordedById    String?
+  approvedById    String?
+  approvalStatus  ApprovalStatus   @default(DRAFT)
+  notes           String?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  @@unique([employeeId, attendanceDate])
+  @@index([attendanceDate, status])
+  @@index([approvalStatus])
+}
+
+model LeavePolicy {
+  id                    String             @id @default(uuid())
+  name                  String
+  leaveType             LeaveType
+  employmentType        EmploymentType?
+  annualEntitlementDays Decimal            @db.Decimal(8, 2)
+  accrualMethod         LeaveAccrualMethod
+  carryForwardAllowed   Boolean            @default(false)
+  maxCarryForwardDays   Decimal?           @db.Decimal(8, 2)
+  activeStatus          Boolean            @default(true)
+  effectiveStartDate    DateTime
+  effectiveEndDate      DateTime?
+  createdById           String?
+  createdAt             DateTime           @default(now())
+  updatedAt             DateTime           @updatedAt
+
+  @@index([leaveType, activeStatus])
+  @@index([employmentType, effectiveStartDate, effectiveEndDate])
+}
+
+model LeaveBalance {
+  id             String    @id @default(uuid())
+  employeeId     String
+  leaveType      LeaveType
+  periodStart    DateTime
+  periodEnd      DateTime
+  openingBalance Decimal   @default(0) @db.Decimal(8, 2)
+  accruedDays    Decimal   @default(0) @db.Decimal(8, 2)
+  usedDays       Decimal   @default(0) @db.Decimal(8, 2)
+  adjustedDays   Decimal   @default(0) @db.Decimal(8, 2)
+  closingBalance Decimal   @default(0) @db.Decimal(8, 2)
+  updatedAt      DateTime  @updatedAt
+
+  @@unique([employeeId, leaveType, periodStart, periodEnd])
+  @@index([employeeId, leaveType])
+}
+
+model LeaveBalanceAdjustment {
+  id              String         @id @default(uuid())
+  employeeId      String
+  leaveType       LeaveType
+  adjustmentDays  Decimal        @db.Decimal(8, 2)
+  reason          String
+  requestedById   String?
+  approvedById    String?
+  approvalStatus  ApprovalStatus @default(DRAFT)
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  @@index([employeeId, leaveType])
+  @@index([approvalStatus])
+}
+
+model KpiImportTemplate {
+  id           String   @id @default(uuid())
+  name         String
+  description  String?
+  fieldMapping Json
+  activeStatus Boolean  @default(true)
+  createdById  String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([activeStatus])
+}
+
+model KpiEvaluationWeight {
+  id                     String       @id @default(uuid())
+  metricId               String
+  applicableRole         EmployeeRole?
+  applicableDepartmentId String?
+  weight                 Decimal      @db.Decimal(5, 2)
+  activeStatus           Boolean      @default(true)
+  createdById            String?
+  createdAt              DateTime     @default(now())
+  updatedAt              DateTime     @updatedAt
+
+  @@index([metricId, activeStatus])
+  @@index([applicableRole, applicableDepartmentId])
+}
+
+model EmailTemplate {
+  id              String           @id @default(uuid())
+  name            String
+  notificationType NotificationType
+  subjectTemplate String
+  bodyTemplate    String
+  activeStatus    Boolean          @default(true)
+  createdById     String?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  @@index([notificationType, activeStatus])
+}
+
+model EmailDeliveryLog {
+  id                String              @id @default(uuid())
+  recipientEmail    String
+  recipientUserId   String?
+  subject           String
+  notificationType  NotificationType
+  relatedEntityType String?
+  relatedEntityId   String?
+  status            EmailDeliveryStatus @default(PENDING)
+  errorMessage      String?
+  sentAt            DateTime?
+  createdAt         DateTime            @default(now())
+
+  @@index([recipientUserId, createdAt])
+  @@index([status, createdAt])
+}
+
+model DataRetentionPolicy {
+  id                  String                  @id @default(uuid())
+  name                String
+  entityType          DataRetentionEntityType
+  retentionPeriodDays Int
+  actionAfterRetention RetentionAction        @default(REVIEW_REQUIRED)
+  activeStatus        Boolean                 @default(true)
+  createdById         String?
+  createdAt           DateTime                @default(now())
+  updatedAt           DateTime                @updatedAt
+
+  @@index([entityType, activeStatus])
+}
+
+model IntegrationToken {
+  id            String    @id @default(uuid())
+  name          String
+  tokenHash     String
+  allowedScopes Json
+  activeStatus  Boolean   @default(true)
+  createdById   String?
+  createdAt     DateTime  @default(now())
+  expiresAt     DateTime?
+  lastUsedAt    DateTime?
+
+  @@index([activeStatus, expiresAt])
+}
+
+model IntegrationEventLog {
+  id             String                 @id @default(uuid())
+  eventType      String
+  entityType     String?
+  entityId       String?
+  payloadSummary Json?
+  status         IntegrationEventStatus @default(CREATED)
+  createdAt      DateTime               @default(now())
+  processedAt    DateTime?
+  errorMessage   String?
+
+  @@index([eventType, status])
+  @@index([entityType, entityId])
+}
+
+model ProductionReadinessCheck {
+  id          String   @id @default(uuid())
+  key         String   @unique
+  label       String
+  completed   Boolean  @default(false)
+  notes       String?
+  updatedById String?
+  updatedAt   DateTime @updatedAt
+}
+
+model ImportBatch {
+  id               String                  @id @default(uuid())
+  fileName         String
+  uploadedFile     String?
+  sourceType       String
+  uploadedById     String?
+  status           ImportBatchStatus       @default(UPLOADED)
+  totalRows        Int                     @default(0)
+  validRows        Int                     @default(0)
+  cleanRows        Int                     @default(0)
+  warningRows      Int                     @default(0)
+  reviewRows       Int                     @default(0)
+  blockedRows      Int                     @default(0)
+  approvedById     String?
+  approvedAt       DateTime?
+  notes            String?
+  columnMapping    Json?
+  validationReport Json?
+  rows             ImportRow[]
+  fieldMappings    ImportFieldMapping[]
+  validationIssues ImportValidationIssue[]
+  createdAt        DateTime                @default(now())
+  updatedAt        DateTime                @updatedAt
+
+  @@index([status])
+}
+
+model ImportRow {
+  id                String                  @id @default(uuid())
+  importBatchId     String
+  importBatch       ImportBatch             @relation(fields: [importBatchId], references: [id], onDelete: Cascade)
+  rowNumber         Int
+  sourceData        Json
+  normalizedData    Json?
+  blockers          Json?
+  warnings          Json?
+  reviewItems       Json?
+  status            ImportRowStatus         @default(REVIEW_REQUIRED)
+  employeeCreated   Boolean                 @default(false)
+  employeeUpdated   Boolean                 @default(false)
+  createdEmployeeId String?
+  notes             String?
+  validationIssues  ImportValidationIssue[]
+
+  @@unique([importBatchId, rowNumber])
+  @@index([status])
+}
+
+model ImportFieldMapping {
+  id            String      @id @default(uuid())
+  importBatchId String
+  importBatch   ImportBatch @relation(fields: [importBatchId], references: [id], onDelete: Cascade)
+  sourceColumn  String
+  targetField   String
+  createdAt     DateTime    @default(now())
+
+  @@unique([importBatchId, sourceColumn])
+  @@index([targetField])
+}
+
+model ImportValidationIssue {
+  id            String      @id @default(uuid())
+  importBatchId String
+  importBatch   ImportBatch @relation(fields: [importBatchId], references: [id], onDelete: Cascade)
+  importRowId   String?
+  importRow     ImportRow?  @relation(fields: [importRowId], references: [id], onDelete: Cascade)
+  severity      String
+  fieldName     String
+  issueCode     String
+  message       String
+  suggestedFix  String?
+  createdAt     DateTime    @default(now())
+
+  @@index([importBatchId, severity])
+  @@index([fieldName])
+}
+
+model AuditLog {
+  id         String      @id @default(uuid())
+  userId     String?
+  user       User?       @relation(fields: [userId], references: [id])
+  action     AuditAction
+  entityType String
+  entityId   String?
+  oldValue   Json?
+  newValue   Json?
+  timestamp  DateTime    @default(now())
+  ipAddress  String?
+
+  @@index([action])
+  @@index([entityType, entityId])
+  @@index([timestamp])
+}
