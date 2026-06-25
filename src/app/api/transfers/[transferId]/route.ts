@@ -1,3 +1,4 @@
+import type { EmployeeRoleValue } from "@/lib/constants";
 import { EmployeeLevel, EmployeeRole, TransferRequestStatus } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { z } from "zod";
@@ -72,7 +73,7 @@ export async function PATCH(request: Request, context: RouteContext) {
   if (nextStatus === "COMPLETED") {
     if (!hasPermission(principal, "transfer.complete")) return NextResponse.json({ error: "Permission denied for completion." }, { status: 403 });
     const issues = validateTransferApproval({
-      requestedRole: (parsed.data.requestedRole ?? existing.requestedRole) as never,
+      requestedRole: (parsed.data.requestedRole ?? existing.requestedRole) as EmployeeRoleValue | null | undefined,
       requestedDepartmentId: parsed.data.requestedDepartmentId ?? existing.requestedDepartmentId,
       requestedRegionId: parsed.data.requestedRegionId ?? existing.requestedRegionId,
       requestedShopId: parsed.data.requestedShopId ?? existing.requestedShopId,
@@ -89,7 +90,7 @@ export async function PATCH(request: Request, context: RouteContext) {
 
   if (nextStatus === "APPROVED") {
     const issues = validateTransferApproval({
-      requestedRole: (parsed.data.requestedRole ?? existing.requestedRole) as never,
+      requestedRole: (parsed.data.requestedRole ?? existing.requestedRole) as EmployeeRoleValue | null | undefined,
       requestedDepartmentId: parsed.data.requestedDepartmentId ?? existing.requestedDepartmentId,
       requestedRegionId: parsed.data.requestedRegionId ?? existing.requestedRegionId,
       requestedShopId: parsed.data.requestedShopId ?? existing.requestedShopId,

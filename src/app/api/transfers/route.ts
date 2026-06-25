@@ -1,3 +1,4 @@
+import type { EmployeeRoleValue } from "@/lib/constants";
 import { EmployeeLevel, EmployeeRole, TransferRequestStatus } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { z } from "zod";
@@ -62,7 +63,7 @@ export async function POST(request: Request) {
   }
 
   if (parsed.data.status === "APPROVED") {
-    const issues = validateTransferApproval(parsed.data as never);
+    const issues = validateTransferApproval(parsed.data as unknown as { requestedRole?: EmployeeRoleValue | null; requestedDepartmentId?: string | null; requestedRegionId?: string | null; requestedShopId?: string | null; requestedClusterId?: string | null; effectiveDate?: string | Date | null });
     if (issues.length > 0) return NextResponse.json({ error: issues[0].message, issues }, { status: 422 });
   }
 

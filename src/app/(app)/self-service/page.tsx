@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { ProfileChangeField } from "@prisma/client";
 import { AsyncForm } from "@/components/phase2/async-form";
+import { SelfServiceLeaveForm } from "@/components/phase2/self-service-leave-form";
+import { SelfServiceDocumentUpload } from "@/components/phase2/self-service-document-upload";
 import { Badge } from "@/components/ui/badge";
 import { prisma } from "@/lib/prisma";
 import { requirePagePermission } from "@/lib/security/page-auth";
@@ -105,6 +107,22 @@ export default async function SelfServicePage() {
                 </div>
               ))}
             </div>
+          </section>
+
+          <section className="panel">
+            <div className="panel-header">
+              <h3>Request Leave</h3>
+              <span>Submit for HR approval</span>
+            </div>
+            <SelfServiceLeaveForm />
+          </section>
+
+          <section className="panel">
+            <div className="panel-header">
+              <h3>Upload Document</h3>
+              <span>Employee-visible only</span>
+            </div>
+            <SelfServiceDocumentUpload />
           </section>
 
           <section className="panel">

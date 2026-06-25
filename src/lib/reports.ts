@@ -1,3 +1,4 @@
+import type { EmployeeRoleValue } from "@/lib/constants";
 import { canViewEmployee, hasAnySystemRole, hasPermission, type Principal } from "@/lib/rbac";
 import { prisma } from "@/lib/prisma";
 
@@ -155,7 +156,7 @@ function employeeToReportScope(employee: {
 }) {
   return {
     id: employee.id,
-    currentRole: employee.currentRole as never,
+    currentRole: employee.currentRole as EmployeeRoleValue,
     currentDepartmentId: employee.currentDepartmentId,
     currentRegionId: employee.currentRegionId,
     currentShopId: employee.currentShopId,

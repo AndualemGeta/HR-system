@@ -1,3 +1,4 @@
+import { EmploymentStatus } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
@@ -116,7 +117,7 @@ export async function GET(request: Request) {
 
   const employees = await prisma.employee.findMany({
     where: {
-      ...(status ? { employmentStatus: status as never } : {}),
+      ...(status ? { employmentStatus: status as EmploymentStatus } : {}),
       ...(query
         ? {
             OR: [
@@ -402,8 +403,10 @@ export async function POST(request: Request) {
       { status: 201 }
     );
   } catch (error) {
-    console.error("Error creating employee:", error);
     const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+    if (process.env.NODE_ENV === "development") {
+      console.error({ event: "employee_create_error", error: errorMessage, stack: error instanceof Error ? error.stack : undefined });
+    }
     return NextResponse.json(
       { error: "Failed to create employee", details: errorMessage },
       { status: 500 }

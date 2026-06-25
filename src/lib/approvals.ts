@@ -3,6 +3,7 @@ import { writeAuditLog } from "@/lib/audit";
 import { createNotification, notifyUsersWithRole } from "@/lib/notifications";
 import { prisma } from "@/lib/prisma";
 import { hasAnySystemRole, hasPermission, type Principal } from "@/lib/rbac";
+import type { PermissionKey } from "@/lib/constants";
 
 export async function ensureDefaultWorkflow(workflowType: ApprovalWorkflowType, createdById?: string | null) {
   const existing = await prisma.approvalWorkflow.findFirst({
@@ -148,7 +149,7 @@ function canActOnStep(principal: Principal, step?: { approverRole: SystemRole | 
   if (!step) return hasAnySystemRole(principal, ["SUPER_ADMIN", "HR_ADMIN"]);
   if (step.approverUserId && step.approverUserId !== principal.id) return false;
   if (step.approverRole && !hasAnySystemRole(principal, [step.approverRole])) return false;
-  if (step.requiredPermission && !hasPermission(principal, step.requiredPermission as never)) return false;
+  if (step.requiredPermission && !hasPermission(principal, step.requiredPermission as PermissionKey)) return false;
   return true;
 }
 

@@ -1,3 +1,4 @@
+import type { EmployeeRoleValue, EmploymentStatusValue, EmploymentTypeValue } from "../constants";
 import { nextEmployeeId } from "../employee-id";
 import {
   defaultLevelForRole,
@@ -152,9 +153,9 @@ export function validateImportRows(
     const lifecycle = validateEmployeeLifecycle({
       employeeId: normalizedData.employeeId,
       fullName: normalizedData.fullName,
-      employmentType: normalizedData.employmentType as never,
-      employmentStatus: normalizedData.employmentStatus as never,
-      currentRole: normalizedData.role as never,
+      employmentType: normalizedData.employmentType as EmploymentTypeValue,
+      employmentStatus: normalizedData.employmentStatus as EmploymentStatusValue,
+      currentRole: normalizedData.role as EmployeeRoleValue,
       currentDepartmentId: normalizedData.department,
       currentRegionId: normalizedData.region,
       currentShopId: normalizedData.shop,

@@ -241,6 +241,7 @@ export const permissionKeys = [
   "kpi_import_template.manage",
   "kpi_evaluation_linkage.manage",
   "self_service.leave_request",
+  "self_service.document_upload",
   "self_service.resignation_request",
   "manager_dashboard.view",
   "team_attendance.view",
@@ -813,6 +814,7 @@ const phase5ManagerPermissions: PermissionKey[] = [
 const phase5EmployeePermissions: PermissionKey[] = [
   "leave_balance.view",
   "self_service.leave_request",
+  "self_service.document_upload",
   "self_service.resignation_request"
 ];
 

@@ -476,7 +476,7 @@ async function seedLifecycleData(
     await prisma.leaveRecord.create({
       data: {
         employeeId: employees.shopManager.id,
-        leaveType: "ANNUAL_LEAVE",
+        leaveType: "ANNUAL",
         startDate: new Date("2026-07-01"),
         endDate: new Date("2026-07-05"),
         totalDays: 5,

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { Prisma } from "@prisma/client";
+import { EmployeeLevel, EmployeeRole, EmploymentStatus, EmploymentType, Prisma } from "@prisma/client";
 import { writeAuditLog } from "../lib/audit";
 import { validateImportRows, flattenImportIssues } from "../lib/import/validator";
 import { canApproveAchievement, canViewDocument, employeeToScope } from "../lib/phase2-access";
@@ -159,10 +159,10 @@ async function verifyImportApproval(principal: Principal) {
         firstName: "Workflow",
         lastName: "Import",
         fullName: normalized.fullName,
-        employmentType: normalized.employmentType as never,
-        employmentStatus: normalized.employmentStatus as never,
-        currentRole: (normalized.role ?? "OTHER") as never,
-        currentLevel: normalized.level as never,
+        employmentType: normalized.employmentType as EmploymentType,
+        employmentStatus: normalized.employmentStatus as EmploymentStatus,
+        currentRole: (normalized.role ?? "OTHER") as EmployeeRole,
+        currentLevel: normalized.level as EmployeeLevel,
         createdById: principal.id,
         updatedById: principal.id
       }
@@ -255,7 +255,7 @@ async function verifyLeaveApproval(principal: Principal, employeeId: string) {
   const leave = await prisma.leaveRecord.create({
     data: {
       employeeId,
-      leaveType: "ANNUAL_LEAVE",
+      leaveType: "ANNUAL",
       startDate: new Date("2026-08-03"),
       endDate: new Date("2026-08-05"),
       totalDays: calculateInclusiveDays(new Date("2026-08-03"), new Date("2026-08-05")),

@@ -1,0 +1,20 @@
+-- RenameIndex
+ALTER INDEX "CommissionPlan_activeStatus_approvalStatus_effectiveStartDate_e" RENAME TO "CommissionPlan_activeStatus_approvalStatus_effectiveStartDa_idx";
+
+-- RenameIndex
+ALTER INDEX "LeavePolicy_employmentType_effectiveStartDate_effectiveEndDate_" RENAME TO "LeavePolicy_employmentType_effectiveStartDate_effectiveEndD_idx";
+
+-- RenameIndex
+ALTER INDEX "PayeTaxBracket_activeStatus_approvalStatus_effectiveStartDate_e" RENAME TO "PayeTaxBracket_activeStatus_approvalStatus_effectiveStartDa_idx";
+
+-- RenameIndex
+ALTER INDEX "PayrollAdjustment_employeeId_payrollPeriodStart_payrollPeriodEn" RENAME TO "PayrollAdjustment_employeeId_payrollPeriodStart_payrollPeri_idx";
+
+-- RenameIndex
+ALTER INDEX "PensionRule_activeStatus_approvalStatus_effectiveStartDate_effe" RENAME TO "PensionRule_activeStatus_approvalStatus_effectiveStartDate__idx";
+
+-- RenameIndex
+ALTER INDEX "RequiredDocumentRule_applicableDepartmentId_applicableDivisionI" RENAME TO "RequiredDocumentRule_applicableDepartmentId_applicableDivis_idx";
+
+-- RenameIndex
+ALTER INDEX "RequiredDocumentRule_applicableEmploymentType_applicableRole_id" RENAME TO "RequiredDocumentRule_applicableEmploymentType_applicableRol_idx";

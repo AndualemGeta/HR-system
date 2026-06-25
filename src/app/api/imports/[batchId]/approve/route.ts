@@ -1,5 +1,5 @@
+import { EmployeeLevel, EmployeeRole, EmploymentStatus, EmploymentType, Prisma } from "@prisma/client";
 import { NextResponse } from "next/server";
-import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { isApiError, requirePermission } from "@/lib/api";
 import { onboardingItems } from "@/lib/constants";
@@ -50,10 +50,10 @@ export async function POST(_request: Request, context: RouteContext) {
           firstName,
           lastName,
           fullName: normalized.fullName,
-          employmentType: normalized.employmentType as never,
-          employmentStatus: normalized.employmentStatus as never,
-          currentRole: (normalized.role ?? "OTHER") as never,
-          currentLevel: normalized.level as never,
+          employmentType: normalized.employmentType as EmploymentType,
+          employmentStatus: normalized.employmentStatus as EmploymentStatus,
+          currentRole: (normalized.role ?? "OTHER") as EmployeeRole,
+          currentLevel: normalized.level as EmployeeLevel,
           basicSalary: normalized.basicSalary ?? null,
           salaryEffectiveDate: normalized.basicSalary ? new Date() : null,
           createdById: principal.id,
