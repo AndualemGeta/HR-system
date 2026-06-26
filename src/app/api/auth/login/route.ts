@@ -1,90 +1,72 @@
-import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
-import { verifyPassword } from "@/lib/security/password";
-import { createSessionToken, sessionCookieName } from "@/lib/security/session";
-import { writeAuditLog } from "@/lib/audit";
+import { type NextRequest } from 'next/server'
+import { z } from 'zod'
+import { prisma } from '@/lib/prisma'
+import { verifyPassword } from '@/lib/password'
+import { createSession, setSessionCookie } from '@/lib/session'
+import { createAuditLog } from '@/lib/audit'
+import { badRequest, unauthorized, internalError, success } from '@/lib/api'
 
-export const runtime = "nodejs";
+const loginSchema = z.object({
+  email: z.string().email(),
+  password: z.string().min(1),
+})
 
-export async function POST(request: Request) {
-  const contentType = request.headers.get("content-type") ?? "";
-  const body = contentType.includes("application/json")
-    ? await request.json()
-    : Object.fromEntries((await request.formData()).entries());
+export async function POST(req: NextRequest) {
+  try {
+    const parsed = loginSchema.safeParse(await req.json().catch(() => ({})))
+    if (!parsed.success) return badRequest('Invalid input', parsed.error.flatten())
 
-  const email = String(body.email ?? "").trim().toLowerCase();
-  const password = String(body.password ?? "");
+    const { email, password } = parsed.data
 
-  const user = await prisma.user.findUnique({ where: { email } });
-  if (!user || user.status !== "ACTIVE") {
-    await writeAuditLog({
-      action: "FAILED_LOGIN",
-      entityType: "User",
-      entityId: email,
-      ipAddress: request.headers.get("x-forwarded-for"),
-      newValue: { reason: "inactive_or_missing_user" }
-    });
-    return NextResponse.json({ error: "Invalid credentials." }, { status: 401 });
-  }
-  if (user.lockedUntil && user.lockedUntil > new Date()) {
-    await writeAuditLog({
-      userId: user.id,
-      action: "FAILED_LOGIN",
-      entityType: "User",
-      entityId: user.id,
-      ipAddress: request.headers.get("x-forwarded-for"),
-      newValue: { reason: "locked_user" }
-    });
-    return NextResponse.json({ error: "Invalid credentials." }, { status: 401 });
-  }
+    const user = await prisma.user.findUnique({ where: { email } })
+    if (!user || !user.isActive) return unauthorized('Invalid email or password')
 
-  const valid = await verifyPassword(password, user.passwordHash);
-  if (!valid) {
-    const failedLoginCount = user.failedLoginCount + 1;
+    if (user.lockedUntil && user.lockedUntil > new Date()) return unauthorized('Account is temporarily locked')
+
+    const valid = await verifyPassword(password, user.passwordHash)
+    if (!valid) {
+      const newCount = user.failedLoginCount + 1
+      const updates: Record<string, unknown> = { failedLoginCount: newCount }
+      if (newCount >= 5) {
+        updates.lockedUntil = new Date(Date.now() + 15 * 60 * 1000)
+      }
+      await prisma.user.update({ where: { id: user.id }, data: updates })
+
+      await createAuditLog({
+        userId: user.id,
+        action: 'FAILED_LOGIN',
+        entityType: 'User',
+        entityId: user.id,
+        ipAddress: req.headers.get('x-forwarded-for') || req.headers.get('x-real-ip'),
+      })
+
+      return unauthorized('Invalid email or password')
+    }
+
     await prisma.user.update({
       where: { id: user.id },
-      data: {
-        failedLoginCount,
-        lockedUntil: failedLoginCount >= Number(process.env.FAILED_LOGIN_LOCKOUT_THRESHOLD ?? 5)
-          ? new Date(Date.now() + Number(process.env.FAILED_LOGIN_LOCKOUT_MINUTES ?? 15) * 60_000)
-          : null
-      }
-    });
-    await writeAuditLog({
+      data: { failedLoginCount: 0, lockedUntil: null, lastLoginAt: new Date() },
+    })
+
+    const token = await createSession({
       userId: user.id,
-      action: "FAILED_LOGIN",
-      entityType: "User",
+      email: user.email,
+      name: user.name,
+      employeeId: user.employeeId,
+    })
+    await setSessionCookie(token)
+
+    await createAuditLog({
+      userId: user.id,
+      action: 'LOGIN',
+      entityType: 'User',
       entityId: user.id,
-      ipAddress: request.headers.get("x-forwarded-for"),
-      newValue: { failedLoginCount }
-    });
-    return NextResponse.json({ error: "Invalid credentials." }, { status: 401 });
+      ipAddress: req.headers.get('x-forwarded-for') || req.headers.get('x-real-ip'),
+    })
+
+    return success({ user: { id: user.id, email: user.email, name: user.name, employeeId: user.employeeId } })
+  } catch (err) {
+    console.error('Login error:', err)
+    return internalError()
   }
-
-  const token = await createSessionToken({ sub: user.id, email: user.email });
-  await prisma.user.update({
-    where: { id: user.id },
-    data: { lastLoginAt: new Date(), failedLoginCount: 0, lockedUntil: null }
-  });
-  await writeAuditLog({
-    userId: user.id,
-    action: "LOGIN",
-    entityType: "User",
-    entityId: user.id,
-    ipAddress: request.headers.get("x-forwarded-for")
-  });
-
-  const response = contentType.includes("application/json")
-    ? NextResponse.json({ ok: true })
-    : NextResponse.redirect(new URL("/dashboard", request.url), { status: 303 });
-
-  response.cookies.set(sessionCookieName, token, {
-    httpOnly: true,
-    sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
-    path: "/",
-    maxAge: 60 * 60 * 8
-  });
-
-  return response;
 }

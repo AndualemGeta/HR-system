@@ -1,11 +1,17 @@
-import { NextResponse } from "next/server";
-import { sessionCookieName } from "@/lib/security/session";
+import { NextResponse } from 'next/server'
+import { clearSessionCookie, getSession } from '@/lib/session'
+import { createAuditLog } from '@/lib/audit'
 
-export const runtime = "nodejs";
-
-export async function POST(request: Request) {
-  const response = NextResponse.redirect(new URL("/login", request.url), { status: 303 });
-  response.cookies.delete(sessionCookieName);
-  return response;
+export async function POST() {
+  const session = await getSession()
+  if (session) {
+    await createAuditLog({
+      userId: session.userId,
+      action: 'LOGOUT',
+      entityType: 'User',
+      entityId: session.userId,
+    })
+  }
+  await clearSessionCookie()
+  return NextResponse.json({ data: { message: 'Logged out' } })
 }
-

@@ -1,16 +1,14 @@
-import type { Metadata } from "next";
-import "./globals.css";
+import type { Metadata } from 'next'
 
 export const metadata: Metadata = {
-  title: "Leapfrog HR Management",
-  description: "Secure role-based HR management system for Leapfrog Software Technology Africa PLC"
-};
-
-export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  return (
-    <html lang="en">
-      <body>{children}</body>
-    </html>
-  );
+  title: 'Leapfrog HR System',
+  description: 'Human Resource Management System',
 }
 
+export default function RootLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <html lang="en">
+      <body style={{ margin: 0, fontFamily: 'system-ui, sans-serif' }}>{children}</body>
+    </html>
+  )
+}

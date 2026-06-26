@@ -1,26 +1,65 @@
-import { NextResponse } from "next/server";
-import { hasPermission, type Principal } from "@/lib/rbac";
-import type { PermissionKey } from "@/lib/constants";
-import { getCurrentPrincipal } from "@/lib/security/session";
+import { NextResponse, type NextRequest } from 'next/server'
+import { getSession } from './session'
+import { userHasPermission, type PermissionKey } from './rbac'
 
-export function jsonError(message: string, status = 400) {
-  return NextResponse.json({ error: message }, { status });
+export interface ApiError {
+  error: string
+  details?: unknown
 }
 
-export async function requirePrincipal(): Promise<Principal | NextResponse> {
-  const principal = await getCurrentPrincipal();
-  if (!principal) return jsonError("Authentication required.", 401);
-  return principal;
+export function unauthorized(message = 'Unauthorized'): NextResponse<ApiError> {
+  return NextResponse.json({ error: message }, { status: 401 })
 }
 
-export async function requirePermission(permission: PermissionKey): Promise<Principal | NextResponse> {
-  const principal = await getCurrentPrincipal();
-  if (!principal) return jsonError("Authentication required.", 401);
-  if (!hasPermission(principal, permission)) return jsonError("Permission denied.", 403);
-  return principal;
+export function forbidden(message = 'Forbidden'): NextResponse<ApiError> {
+  return NextResponse.json({ error: message }, { status: 403 })
 }
 
-export function isApiError(value: Principal | NextResponse): value is NextResponse {
-  return value instanceof NextResponse;
+export function notFound(message = 'Not found'): NextResponse<ApiError> {
+  return NextResponse.json({ error: message }, { status: 404 })
 }
 
+export function badRequest(message: string, details?: unknown): NextResponse<ApiError> {
+  return NextResponse.json({ error: message, details }, { status: 400 })
+}
+
+export function conflict(message: string): NextResponse<ApiError> {
+  return NextResponse.json({ error: message }, { status: 409 })
+}
+
+export function internalError(message = 'Internal server error'): NextResponse<ApiError> {
+  return NextResponse.json({ error: message }, { status: 500 })
+}
+
+export function success<T>(data: T, status = 200): NextResponse<{ data: T }> {
+  return NextResponse.json({ data }, { status })
+}
+
+export function withAuth(handler: (req: NextRequest, ctx: { userId: string; email: string; name: string; employeeId?: string | null }) => Promise<NextResponse>, requiredPermission?: PermissionKey) {
+  return async (req: NextRequest) => {
+    const session = await getSession()
+    if (!session) return unauthorized()
+
+    if (requiredPermission) {
+      const hasPermission = await userHasPermission(session.userId, requiredPermission)
+      if (!hasPermission) return forbidden()
+    }
+
+    const ctx = { userId: session.userId, email: session.email, name: session.name, employeeId: session.employeeId }
+
+    try {
+      return await handler(req, ctx)
+    } catch (err) {
+      console.error('API Error:', err instanceof Error ? err.message : err)
+      return internalError()
+    }
+  }
+}
+
+export async function getBody<T>(req: NextRequest): Promise<T | null> {
+  try {
+    return await req.json() as T
+  } catch {
+    return null
+  }
+}
