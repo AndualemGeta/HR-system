@@ -7,8 +7,21 @@ import { notFound, badRequest, success, unauthorized, forbidden, internalError }
 import { createAuditLog } from '@/lib/audit'
 
 const updateSchema = z.object({
-  endDate: z.string().optional(),
-  reason: z.string().optional(),
+  role: z.string().optional(),
+  level: z.string().optional(),
+  employeeCategory: z.string().optional(),
+  departmentId: z.string().nullable().optional(),
+  divisionId: z.string().nullable().optional(),
+  regionId: z.string().nullable().optional(),
+  areaId: z.string().nullable().optional(),
+  shopId: z.string().nullable().optional(),
+  clusterId: z.string().nullable().optional(),
+  directManagerId: z.string().nullable().optional(),
+  accountingReportingManagerId: z.string().nullable().optional(),
+  startDate: z.string().optional(),
+  endDate: z.string().nullable().optional(),
+  reason: z.string().nullable().optional(),
+  isActive: z.boolean().optional(),
 })
 
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -27,8 +40,19 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 
     const data = parsed.data
     const updateData: Record<string, unknown> = {}
-    if (data.endDate) updateData.endDate = new Date(data.endDate)
-    if (data.reason) updateData.reason = data.reason
+
+    const stringFields = ['role', 'level', 'employeeCategory', 'departmentId', 'divisionId', 'regionId', 'areaId', 'shopId', 'clusterId', 'directManagerId', 'accountingReportingManagerId', 'reason'] as const
+    for (const field of stringFields) {
+      if (data[field] !== undefined) {
+        updateData[field] = data[field] === null ? null : data[field]
+      }
+    }
+    if (data.startDate !== undefined) updateData.startDate = new Date(data.startDate)
+    if (data.endDate !== undefined) updateData.endDate = data.endDate ? new Date(data.endDate) : null
+    if (data.isActive !== undefined) updateData.isActive = data.isActive
+
+    // If level is empty string, default to TO_BE_DEFINED
+    if (updateData.level === '') updateData.level = 'TO_BE_DEFINED'
 
     const assignment = await prisma.employeeAssignment.update({ where: { id }, data: updateData })
 
@@ -37,8 +61,8 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       action: 'ASSIGNMENT_CHANGE',
       entityType: 'EmployeeAssignment',
       entityId: id,
-      oldValue: { endDate: existing.endDate },
-      newValue: data,
+      oldValue: { role: existing.role, level: existing.level, endDate: existing.endDate, reason: existing.reason },
+      newValue: { role: updateData.role, level: updateData.level, endDate: updateData.endDate, reason: updateData.reason },
     })
 
     return success(assignment)

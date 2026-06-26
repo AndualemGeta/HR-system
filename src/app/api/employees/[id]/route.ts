@@ -200,6 +200,34 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 
     const employee = await prisma.employee.update({ where: { id }, data: updateData })
 
+    // Sync current assignment with updated role/level/location fields
+    const assignFields = ['employeeCategory', 'currentRole', 'currentLevel', 'currentDepartmentId', 'currentDivisionId', 'currentRegionId', 'currentAreaId', 'currentShopId', 'currentClusterId', 'directManagerId', 'accountingReportingManagerId'] as const
+    const assignMap: Record<string, string> = {
+      currentRole: 'role', currentLevel: 'level', currentDepartmentId: 'departmentId',
+      currentDivisionId: 'divisionId', currentRegionId: 'regionId', currentAreaId: 'areaId',
+      currentShopId: 'shopId', currentClusterId: 'clusterId',
+      directManagerId: 'directManagerId', accountingReportingManagerId: 'accountingReportingManagerId',
+      employeeCategory: 'employeeCategory',
+    }
+    const changedAssignFields = assignFields.filter(f => data[f] !== undefined)
+    if (changedAssignFields.length > 0) {
+      const assignUpdate: Record<string, unknown> = {}
+      for (const f of changedAssignFields) {
+        const val = data[f]
+        if (val === '' || val === null) {
+          if (f === 'currentLevel') assignUpdate[assignMap[f]] = 'TO_BE_DEFINED'
+          else if (f === 'currentRole') assignUpdate[assignMap[f]] = 'OTHER'
+          else assignUpdate[assignMap[f]] = null
+        } else {
+          assignUpdate[assignMap[f]] = val
+        }
+      }
+      await prisma.employeeAssignment.updateMany({
+        where: { employeeId: id, isActive: true, endDate: null },
+        data: assignUpdate,
+      })
+    }
+
     await createAuditLog({
       userId: session.userId, action: 'EMPLOYEE_UPDATE', entityType: 'Employee', entityId: id,
       oldValue: { fullName: existing.fullName }, newValue: { fullName: employee.fullName },

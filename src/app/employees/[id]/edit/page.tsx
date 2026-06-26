@@ -6,6 +6,7 @@ import Link from 'next/link'
 
 interface Dept { id: string; name: string; code: string }
 interface Emp { id: string; employeeId: string; fullName: string; currentRole: string }
+interface Assign { id: string; role: string; level: string; startDate: string; endDate: string | null; reason: string | null; isActive: boolean; departmentId: string | null; regionId: string | null; areaId: string | null; shopId: string | null; directManagerId: string | null; accountingReportingManagerId: string | null }
 
 export default function EditEmployeePage() {
   const router = useRouter()
@@ -17,6 +18,10 @@ export default function EditEmployeePage() {
   const [loading, setLoading] = useState(true)
   const [isHO, setIsHO] = useState(false)
   const [empIdStr, setEmpIdStr] = useState('')
+  const [assignments, setAssignments] = useState<Assign[]>([])
+  const [editingAssignId, setEditingAssignId] = useState<string | null>(null)
+  const [assignForm, setAssignForm] = useState<Record<string, string>>({})
+  const [savingAssign, setSavingAssign] = useState(false)
   const [form, setForm] = useState({
     firstName: '', middleName: '', lastName: '', email: '', phoneNumber: '',
     gender: 'NOT_SPECIFIED', dateOfBirth: '', address: '', notes: '', hireDate: '',
@@ -35,12 +40,14 @@ export default function EditEmployeePage() {
       fetch('/api/departments').then(r => r.json()),
       fetch('/api/employees?limit=200').then(r => r.json()),
       fetch(`/api/employees/${id}`).then(r => r.json()),
-    ]).then(([meJson, deptJson, empJson, empDetail]) => {
+      fetch(`/api/employees/${id}/assignments`).then(r => r.json()),
+    ]).then(([meJson, deptJson, empJson, empDetail, assignJson]) => {
       const me = meJson.data || meJson
       const employee = empDetail.data || empDetail
       if (!me.id) { router.push('/login'); return }
       if (!employee.id) { router.push('/employees'); return }
       setDepartments(deptJson.data || [])
+      setAssignments(assignJson.data || [])
       const allManagers = empJson.data?.items || []
       setManagers(allManagers.filter((m: Emp) => m.id !== id))
       const isHo = employee.employeeCategory === 'HEAD_OFFICE'
@@ -111,6 +118,38 @@ export default function EditEmployeePage() {
   }
 
   function set(field: string, value: string) { setForm(prev => ({ ...prev, [field]: value })) }
+
+  function startEditAssignment(a: Assign) {
+    setAssignForm({
+      role: a.role || '',
+      level: a.level || '',
+      startDate: a.startDate ? a.startDate.split('T')[0] : '',
+      endDate: a.endDate ? a.endDate.split('T')[0] : '',
+      reason: a.reason || '',
+    })
+    setEditingAssignId(a.id)
+  }
+
+  async function saveAssignment(id: string) {
+    setSavingAssign(true)
+    setError('')
+    const payload: Record<string, unknown> = { ...assignForm }
+    if (!payload.startDate) delete payload.startDate
+    if (!payload.endDate) payload.endDate = null
+    if (!payload.reason) payload.reason = null
+    try {
+      const res = await fetch(`/api/assignments/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+      const json = await res.json()
+      if (!res.ok) { setError(json.error || json.message || 'Failed to update assignment'); return }
+      setAssignments(prev => prev.map(a => a.id === id ? { ...a, ...json.data } : a))
+      setEditingAssignId(null)
+    } catch { setError('Network error saving assignment') }
+    finally { setSavingAssign(false) }
+  }
 
   if (loading) return <div style={{ padding: '2rem', textAlign: 'center' }}>Loading...</div>
 
@@ -216,6 +255,50 @@ export default function EditEmployeePage() {
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
             <Field label="Basic Salary" value={form.basicSalary} onChange={v => set('basicSalary', v)} type="number" />
           </div>
+        </fieldset>
+
+        <fieldset style={{ border: '1px solid #d1d5db', borderRadius: 6, padding: '1rem' }}>
+          <legend style={{ fontWeight: 600 }}>Assignment Records</legend>
+          {assignments.length === 0 ? <p style={{ color: '#888', fontSize: '0.9rem' }}>No assignment records found.</p> : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+              {assignments.map(a => (
+                <div key={a.id} style={{ border: '1px solid #e5e7eb', borderRadius: 4, padding: '0.75rem' }}>
+                  {editingAssignId === a.id ? (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
+                        <Field label="Role" value={assignForm.role || ''} onChange={v => setAssignForm(p => ({ ...p, role: v }))} />
+                        <Select label="Level" value={assignForm.level || ''} onChange={v => setAssignForm(p => ({ ...p, level: v }))} options={[
+                          { value: '', label: '-- Select --' }, { value: 'JUNIOR', label: 'Junior' },
+                          { value: 'MID', label: 'Mid' }, { value: 'SENIOR', label: 'Senior' },
+                          { value: 'LEAD', label: 'Lead' }, { value: 'MANAGER', label: 'Manager' },
+                          { value: 'DIRECTOR', label: 'Director' }, { value: 'EXECUTIVE', label: 'Executive' },
+                        ]} />
+                        <Field label="Start Date" value={assignForm.startDate || ''} onChange={v => setAssignForm(p => ({ ...p, startDate: v }))} type="date" />
+                        <Field label="End Date" value={assignForm.endDate || ''} onChange={v => setAssignForm(p => ({ ...p, endDate: v }))} type="date" />
+                        <Field label="Reason" value={assignForm.reason || ''} onChange={v => setAssignForm(p => ({ ...p, reason: v }))} />
+                      </div>
+                      <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
+                        <button onClick={() => setEditingAssignId(null)} style={{ padding: '0.3rem 0.75rem', border: '1px solid #d1d5db', borderRadius: 4, background: '#fff', cursor: 'pointer', fontSize: '0.85rem' }}>Cancel</button>
+                        <button onClick={() => saveAssignment(a.id)} disabled={savingAssign} style={{
+                          padding: '0.3rem 0.75rem', background: savingAssign ? '#999' : '#2563eb', color: '#fff',
+                          border: 'none', borderRadius: 4, cursor: savingAssign ? 'not-allowed' : 'pointer', fontSize: '0.85rem',
+                        }}>{savingAssign ? 'Saving...' : 'Save'}</button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div style={{ fontSize: '0.85rem' }}>
+                        <strong>{a.role}</strong> · {a.level}{a.isActive ? <span style={{ color: '#16a34a', marginLeft: '0.5rem', fontSize: '0.8rem' }}>Active</span> : <span style={{ color: '#888', marginLeft: '0.5rem', fontSize: '0.8rem' }}>Past</span>}
+                        <div style={{ color: '#666', marginTop: '0.2rem' }}>{new Date(a.startDate).toLocaleDateString()} {a.endDate ? `- ${new Date(a.endDate).toLocaleDateString()}` : '- Present'}</div>
+                        {a.reason && <div style={{ color: '#888' }}>{a.reason}</div>}
+                      </div>
+                      <button onClick={() => startEditAssignment(a)} style={{ padding: '0.25rem 0.6rem', border: '1px solid #d1d5db', borderRadius: 4, background: '#fff', cursor: 'pointer', fontSize: '0.8rem' }}>Edit</button>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
         </fieldset>
 
         <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end' }}>

@@ -17,7 +17,16 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       orderBy: { effectiveDate: 'desc' },
     })
 
-    return success(history)
+    // Resolve updater names
+    const userIds = history.map(h => h.updatedById).filter(Boolean) as string[]
+    const users = userIds.length > 0 ? await prisma.user.findMany({ where: { id: { in: userIds } }, select: { id: true, name: true } }) : []
+    const userMap = Object.fromEntries(users.map(u => [u.id, u.name]))
+    const enriched = history.map(h => ({
+      ...h,
+      updatedByName: h.updatedById ? userMap[h.updatedById] || null : null,
+    }))
+
+    return success(enriched)
   } catch (err) {
     console.error(err)
     return internalError()

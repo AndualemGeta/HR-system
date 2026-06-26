@@ -19,7 +19,7 @@ interface Employee {
 }
 
 interface Assignment { id: string; role: string; level: string; startDate: string; endDate: string | null; reason: string | null; isActive: boolean }
-interface StatusHist { id: string; status: string; changedAt: string; changedBy: string | null; reason: string | null }
+interface StatusHist { id: string; newStatus: string; previousStatus: string | null; effectiveDate: string; updatedById: string | null; updatedByName: string | null; reason: string | null }
 interface OnboardingItem { id: string; key: string; label: string; completed: boolean; completedAt: string | null }
 
 export default function EmployeeDetailPage() {
@@ -194,9 +194,9 @@ export default function EmployeeDetailPage() {
               </tr></thead>
               <tbody>{statusHists.map(s => (
                 <tr key={s.id} style={{ borderBottom: '1px solid #e5e7eb' }}>
-                  <td style={td}>{s.status}</td>
-                  <td style={td}>{new Date(s.changedAt).toLocaleString()}</td>
-                  <td style={td}>{s.changedBy || 'System'}</td>
+                  <td style={td}>{s.newStatus}</td>
+                  <td style={td}>{new Date(s.effectiveDate).toLocaleString()}</td>
+                  <td style={td}>{s.updatedByName || 'System'}</td>
                   <td style={td}>{s.reason || ''}</td>
                 </tr>
               ))}</tbody>
