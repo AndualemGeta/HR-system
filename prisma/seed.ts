@@ -1,4 +1,4 @@
-import { PrismaClient, EmployeeRole, EmployeeLevel, LocationType, EmploymentType, EmploymentStatus } from '@prisma/client'
+import { PrismaClient, EmployeeRole, EmployeeLevel, LocationType, EmploymentType, EmploymentStatus, EmployeeCategory } from '@prisma/client'
 import bcrypt from 'bcryptjs'
 
 const prisma = new PrismaClient()
@@ -18,335 +18,443 @@ const ALL_PERMISSIONS = [
 
 const ROLE_PERMISSIONS: Record<string, string[]> = {
   SUPER_ADMIN: [...ALL_PERMISSIONS],
-  CEO: [
-    'employee.view', 'reports.view', 'organization.view',
-  ],
-  CEO_COORDINATOR: [
-    'employee.view', 'status.view', 'reports.view', 'organization.view',
-  ],
   HR_ADMIN: [
-    'employee.view', 'employee.create', 'employee.update', 'employee.delete',
-    'salary.view', 'salary.update',
-    'status.view', 'status.update',
-    'assignment.view', 'assignment.update',
-    'onboarding.view', 'onboarding.update',
-    'reports.view', 'audit.view',
-    'user.view', 'user.manage',
-    'role.view', 'role.manage',
-    'organization.view', 'organization.manage',
-  ],
-  HR_MANAGER: [
     'employee.view', 'employee.create', 'employee.update',
     'salary.view',
     'status.view', 'status.update',
     'assignment.view', 'assignment.update',
     'onboarding.view', 'onboarding.update',
-    'reports.view',
     'organization.view',
+    'audit.view',
   ],
   HR_OFFICER: [
     'employee.view', 'employee.create', 'employee.update',
     'status.view', 'status.update',
-    'assignment.view',
+    'assignment.view', 'assignment.update',
     'onboarding.view', 'onboarding.update',
-    'reports.view',
-    'organization.view',
   ],
   FINANCE_DIRECTOR: [
-    'employee.view', 'salary.view', 'salary.update', 'reports.view',
+    'employee.view', 'salary.view', 'salary.update',
+    'reports.view', 'audit.view',
   ],
   FINANCE_PAYROLL: [
     'employee.view', 'salary.view', 'reports.view',
   ],
   TREASURY_MANAGER: [
-    'employee.view', 'salary.view', 'reports.view',
+    'employee.view', 'salary.view',
   ],
-  FINANCIAL_CONTROL_REPORTING_MANAGER: [
-    'employee.view', 'salary.view', 'reports.view',
-  ],
-  DISTRIBUTION_MANAGER: [
-    'employee.view', 'status.view', 'reports.view', 'organization.view',
-  ],
-  DISTRIBUTION_OFFICER: [
-    'employee.view', 'status.view', 'organization.view',
-  ],
-  TECHNOLOGY_MANAGER: [
-    'employee.view', 'reports.view', 'organization.view',
+  ACCOUNTANT: [
+    'employee.view', 'salary.view',
   ],
   SALES_HEAD: [
-    'employee.view', 'status.view', 'reports.view', 'organization.view',
+    'employee.view', 'reports.view', 'organization.view',
   ],
-  AREA_SALES_MANAGER: [
-    'employee.view', 'status.view', 'organization.view',
+  ASM: [
+    'employee.view', 'reports.view',
   ],
   SHOP_MANAGER: [
-    'employee.view', 'status.view', 'organization.view',
+    'employee.view',
   ],
   EMPLOYEE: [],
   AUDITOR: [
-    'employee.view', 'audit.view', 'reports.view',
+    'audit.view', 'reports.view',
   ],
 }
 
-async function main() {
-  console.log('Seeding Phase 1...')
+async function hashPassword(password: string): Promise<string> {
+  return bcrypt.hash(password, 12)
+}
 
-  // 1. Permissions
-  const permRecords = await Promise.all(
+async function getNextEmployeeId(): Promise<string> {
+  const last = await prisma.employee.findFirst({
+    orderBy: { employeeId: 'desc' },
+    select: { employeeId: true },
+  })
+  if (!last) return 'LSTA_0001'
+  const num = parseInt(last.employeeId.split('_')[1], 10)
+  return `LSTA_${String(num + 1).padStart(4, '0')}`
+}
+
+async function main() {
+  console.log('Seeding Leapfrog HR database...')
+
+  // Clean existing data in dependency order
+  await prisma.auditLog.deleteMany()
+  await prisma.notification.deleteMany()
+  await prisma.onboardingChecklistItem.deleteMany()
+  await prisma.onboardingChecklist.deleteMany()
+  await prisma.employeeStatusHistory.deleteMany()
+  await prisma.employeeAssignment.deleteMany()
+  await prisma.employeeSalary.deleteMany()
+  await prisma.employeeDocument.deleteMany()
+  await prisma.salaryReview.deleteMany()
+  await prisma.achievement.deleteMany()
+  await prisma.disciplinaryRecord.deleteMany()
+  await prisma.terminationCase.deleteMany()
+  await prisma.transferRequest.deleteMany()
+  await prisma.promotionRequest.deleteMany()
+  await prisma.commissionCalculation.deleteMany()
+  await prisma.leaveRecord.deleteMany()
+  await prisma.employeeEvaluation.deleteMany()
+  await prisma.employeeProfileChangeRequest.deleteMany()
+  await prisma.payrollAllowance.deleteMany()
+  await prisma.payrollDeduction.deleteMany()
+  await prisma.payrollAttendanceInput.deleteMany()
+  await prisma.payrollPreparationRow.deleteMany()
+  await prisma.payrollPreparationBatch.deleteMany()
+  await prisma.payrollAdjustment.deleteMany()
+  await prisma.payrollPeriodLock.deleteMany()
+  await prisma.payeTaxBracket.deleteMany()
+  await prisma.pensionRule.deleteMany()
+  await prisma.payrollRule.deleteMany()
+  await prisma.employee.deleteMany()
+  await prisma.location.deleteMany()
+  await prisma.department.deleteMany()
+  await prisma.rolePermission.deleteMany()
+  await prisma.userRole.deleteMany()
+  await prisma.permission.deleteMany()
+  await prisma.role.deleteMany()
+  await prisma.user.deleteMany()
+
+  console.log('  Cleaned existing data')
+
+  // Create permissions
+  const permissionRecords = await Promise.all(
     ALL_PERMISSIONS.map(key =>
-      prisma.permission.upsert({
-        where: { key },
-        update: {},
-        create: { key, description: key },
-      })
+      prisma.permission.create({ data: { key, description: key } })
     )
   )
-  const permMap = Object.fromEntries(permRecords.map(p => [p.key, p.id]))
-  console.log(`${permRecords.length} permissions`)
+  const permMap = Object.fromEntries(permissionRecords.map(p => [p.key, p.id]))
+  console.log(`  Created ${permissionRecords.length} permissions`)
 
-  // 2. Roles + mappings
-  const roleRecords: Record<string, string> = {}
-  for (const [name, perms] of Object.entries(ROLE_PERMISSIONS)) {
-    const role = await prisma.role.upsert({
-      where: { name },
-      update: {},
-      create: { name, description: `${name} role` },
-    })
-    roleRecords[name] = role.id
-    for (const permKey of perms) {
-      const permId = permMap[permKey]
-      if (!permId) continue
-      await prisma.rolePermission.upsert({
-        where: { roleId_permissionId: { roleId: role.id, permissionId: permId } },
-        update: {},
-        create: { roleId: role.id, permissionId: permId },
+  // Create roles
+  const roleRecords = await Promise.all(
+    Object.entries(ROLE_PERMISSIONS).map(async ([name, perms]) => {
+      const role = await prisma.role.create({
+        data: { name, description: `${name} role` },
       })
-    }
-  }
-  console.log(`${Object.keys(roleRecords).length} roles`)
-
-  // 3. Users
-  async function createUser(email: string, name: string, password: string, roleName: string) {
-    const u = await prisma.user.upsert({
-      where: { email },
-      update: {},
-      create: { email, name, passwordHash: await bcrypt.hash(password, 12), isActive: true },
-    })
-    const rId = roleRecords[roleName]
-    if (rId) {
-      await prisma.userRole.upsert({
-        where: { userId_roleId: { userId: u.id, roleId: rId } },
-        update: {},
-        create: { userId: u.id, roleId: rId },
+      await prisma.rolePermission.createMany({
+        data: perms.map(p => ({ roleId: role.id, permissionId: permMap[p] })),
       })
-    }
-    return u
-  }
-
-  await createUser('admin@leapfrog.com', 'System Admin', 'Admin123!', 'SUPER_ADMIN')
-  await createUser('ceo@leapfrog.com', 'CEO', 'Ceo123!', 'CEO')
-  await createUser('hr.admin@leapfrog.com', 'HR Admin', 'HrAdmin123!', 'HR_ADMIN')
-  await createUser('hr.manager@leapfrog.com', 'HR Manager', 'Hr123!', 'HR_MANAGER')
-  await createUser('hr.officer@leapfrog.com', 'HR Officer', 'HrOff123!', 'HR_OFFICER')
-  await createUser('finance.director@leapfrog.com', 'Finance Director', 'Fin123!', 'FINANCE_DIRECTOR')
-  await createUser('finance.payroll@leapfrog.com', 'Finance Payroll', 'FinPay123!', 'FINANCE_PAYROLL')
-  await createUser('sales.head@leapfrog.com', 'Sales Head', 'Sales123!', 'SALES_HEAD')
-  await createUser('shop.manager@leapfrog.com', 'Shop Manager', 'Shop123!', 'SHOP_MANAGER')
-  await createUser('manager@leapfrog.com', 'Area Sales Manager', 'Mgr123!', 'AREA_SALES_MANAGER')
-  await createUser('employee@leapfrog.com', 'Employee User', 'Emp123!', 'EMPLOYEE')
-  await createUser('auditor@leapfrog.com', 'Auditor', 'Audit123!', 'AUDITOR')
-  console.log('12 users created')
-
-  // 4. Departments
-  const deptCodeToId: Record<string, string> = {}
-  const deptDefs = [
-    { name: 'Head Office', code: 'HO', parentCode: null },
-    { name: 'Human Resources', code: 'HR', parentCode: 'HO' },
-    { name: 'Finance', code: 'FIN', parentCode: 'HO' },
-    { name: 'Sales', code: 'SALES', parentCode: 'HO' },
-    { name: 'Distribution', code: 'DIST', parentCode: 'HO' },
-    { name: 'Technology', code: 'TECH', parentCode: 'HO' },
-  ]
-  for (const d of deptDefs) {
-    const record = await prisma.department.upsert({
-      where: { code: d.code },
-      update: {},
-      create: { name: d.name, code: d.code, parentId: d.parentCode ? deptCodeToId[d.parentCode] : null },
+      return role
     })
-    deptCodeToId[d.code] = record.id
-  }
-  console.log(`${deptDefs.length} departments`)
+  )
+  const roleMap = Object.fromEntries(roleRecords.map(r => [r.name, r.id]))
+  console.log(`  Created ${roleRecords.length} roles with permissions`)
 
-  // 5. Locations (Ethiopia-oriented)
-  const locDefs: { name: string; code: string; type: LocationType }[] = [
-    { name: 'Head Office - Addis Ababa', code: 'ADD-HO', type: LocationType.DIVISION },
-    { name: 'East Addis 1 - Bole', code: 'ADD-E1', type: LocationType.REGION },
-    { name: 'East Addis 2 - Ayat', code: 'ADD-E2', type: LocationType.REGION },
-    { name: 'Regional - Outside Addis', code: 'REG-EXT', type: LocationType.REGION },
+  // Create users
+  const password = await hashPassword('Test123!')
+  const ALL_USERS = [
+    { email: 'admin@leapfrog.com', name: 'Super Admin', roles: ['SUPER_ADMIN'] },
+    { email: 'hr.admin@leapfrog.com', name: 'Almaz Tesfaye', roles: ['HR_ADMIN'] },
+    { email: 'hr.officer@leapfrog.com', name: 'Dawit Eshetu', roles: ['HR_OFFICER'] },
+    { email: 'finance.director@leapfrog.com', name: 'Selamawit Gebre', roles: ['FINANCE_DIRECTOR'] },
+    { email: 'finance.payroll@leapfrog.com', name: 'Genet Mengistu', roles: ['FINANCE_PAYROLL'] },
+    { email: 'treasury@leapfrog.com', name: 'Henok Desta', roles: ['TREASURY_MANAGER'] },
+    { email: 'sales.head@leapfrog.com', name: 'Biruk Tadesse', roles: ['SALES_HEAD'] },
+    { email: 'asm@leapfrog.com', name: 'Aster Desta', roles: ['ASM'] },
+    { email: 'shop.manager@leapfrog.com', name: 'Tesfaye Hailu', roles: ['SHOP_MANAGER'] },
+    { email: 'employee@leapfrog.com', name: 'Kidus Yohannes', roles: ['EMPLOYEE'] },
+    { email: 'auditor@leapfrog.com', name: 'Yonas Tadesse', roles: ['AUDITOR'] },
   ]
-  const locCodeToId: Record<string, string> = {}
-  for (const l of locDefs) {
-    const record = await prisma.location.upsert({
-      where: { code: l.code },
-      update: {},
-      create: { name: l.name, code: l.code, type: l.type },
+  const userRecords = await Promise.all(
+    ALL_USERS.map(async u => {
+      const user = await prisma.user.create({
+        data: { email: u.email, name: u.name, passwordHash: password, isActive: true },
+      })
+      await prisma.userRole.createMany({
+        data: u.roles.map(r => ({ userId: user.id, roleId: roleMap[r] })),
+      })
+      return user
     })
-    locCodeToId[l.code] = record.id
-  }
+  )
+  const userMap = Object.fromEntries(userRecords.map(u => [u.email, u.id]))
+  console.log(`  Created ${userRecords.length} users`)
 
-  // Shops under East Addis 1 (Bole)
-  const shopDefs = [
-    { name: 'Bole Arabsa', code: 'SHOP-BA', regionCode: 'ADD-E1' },
-    { name: 'Megenagna', code: 'SHOP-MG', regionCode: 'ADD-E1' },
-    { name: 'Shiromeda', code: 'SHOP-SH', regionCode: 'ADD-E1' },
-    { name: 'Wossen', code: 'SHOP-WS', regionCode: 'ADD-E1' },
-  ]
-  const shopCodeToId: Record<string, string> = {}
-  for (const s of shopDefs) {
-    const record = await prisma.location.upsert({
-      where: { code: s.code },
-      update: {},
-      create: { name: s.name, code: s.code, type: LocationType.SHOP, parentId: locCodeToId[s.regionCode] },
-    })
-    shopCodeToId[s.code] = record.id
-  }
+  // Create departments
+  const deptRecords = await Promise.all([
+    prisma.department.create({ data: { name: 'CEO Office', code: 'CEO' } }),
+    prisma.department.create({ data: { name: 'Sales', code: 'SALES' } }),
+    prisma.department.create({ data: { name: 'Distribution', code: 'DIST' } }),
+    prisma.department.create({ data: { name: 'Finance', code: 'FIN' } }),
+    prisma.department.create({ data: { name: 'Human Resources', code: 'HR' } }),
+    prisma.department.create({ data: { name: 'Technology', code: 'TECH' } }),
+  ])
+  const deptMap = Object.fromEntries(deptRecords.map(d => [d.code, d.id]))
+  console.log(`  Created ${deptRecords.length} departments`)
 
-  // Clusters
-  const clusterDefs = [
-    { name: 'Bole Arabsa Cluster - DSA', code: 'CL-BA-DSA', shopCode: 'SHOP-BA' },
-    { name: 'Megenagna Cluster - DSA', code: 'CL-MG-DSA', shopCode: 'SHOP-MG' },
-  ]
-  for (const c of clusterDefs) {
-    await prisma.location.upsert({
-      where: { code: c.code },
-      update: {},
-      create: { name: c.name, code: c.code, type: LocationType.CLUSTER, parentId: shopCodeToId[c.shopCode] },
-    })
-  }
-  console.log(`${locDefs.length + shopDefs.length + clusterDefs.length} locations`)
+  // Create locations - regions, areas, shops
+  const regionRecords = await Promise.all([
+    prisma.location.create({ data: { name: 'Addis Ababa', code: 'ADDIS', type: 'REGION' as LocationType } }),
+  ])
+  const regionMap = Object.fromEntries(regionRecords.map(r => [r.code, r.id]))
 
-  // 6. Sample employees
-  const sampleEmps = [
-    { eid: 'LSTA_0001', first: 'Abebe', last: 'Kebede', email: 'abebe.kebede@leapfrog.com', role: EmployeeRole.CEO, level: EmployeeLevel.EXECUTIVE, deptCode: 'HO', empType: EmploymentType.FULL_TIME, status: EmploymentStatus.ACTIVE },
-    { eid: 'LSTA_0002', first: 'Almaz', last: 'Tesfaye', email: 'almaz.tesfaye@leapfrog.com', role: EmployeeRole.HR_MANAGER, level: EmployeeLevel.MANAGER, deptCode: 'HR', empType: EmploymentType.FULL_TIME, status: EmploymentStatus.ACTIVE },
-    { eid: 'LSTA_0003', first: 'Bereket', last: 'Hailu', email: 'bereket.hailu@leapfrog.com', role: EmployeeRole.FINANCE_DIRECTOR, level: EmployeeLevel.DIRECTOR, deptCode: 'FIN', empType: EmploymentType.FULL_TIME, status: EmploymentStatus.ACTIVE },
-    { eid: 'LSTA_0004', first: 'Chaltu', last: 'Bekele', email: 'chaltu.bekele@leapfrog.com', role: EmployeeRole.HR_OFFICER, level: EmployeeLevel.MID, deptCode: 'HR', empType: EmploymentType.FULL_TIME, status: EmploymentStatus.ACTIVE },
-    { eid: 'LSTA_0005', first: 'Dawit', last: 'Mekonnen', email: 'dawit.mekonnen@leapfrog.com', role: EmployeeRole.SALES_HEAD, level: EmployeeLevel.DIRECTOR, deptCode: 'SALES', empType: EmploymentType.FULL_TIME, status: EmploymentStatus.ACTIVE },
-    { eid: 'LSTA_0006', first: 'Eden', last: 'Girma', email: 'eden.girma@leapfrog.com', role: EmployeeRole.SHOP_MANAGER, level: EmployeeLevel.MANAGER, deptCode: 'SALES', empType: EmploymentType.FULL_TIME, status: EmploymentStatus.ACTIVE },
-    { eid: 'LSTA_0007', first: 'Fikru', last: 'Alemu', email: 'fikru.alemu@leapfrog.com', role: EmployeeRole.EMPLOYEE, level: EmployeeLevel.JUNIOR, deptCode: 'SALES', empType: EmploymentType.FULL_TIME, status: EmploymentStatus.ON_PROBATION },
-    { eid: 'LSTA_0008', first: 'Genet', last: 'Assefa', email: 'genet.assefa@leapfrog.com', role: EmployeeRole.TECHNOLOGY_MANAGER, level: EmployeeLevel.MANAGER, deptCode: 'TECH', empType: EmploymentType.FULL_TIME, status: EmploymentStatus.ACTIVE },
-  ]
+  const areaRecords = await Promise.all([
+    prisma.location.create({ data: { name: 'Megenagna Area', code: 'MEGENAGNA', type: 'AREA' as LocationType, parentId: regionMap['ADDIS'] } }),
+    prisma.location.create({ data: { name: 'Shiromeda Area', code: 'SHIROMEDA', type: 'AREA' as LocationType, parentId: regionMap['ADDIS'] } }),
+  ])
+  const areaMap = Object.fromEntries(areaRecords.map(a => [a.code, a.id]))
 
-  for (const emp of sampleEmps) {
-    const exists = await prisma.employee.findUnique({ where: { employeeId: emp.eid } })
-    if (exists) continue
-    await prisma.employee.create({
+  const shopRecords = await Promise.all([
+    prisma.location.create({ data: { name: 'Megenagna Shop', code: 'SHOP_MEG', type: 'SHOP' as LocationType, parentId: areaMap['MEGENAGNA'] } }),
+    prisma.location.create({ data: { name: 'Shiromeda Shop', code: 'SHOP_SHI', type: 'SHOP' as LocationType, parentId: areaMap['SHIROMEDA'] } }),
+    prisma.location.create({ data: { name: 'Wossen Shop', code: 'SHOP_WOS', type: 'SHOP' as LocationType, parentId: areaMap['MEGENAGNA'] } }),
+    prisma.location.create({ data: { name: 'Bole Arabsa Shop', code: 'SHOP_BOL', type: 'SHOP' as LocationType, parentId: areaMap['MEGENAGNA'] } }),
+    prisma.location.create({ data: { name: 'Meri Ayat Shop', code: 'SHOP_MER', type: 'SHOP' as LocationType, parentId: areaMap['SHIROMEDA'] } }),
+    prisma.location.create({ data: { name: 'Ayat Tafo Shop', code: 'SHOP_AYT', type: 'SHOP' as LocationType, parentId: areaMap['SHIROMEDA'] } }),
+  ])
+  const shopMap = Object.fromEntries(shopRecords.map(s => [s.code, s.id]))
+  console.log(`  Created ${regionRecords.length + areaRecords.length + shopRecords.length} locations`)
+
+  // Create employees in order of reporting hierarchy
+  // We'll build them and track IDs for manager references
+
+  const empId = await getNextEmployeeId()
+
+  // Helper to create employee
+  async function createEmployee(data: {
+    firstName: string; middleName?: string; lastName: string; email: string; phoneNumber: string
+    gender: string; hireDate: Date; employmentType: EmploymentType; employmentStatus: EmploymentStatus
+    employeeCategory?: EmployeeCategory; currentDepartmentId?: string; currentRegionId?: string
+    currentAreaId?: string; currentShopId?: string; currentRole: EmployeeRole; currentLevel: EmployeeLevel
+    directManagerId?: string; accountingReportingManagerId?: string; basicSalary?: number
+    userEmail: string; notes?: string
+  }) {
+    const eid = await getNextEmployeeId()
+    const employee = await prisma.employee.create({
       data: {
-        employeeId: emp.eid,
-        firstName: emp.first,
-        lastName: emp.last,
-        fullName: `${emp.first} ${emp.last}`,
-        email: emp.email,
-        employmentType: emp.empType,
-        employmentStatus: emp.status,
-        currentRole: emp.role,
-        currentLevel: emp.level,
-        currentDepartmentId: deptCodeToId[emp.deptCode] || null,
-        hireDate: new Date('2025-01-01'),
+        employeeId: eid,
+        firstName: data.firstName,
+        middleName: data.middleName || null,
+        lastName: data.lastName,
+        fullName: [data.firstName, data.middleName, data.lastName].filter(Boolean).join(' '),
+        gender: data.gender,
+        phoneNumber: data.phoneNumber,
+        email: data.email || null,
+        hireDate: data.hireDate,
+        employmentType: data.employmentType,
+        employmentStatus: data.employmentStatus,
+        employeeCategory: data.employeeCategory || null,
+        currentDepartmentId: data.currentDepartmentId || null,
+        currentRegionId: data.currentRegionId || null,
+        currentAreaId: data.currentAreaId || null,
+        currentShopId: data.currentShopId || null,
+        currentRole: data.currentRole,
+        currentLevel: data.currentLevel,
+        directManagerId: data.directManagerId || null,
+        accountingReportingManagerId: data.accountingReportingManagerId || null,
+        basicSalary: data.basicSalary || null,
+        salaryEffectiveDate: data.basicSalary ? data.hireDate : null,
+        notes: data.notes || null,
+        createdById: userMap['admin@leapfrog.com'],
       },
     })
-  }
-  console.log(`${sampleEmps.length} sample employees`)
 
-  // 7. Link users to employees where applicable
-  const ceoUser = await prisma.user.findUnique({ where: { email: 'ceo@leapfrog.com' } })
-  const ceoEmp = await prisma.employee.findUnique({ where: { employeeId: 'LSTA_0001' } })
-  if (ceoUser && ceoEmp) {
-    await prisma.user.update({ where: { id: ceoUser.id }, data: { employeeId: ceoEmp.id } })
-  }
-
-  const hrAdminUser = await prisma.user.findUnique({ where: { email: 'hr.admin@leapfrog.com' } })
-  const hrAdminEmp = await prisma.employee.findUnique({ where: { employeeId: 'LSTA_0002' } })
-  if (hrAdminUser && hrAdminEmp) {
-    await prisma.user.update({ where: { id: hrAdminUser.id }, data: { employeeId: hrAdminEmp.id } })
-  }
-
-  // 8. Onboarding checklists for sample employees
-  const checklistItems = [
-    { key: 'id_collected', label: 'ID collected' },
-    { key: 'contract_signed', label: 'Contract signed' },
-    { key: 'emergency_contact', label: 'Emergency contact added' },
-    { key: 'bank_details', label: 'Bank/payment details collected' },
-    { key: 'employment_type_confirmed', label: 'Employment type confirmed' },
-    { key: 'role_assigned', label: 'Role assigned' },
-    { key: 'manager_assigned', label: 'Manager assigned' },
-    { key: 'department_assigned', label: 'Department/division assigned' },
-    { key: 'salary_confirmed', label: 'Salary confirmed' },
-    { key: 'start_date_confirmed', label: 'Start date confirmed' },
-    { key: 'documents_uploaded', label: 'Documents uploaded' },
-  ]
-
-  const sampleEmployeeRecords = await prisma.employee.findMany({ take: 8, orderBy: { employeeId: 'asc' } })
-  for (const emp of sampleEmployeeRecords) {
-    const existing = await prisma.onboardingChecklist.findUnique({ where: { employeeId: emp.id } })
-    if (existing) continue
-    const checklist = await prisma.onboardingChecklist.create({
-      data: { employeeId: emp.id },
-    })
-    for (const item of checklistItems) {
-      await prisma.onboardingChecklistItem.create({
-        data: {
-          checklistId: checklist.id,
-          key: item.key,
-          label: item.label,
-          completed: emp.employmentStatus === 'ACTIVE',
-        },
-      })
+    // Link user to employee
+    const user = userRecords.find(u => u.email === data.userEmail)
+    if (user) {
+      await prisma.user.update({ where: { id: user.id }, data: { employeeId: employee.id } })
     }
-  }
-  console.log(`Onboarding checklists created`)
 
-  // 9. Audit logs for seed actions
-  const seedUser = await prisma.user.findUnique({ where: { email: 'admin@leapfrog.com' } })
-  if (seedUser) {
-    await prisma.auditLog.create({
+    // Create initial assignment
+    await prisma.employeeAssignment.create({
       data: {
-        userId: seedUser.id,
-        action: 'OTHER',
-        entityType: 'System',
-        entityId: 'seed',
-        newValue: { event: 'Seed completed' },
+        employeeId: employee.id,
+        employeeCategory: data.employeeCategory || null,
+        departmentId: data.currentDepartmentId || null,
+        regionId: data.currentRegionId || null,
+        areaId: data.currentAreaId || null,
+        shopId: data.currentShopId || null,
+        role: data.currentRole,
+        level: data.currentLevel,
+        directManagerId: data.directManagerId || null,
+        accountingReportingManagerId: data.accountingReportingManagerId || null,
+        startDate: data.hireDate,
+        reason: 'Initial assignment',
       },
     })
-  }
 
-  // 10. Salary records for sample employees
-  const salaryEmps = await prisma.employee.findMany({ where: { employmentStatus: 'ACTIVE' }, take: 3 })
-  for (const emp of salaryEmps) {
-    const existingSalary = await prisma.employeeSalary.findFirst({ where: { employeeId: emp.id } })
-    if (existingSalary) continue
-    const amount = emp.currentRole === 'CEO' ? 150000 : emp.currentRole === 'HR_MANAGER' ? 80000 : 50000
-    await prisma.employeeSalary.create({
+    // Create status history
+    await prisma.employeeStatusHistory.create({
       data: {
-        employeeId: emp.id,
-        basicSalary: amount,
-        effectiveDate: new Date('2025-01-01'),
-        reason: 'Initial salary',
-        createdById: seedUser?.id,
+        employeeId: employee.id,
+        newStatus: data.employmentStatus,
+        reason: 'Initial status on creation',
+        effectiveDate: data.hireDate,
+        updatedById: userMap['admin@leapfrog.com'],
       },
     })
-    await prisma.employee.update({
-      where: { id: emp.id },
-      data: { basicSalary: amount, salaryEffectiveDate: new Date('2025-01-01') },
-    })
+
+    return employee
   }
 
-  console.log('Seed complete!')
+  // Pass 1: Create all employees
+  const ceo = await createEmployee({
+    firstName: 'Abebe', lastName: 'Kebede', email: 'ceo@leapfrog.com',
+    phoneNumber: '+251911100001', gender: 'MALE', hireDate: new Date('2023-01-01'),
+    employmentType: 'FULL_TIME' as EmploymentType, employmentStatus: 'ACTIVE' as EmploymentStatus,
+    employeeCategory: 'HEAD_OFFICE' as EmployeeCategory,
+    currentDepartmentId: deptMap['CEO'], currentRole: 'CEO' as EmployeeRole, currentLevel: 'EXECUTIVE' as EmployeeLevel,
+    basicSalary: 250000, userEmail: 'admin@leapfrog.com',
+  })
+
+  const hrManager = await createEmployee({
+    firstName: 'Almaz', lastName: 'Tesfaye', email: 'hr@leapfrog.com',
+    phoneNumber: '+251911100002', gender: 'FEMALE', hireDate: new Date('2023-02-01'),
+    employmentType: 'FULL_TIME' as EmploymentType, employmentStatus: 'ACTIVE' as EmploymentStatus,
+    employeeCategory: 'HEAD_OFFICE' as EmployeeCategory,
+    currentDepartmentId: deptMap['HR'], currentRole: 'HR_MANAGER' as EmployeeRole, currentLevel: 'MANAGER' as EmployeeLevel,
+    directManagerId: ceo.id, basicSalary: 80000, userEmail: 'hr.admin@leapfrog.com',
+  })
+
+  const hrOfficer = await createEmployee({
+    firstName: 'Dawit', lastName: 'Eshetu', email: 'hr.officer@leapfrog.com',
+    phoneNumber: '+251911100003', gender: 'MALE', hireDate: new Date('2023-03-01'),
+    employmentType: 'FULL_TIME' as EmploymentType, employmentStatus: 'ACTIVE' as EmploymentStatus,
+    employeeCategory: 'HEAD_OFFICE' as EmployeeCategory,
+    currentDepartmentId: deptMap['HR'], currentRole: 'HR_OFFICER' as EmployeeRole, currentLevel: 'MID' as EmployeeLevel,
+    directManagerId: hrManager.id, basicSalary: 45000, userEmail: 'hr.officer@leapfrog.com',
+  })
+
+  const financeDirector = await createEmployee({
+    firstName: 'Selamawit', lastName: 'Gebre', email: 'finance.director@leapfrog.com',
+    phoneNumber: '+251911100004', gender: 'FEMALE', hireDate: new Date('2023-01-15'),
+    employmentType: 'FULL_TIME' as EmploymentType, employmentStatus: 'ACTIVE' as EmploymentStatus,
+    employeeCategory: 'HEAD_OFFICE' as EmployeeCategory,
+    currentDepartmentId: deptMap['FIN'], currentRole: 'FINANCE_DIRECTOR' as EmployeeRole, currentLevel: 'DIRECTOR' as EmployeeLevel,
+    directManagerId: ceo.id, basicSalary: 180000, userEmail: 'finance.director@leapfrog.com',
+  })
+
+  const treasuryManager = await createEmployee({
+    firstName: 'Henok', lastName: 'Desta', email: 'treasury@leapfrog.com',
+    phoneNumber: '+251911100005', gender: 'MALE', hireDate: new Date('2023-02-15'),
+    employmentType: 'FULL_TIME' as EmploymentType, employmentStatus: 'ACTIVE' as EmploymentStatus,
+    employeeCategory: 'HEAD_OFFICE' as EmployeeCategory,
+    currentDepartmentId: deptMap['FIN'], currentRole: 'TREASURY_MANAGER' as EmployeeRole, currentLevel: 'MANAGER' as EmployeeLevel,
+    directManagerId: financeDirector.id, basicSalary: 90000, userEmail: 'treasury@leapfrog.com',
+  })
+
+  const accountant = await createEmployee({
+    firstName: 'Genet', lastName: 'Mengistu', email: 'finance.payroll@leapfrog.com',
+    phoneNumber: '+251911100006', gender: 'FEMALE', hireDate: new Date('2023-03-01'),
+    employmentType: 'FULL_TIME' as EmploymentType, employmentStatus: 'ACTIVE' as EmploymentStatus,
+    employeeCategory: 'HEAD_OFFICE' as EmployeeCategory,
+    currentDepartmentId: deptMap['FIN'], currentRole: 'ACCOUNTANT' as EmployeeRole, currentLevel: 'SENIOR' as EmployeeLevel,
+    directManagerId: treasuryManager.id, basicSalary: 55000, userEmail: 'finance.payroll@leapfrog.com',
+  })
+
+  const salesHead = await createEmployee({
+    firstName: 'Biruk', lastName: 'Tadesse', email: 'sales.head@leapfrog.com',
+    phoneNumber: '+251911100007', gender: 'MALE', hireDate: new Date('2023-01-10'),
+    employmentType: 'FULL_TIME' as EmploymentType, employmentStatus: 'ACTIVE' as EmploymentStatus,
+    employeeCategory: 'HEAD_OFFICE' as EmployeeCategory,
+    currentDepartmentId: deptMap['SALES'], currentRole: 'SALES_HEAD' as EmployeeRole, currentLevel: 'DIRECTOR' as EmployeeLevel,
+    directManagerId: ceo.id, basicSalary: 150000, userEmail: 'sales.head@leapfrog.com',
+  })
+
+  const asmEmployee = await createEmployee({
+    firstName: 'Aster', lastName: 'Desta', email: 'asm@leapfrog.com',
+    phoneNumber: '+251911100008', gender: 'FEMALE', hireDate: new Date('2023-04-01'),
+    employmentType: 'FULL_TIME' as EmploymentType, employmentStatus: 'ACTIVE' as EmploymentStatus,
+    employeeCategory: 'SHOP_FIELD' as EmployeeCategory,
+    currentDepartmentId: deptMap['SALES'], currentRegionId: regionMap['ADDIS'],
+    currentAreaId: areaMap['MEGENAGNA'],
+    currentRole: 'ASM' as EmployeeRole, currentLevel: 'MANAGER' as EmployeeLevel,
+    directManagerId: salesHead.id, basicSalary: 70000, userEmail: 'asm@leapfrog.com',
+  })
+
+  const shopManagerMegenagna = await createEmployee({
+    firstName: 'Tesfaye', lastName: 'Hailu', email: 'shop.manager@leapfrog.com',
+    phoneNumber: '+251911100009', gender: 'MALE', hireDate: new Date('2023-05-01'),
+    employmentType: 'FULL_TIME' as EmploymentType, employmentStatus: 'ACTIVE' as EmploymentStatus,
+    employeeCategory: 'SHOP_FIELD' as EmployeeCategory,
+    currentRegionId: regionMap['ADDIS'], currentAreaId: areaMap['MEGENAGNA'],
+    currentShopId: shopMap['SHOP_MEG'],
+    currentRole: 'SHOP_MANAGER' as EmployeeRole, currentLevel: 'MANAGER' as EmployeeLevel,
+    directManagerId: asmEmployee.id, basicSalary: 35000, userEmail: 'shop.manager@leapfrog.com',
+  })
+
+  const shopManagerShiromeda = await createEmployee({
+    firstName: 'Lemlem', lastName: 'Berhe', email: 'shopmgr.shiromeda@leapfrog.com',
+    phoneNumber: '+251911100010', gender: 'FEMALE', hireDate: new Date('2023-05-15'),
+    employmentType: 'FULL_TIME' as EmploymentType, employmentStatus: 'ACTIVE' as EmploymentStatus,
+    employeeCategory: 'SHOP_FIELD' as EmployeeCategory,
+    currentRegionId: regionMap['ADDIS'], currentAreaId: areaMap['SHIROMEDA'],
+    currentShopId: shopMap['SHOP_SHI'],
+    currentRole: 'SHOP_MANAGER' as EmployeeRole, currentLevel: 'MANAGER' as EmployeeLevel,
+    directManagerId: asmEmployee.id, basicSalary: 35000,
+    userEmail: 'employee@leapfrog.com', // reuse employee user
+  })
+
+  const dspEmployee = await createEmployee({
+    firstName: 'Kidus', lastName: 'Yohannes', email: 'dsp.megenagna@leapfrog.com',
+    phoneNumber: '+251911100011', gender: 'MALE', hireDate: new Date('2023-06-01'),
+    employmentType: 'FULL_TIME' as EmploymentType, employmentStatus: 'ACTIVE' as EmploymentStatus,
+    employeeCategory: 'SHOP_FIELD' as EmployeeCategory,
+    currentRegionId: regionMap['ADDIS'], currentAreaId: areaMap['MEGENAGNA'],
+    currentShopId: shopMap['SHOP_MEG'],
+    currentRole: 'DSP' as EmployeeRole, currentLevel: 'JUNIOR' as EmployeeLevel,
+    directManagerId: shopManagerMegenagna.id, basicSalary: 12000,
+    userEmail: 'employee@leapfrog.com',
+  })
+
+  const dsaEmployee = await createEmployee({
+    firstName: 'Meron', lastName: 'Tadesse', email: 'dsa.shiromeda@leapfrog.com',
+    phoneNumber: '+251911100012', gender: 'FEMALE', hireDate: new Date('2023-06-15'),
+    employmentType: 'COMMISSION_BASED' as EmploymentType, employmentStatus: 'ACTIVE' as EmploymentStatus,
+    employeeCategory: 'SHOP_FIELD' as EmployeeCategory,
+    currentRegionId: regionMap['ADDIS'], currentAreaId: areaMap['SHIROMEDA'],
+    currentShopId: shopMap['SHOP_SHI'],
+    currentRole: 'DSA' as EmployeeRole, currentLevel: 'JUNIOR' as EmployeeLevel,
+    directManagerId: shopManagerShiromeda.id, basicSalary: 8000,
+    userEmail: 'employee@leapfrog.com',
+  })
+
+  const shopAccountant = await createEmployee({
+    firstName: 'Bezawit', lastName: 'Assefa', email: 'shopacct.megenagna@leapfrog.com',
+    phoneNumber: '+251911100013', gender: 'FEMALE', hireDate: new Date('2023-07-01'),
+    employmentType: 'FULL_TIME' as EmploymentType, employmentStatus: 'ACTIVE' as EmploymentStatus,
+    employeeCategory: 'SHOP_FIELD' as EmployeeCategory,
+    currentRegionId: regionMap['ADDIS'], currentAreaId: areaMap['MEGENAGNA'],
+    currentShopId: shopMap['SHOP_MEG'],
+    currentRole: 'SHOP_ACCOUNTANT' as EmployeeRole, currentLevel: 'MID' as EmployeeLevel,
+    directManagerId: shopManagerMegenagna.id,
+    accountingReportingManagerId: treasuryManager.id,
+    basicSalary: 25000,
+    userEmail: 'employee@leapfrog.com',
+  })
+
+  // Auditor (no employee record needed - just a user)
+  const auditorEmail = 'auditor@leapfrog.com'
+  const auditorUser = userRecords.find(u => u.email === auditorEmail)
+  if (auditorUser) {
+    await prisma.user.update({ where: { id: auditorUser.id }, data: { name: 'Yonas Tadesse' } })
+  }
+
+  console.log(`  Created employees with assignments and status history`)
+
+  // Create sample audit log
+  await prisma.auditLog.create({
+    data: {
+      userId: userMap['admin@leapfrog.com'],
+      action: 'LOGIN',
+      entityType: 'User',
+      entityId: userMap['admin@leapfrog.com'],
+      newValue: { method: 'seed' },
+    },
+  })
+  console.log('  Created sample audit log')
+
+  console.log('\nSeed complete!')
+  console.log('Demo users (password: Test123!):')
+  for (const u of ALL_USERS) {
+    console.log(`  ${u.email} - ${u.roles.join(', ')}`)
+  }
 }
 
 main()
   .catch(e => {
-    console.error(e)
+    console.error('Seed error:', e)
     process.exit(1)
   })
   .finally(() => prisma.$disconnect())

@@ -1,85 +1,93 @@
-# Leapfrog HRMS — Phase 1 User Review Guide
+# Leapfrog HRMS — Starter User Review Guide
 
 ## Review Scope
 
-This review covers Phase 1 — the HRIS foundation. The following workflows are ready for validation:
+This review covers the employee registration starter workflow — Head Office and Shop/Field employees only. The following workflows are ready for validation:
 
-### 1. Login
+### 1. Login as HR Admin
 - Open `http://localhost:3000`
-- Sign in as `admin@leapfrog.com` / `Admin123!`
-- Verify you reach the dashboard
-- Sign out, try invalid credentials — verify error message does not reveal whether the email exists
-- Sign in as `employee@leapfrog.com` / `Emp123!` — verify dashboard shows "You do not have access to any modules"
+- Sign in as `hr.admin@leapfrog.com` / `Test123!`
+- Verify you reach the dashboard with HR, Reports & Audit sections visible
 
-### 2. Dashboard Navigation
-- Sign in as `hr.admin@leapfrog.com` — verify all HR, Reports & Audit sections appear
-- Verify Finance section does NOT appear (HR_ADMIN does not have salary.view)
-- Sign in as `auditor@leapfrog.com` — verify only Reports & Audit section appears
-- Sign in as `finance.director@leapfrog.com` — verify Finance section appears (Salary Records)
+### 2. Register a Head Office Employee
+- Click "Employees" → "+ Register Employee"
+- Select "Head Office Department"
+- Fill in: First Name, Last Name, select Department (e.g., HR), Position/Role (e.g., HR_OFFICER), Direct Manager
+- Verify the form does NOT require shop or cluster fields
+- Submit — verify you reach the new employee's profile page
+- Verify the employee shows "Head Office" category badge
 
-### 3. Employees
-- Navigate to Employees
-- Verify list shows 8 sample employees with correct IDs (LSTA_0001–LSTA_0008)
-- Use search to filter
-- Verify pagination works
+### 3. Register a Shop Manager
+- Go to Employees → "+ Register Employee"
+- Select "Shop / Field Structure"
+- Select Position/Role = "Shop Manager"
+- Select Region/Area and a Shop
+- Verify Direct Manager defaults to ASM if available
+- Submit — verify profile shows "Shop / Field" badge and shop assignment
 
-### 4. Organization
-- Navigate to Organization Chart
-- Verify department tree shows Head Office → HR, Finance, Sales, etc.
-- Verify locations show Ethiopia data (Addis Ababa, Bole, Megenagna, etc.)
-- No Kathmandu or unrelated locations should appear
+### 4. Register DSP under a Shop Manager
+- Go to Employees → "+ Register Employee"
+- Select "Shop / Field Structure"
+- Select Position/Role = "DSP - Indoor Sales"
+- Select Region/Area and a Shop
+- Verify Direct Manager defaults to Shop Manager of selected shop if available
+- Submit — verify DSP has correct manager
 
-### 5. Onboarding
-- Navigate to Onboarding
-- Verify 8 checklists exist with 11 items each
-- Toggle item completion — verify it updates and shows strikethrough
+### 5. Register DSA under a Shop Manager
+- Same as DSP but select Position/Role = "DSA - Outdoor Sales"
+- Verify DSA has correct manager assignment
 
-### 6. Assignments
-- Navigate to Assignments
-- Verify list is empty or shows seeded data
-- (Assignments are created via API — no create UI in Phase 1)
+### 6. Register Shop Accountant with HO Treasury Accountant reporting line
+- Go to Employees → "+ Register Employee"
+- Select "Shop / Field Structure"
+- Select Position/Role = "Shop Accountant"
+- Select Region/Area and a Shop
+- Verify "Accounting Reporting Manager" field appears
+- Verify it auto-defaults to HO Treasury Manager (Henok Desta) if available
+- Submit — verify profile shows both shop assignment and accounting reporting manager
 
-### 7. Status History
-- Navigate to Status History
-- Verify list is empty (no status changes have been made yet)
-- Status changes are recorded via the status API
+### 7. Confirm Salary Visibility Restriction
+- Sign in as `hr.admin@leapfrog.com` — navigate to any employee profile
+- Verify salary is visible
+- Sign out, sign in as `employee@leapfrog.com` (no salary.view permission)
+- Navigate to same employee profile — verify salary shows "Restricted" or is hidden
+- Sign in as `finance.director@leapfrog.com` — verify salary is visible
 
-### 8. Salary Records
-- Sign in as `finance.director@leapfrog.com`
-- Navigate to Salary Records (via dashboard or `/salary`)
-- Verify salary data is visible
-- Sign in as `employee@leapfrog.com` — verify salary link is hidden
+### 8. Confirm Manager Scope
+- Sign in as `asm@leapfrog.com` (ASM role, has employee.view)
+- Navigate to Employees — verify employee list is accessible
+- (Scope filtering is data-level; ASM can see all employees via list but scope enforcement is planned)
 
-### 9. Audit Logs
-- Sign in as `auditor@leapfrog.com`
+### 9. Confirm Audit Logs
+- Sign in as `auditor@leapfrog.com` / `Test123!`
 - Navigate to Audit Logs
 - Verify seed audit log entry appears
-- Verify login page shows entries
+- After creating employees in steps 2-6, verify corresponding audit entries exist (EMPLOYEE_CREATE, MANAGER_CHANGE, ACCOUNTING_MANAGER_CHANGE, etc.)
 
-### 10. Reports
-- Sign in as `hr.admin@leapfrog.com`
-- Navigate to Reports
-- Verify counts (total employees, active, onboarding pending, etc.)
-- Verify breakdowns by department, role, employment type
+## Extra: Employee Category Filter
+- On the Employees page, use the "Category" dropdown to filter by "Head Office" or "Shop / Field"
+- Verify only matching employees appear
 
-### 11. Users
-- Sign in as `admin@leapfrog.com`
-- Navigate to Users & Roles (if link appears)
-- Verify 12 seeded users are listed
+## Extra: Employee Profile Tabs
+- Navigate to any employee profile
+- Verify tabs: Profile, Assignments, Status History, Onboarding
+- Profile tab shows organization info, manager, category badge
+- Assignments tab shows current/past assignments with active indicator
+- Status History tab shows status changes
 
-## Not Enabled in Phase 1
+## Not Enabled in This Starter Build
 
 - Document upload/management
 - Leave requests and balances
 - Employee evaluations
-- Achievements
+- Payroll preparation and calculation
+- Commission plans
 - Disciplinary records
 - Termination/exit workflows
 - Transfers/promotions
 - Approval routing
-- Payroll preparation and calculation
-- Commission plans
-- PAYE/pension rules
 - Employee/manager self-service
 - Email notifications
 - External integrations
+
+Do not claim these modules are ready.

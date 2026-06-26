@@ -30,11 +30,16 @@ enum EmploymentStatus {
   EXITED
 }
 
+enum EmployeeCategory {
+  HEAD_OFFICE
+  SHOP_FIELD
+}
+
 enum EmployeeRole {
   CEO
   CEO_COORDINATOR
   SALES_HEAD
-  AREA_SALES_MANAGER
+  ASM
   SHOP_MANAGER
   SHOP_ACCOUNTANT
   DSA
@@ -73,6 +78,7 @@ enum EmployeeLevel {
 enum LocationType {
   DIVISION
   REGION
+  AREA
   SHOP
   CLUSTER
 }
@@ -253,6 +259,8 @@ enum AuditAction {
   EMPLOYEE_STATUS_CHANGE
   SALARY_CHANGE
   ASSIGNMENT_CHANGE
+  MANAGER_CHANGE
+  ACCOUNTING_MANAGER_CHANGE
   DOCUMENT_UPLOAD
   DOCUMENT_VIEW
   DOCUMENT_DEACTIVATE
@@ -393,83 +401,96 @@ model Location {
 }
 
 model Employee {
-  id                  String           @id @default(uuid())
-  employeeId          String           @unique(map: "emp_employee_id_unique")
-  firstName           String
-  middleName          String?
-  lastName            String
-  fullName            String
-  gender              String           @default("NOT_SPECIFIED")
-  dateOfBirth         DateTime?
-  phoneNumber         String?
-  email               String?          @unique(map: "emp_email_unique")
-  address             String?
-  hireDate            DateTime?
-  employmentType      EmploymentType?
-  employmentStatus    EmploymentStatus @default(DRAFT)
-  probationStatus     String           @default("NOT_APPLICABLE")
-  currentDepartmentId String?
-  currentDivisionId   String?
-  currentRegionId     String?
-  currentShopId       String?
-  currentClusterId    String?
-  currentRole         EmployeeRole     @default(OTHER)
-  currentLevel        EmployeeLevel    @default(TO_BE_DEFINED)
-  directManagerId     String?
-  basicSalary         Decimal?         @db.Decimal(12, 2)
-  salaryEffectiveDate DateTime?
-  createdById         String?
-  updatedById         String?
-  createdAt           DateTime         @default(now())
-  updatedAt           DateTime         @updatedAt
-  directManager       Employee?        @relation("EmployeeManager", fields: [directManagerId], references: [id])
-  directReports       Employee[]       @relation("EmployeeManager")
-  departmentsLed      Department[]     @relation("DepartmentHead")
-  locationsManaged    Location[]       @relation("LocationManager")
-  assignments         EmployeeAssignment[]
-  statusHistory       EmployeeStatusHistory[]
-  onboardingChecklist OnboardingChecklist?
-  documents           EmployeeDocument[]
-  leaveRecords        LeaveRecord[]
-  salaries            EmployeeSalary[]
-  salaryReviews       SalaryReview[]
-  achievements        Achievement[]
-  disciplinaryRecords DisciplinaryRecord[]
-  terminations        TerminationCase[]
-  transferRequests    TransferRequest[]
-  promotionRequests   PromotionRequest[]
-  commissionCalculations CommissionCalculation[]
-  payrollRows         PayrollPreparationRow[]
-  payrollAttendance   PayrollAttendanceInput[]
-  payrollAllowances   PayrollAllowance[]
-  payrollDeductions   PayrollDeduction[]
-  evaluations         EmployeeEvaluation[]   @relation("EvaluationEmployee")
-  evaluationsGiven    EmployeeEvaluation[]   @relation("EvaluationEvaluator")
-  profileChangeRequests EmployeeProfileChangeRequest[]
+  id                          String           @id @default(uuid())
+  employeeId                  String           @unique(map: "emp_employee_id_unique")
+  firstName                   String
+  middleName                  String?
+  lastName                    String
+  fullName                    String
+  gender                      String           @default("NOT_SPECIFIED")
+  dateOfBirth                 DateTime?
+  phoneNumber                 String?
+  email                       String?          @unique(map: "emp_email_unique")
+  address                     String?
+  hireDate                    DateTime?
+  employmentType              EmploymentType?
+  employmentStatus            EmploymentStatus @default(DRAFT)
+  employeeCategory            EmployeeCategory?
+  probationStatus             String           @default("NOT_APPLICABLE")
+  currentDepartmentId         String?
+  currentDivisionId           String?
+  currentRegionId             String?
+  currentAreaId               String?
+  currentShopId               String?
+  currentClusterId            String?
+  currentRole                 EmployeeRole     @default(OTHER)
+  currentLevel                EmployeeLevel    @default(TO_BE_DEFINED)
+  directManagerId             String?
+  accountingReportingManagerId String?
+  basicSalary                 Decimal?         @db.Decimal(12, 2)
+  salaryEffectiveDate         DateTime?
+  notes                       String?
+  createdById                 String?
+  updatedById                 String?
+  createdAt                   DateTime         @default(now())
+  updatedAt                   DateTime         @updatedAt
+  directManager               Employee?        @relation("EmployeeManager", fields: [directManagerId], references: [id])
+  accountingReportingManager  Employee?        @relation("AccountingManager", fields: [accountingReportingManagerId], references: [id])
+  accountingReportees         Employee[]       @relation("AccountingManager")
+  directReports               Employee[]       @relation("EmployeeManager")
+  departmentsLed              Department[]     @relation("DepartmentHead")
+  locationsManaged            Location[]       @relation("LocationManager")
+  assignments                 EmployeeAssignment[]
+  statusHistory               EmployeeStatusHistory[]
+  onboardingChecklist         OnboardingChecklist?
+  documents                   EmployeeDocument[]
+  leaveRecords                LeaveRecord[]
+  salaries                    EmployeeSalary[]
+  salaryReviews               SalaryReview[]
+  achievements                Achievement[]
+  disciplinaryRecords         DisciplinaryRecord[]
+  terminations                TerminationCase[]
+  transferRequests            TransferRequest[]
+  promotionRequests           PromotionRequest[]
+  commissionCalculations      CommissionCalculation[]
+  payrollRows                 PayrollPreparationRow[]
+  payrollAttendance           PayrollAttendanceInput[]
+  payrollAllowances           PayrollAllowance[]
+  payrollDeductions           PayrollDeduction[]
+  evaluations                 EmployeeEvaluation[]   @relation("EvaluationEmployee")
+  evaluationsGiven            EmployeeEvaluation[]   @relation("EvaluationEvaluator")
+  profileChangeRequests       EmployeeProfileChangeRequest[]
   @@index([employmentStatus])
   @@index([currentRole])
   @@index([currentDepartmentId])
   @@index([directManagerId])
+  @@index([accountingReportingManagerId])
+  @@index([employeeCategory])
 }
 
 model EmployeeAssignment {
-  id              String        @id @default(uuid())
-  employeeId      String
-  divisionId      String?
-  departmentId    String?
-  regionId        String?
-  shopId          String?
-  clusterId       String?
-  role            EmployeeRole
-  level           EmployeeLevel @default(TO_BE_DEFINED)
-  directManagerId String?
-  startDate       DateTime
-  endDate         DateTime?
-  reason          String?
-  approvedById    String?
-  createdAt       DateTime      @default(now())
-  employee        Employee      @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  id                          String        @id @default(uuid())
+  employeeId                  String
+  employeeCategory            EmployeeCategory?
+  departmentId                String?
+  divisionId                  String?
+  regionId                    String?
+  areaId                      String?
+  shopId                      String?
+  clusterId                   String?
+  role                        EmployeeRole
+  level                       EmployeeLevel @default(TO_BE_DEFINED)
+  directManagerId             String?
+  accountingReportingManagerId String?
+  isActive                    Boolean       @default(true)
+  startDate                   DateTime
+  endDate                     DateTime?
+  reason                      String?
+  approvedById                String?
+  createdAt                   DateTime      @default(now())
+  employee                    Employee      @relation(fields: [employeeId], references: [id], onDelete: Cascade)
   @@index([employeeId, endDate])
+  @@index([employeeId, isActive])
 }
 
 model EmployeeStatusHistory {

@@ -10,21 +10,28 @@ const updateSchema = z.object({
   firstName: z.string().min(1).optional(),
   middleName: z.string().optional(),
   lastName: z.string().min(1).optional(),
-  email: z.string().email().optional(),
+  email: z.string().email().optional().or(z.literal('')),
   phoneNumber: z.string().optional(),
   gender: z.string().optional(),
+  dateOfBirth: z.string().optional(),
+  address: z.string().optional(),
+  notes: z.string().optional(),
+  hireDate: z.string().optional(),
   employmentType: z.string().optional(),
+  employmentStatus: z.string().optional(),
+  employeeCategory: z.string().optional(),
   currentRole: z.string().optional(),
   currentLevel: z.string().optional(),
   currentDepartmentId: z.string().optional(),
+  currentDivisionId: z.string().optional(),
+  currentRegionId: z.string().optional(),
+  currentAreaId: z.string().optional(),
+  currentShopId: z.string().optional(),
+  currentClusterId: z.string().optional(),
+  directManagerId: z.string().nullable().optional(),
+  accountingReportingManagerId: z.string().nullable().optional(),
   basicSalary: z.number().optional(),
 })
-
-async function getEmployeeOrNotFound(id: string) {
-  const employee = await prisma.employee.findUnique({ where: { id } })
-  if (!employee) return null
-  return employee
-}
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -33,10 +40,27 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     if (!session) return unauthorized()
     if (!(await userHasPermission(session.userId, 'employee.view'))) return forbidden()
 
-    const employee = await getEmployeeOrNotFound(id)
+    const employee = await prisma.employee.findUnique({
+      where: { id },
+      include: {
+        directManager: { select: { id: true, employeeId: true, fullName: true } },
+        accountingReportingManager: { select: { id: true, employeeId: true, fullName: true, currentRole: true } },
+        assignments: { orderBy: { startDate: 'desc' }, take: 5 },
+      },
+    })
     if (!employee) return notFound()
 
-    return success(employee)
+    const canViewSalary = await userHasPermission(session.userId, 'salary.view')
+
+    // Build result without passwordHash
+    const result = { ...employee } as Record<string, unknown>
+    delete result.passwordHash
+    if (!canViewSalary) {
+      result.basicSalary = 'REDACTED'
+      result.salaryEffectiveDate = 'REDACTED'
+    }
+
+    return success(result)
   } catch (err) {
     console.error(err)
     return internalError()
@@ -50,7 +74,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     if (!session) return unauthorized()
     if (!(await userHasPermission(session.userId, 'employee.update'))) return forbidden()
 
-    const existing = await getEmployeeOrNotFound(id)
+    const existing = await prisma.employee.findUnique({ where: { id } })
     if (!existing) return notFound()
 
     const body = await req.json().catch(() => ({}))
@@ -60,20 +84,78 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     const data = parsed.data
     const updateData: Record<string, unknown> = {}
 
-    if (data.firstName !== undefined) updateData.firstName = data.firstName
-    if (data.lastName !== undefined) updateData.lastName = data.lastName
-    if (data.middleName !== undefined) updateData.middleName = data.middleName
-    if (data.email !== undefined) updateData.email = data.email
-    if (data.phoneNumber !== undefined) updateData.phoneNumber = data.phoneNumber
-    if (data.gender !== undefined) updateData.gender = data.gender
-    if (data.employmentType !== undefined) updateData.employmentType = data.employmentType
-    if (data.currentRole !== undefined) updateData.currentRole = data.currentRole
-    if (data.currentLevel !== undefined) updateData.currentLevel = data.currentLevel
-    if (data.currentDepartmentId !== undefined) updateData.currentDepartmentId = data.currentDepartmentId
-    if (data.basicSalary !== undefined) updateData.basicSalary = data.basicSalary
+    const stringFields = ['firstName', 'lastName', 'middleName', 'email', 'phoneNumber', 'gender', 'address', 'notes', 'employmentType', 'employmentStatus', 'employeeCategory', 'currentRole', 'currentLevel', 'currentDepartmentId', 'currentDivisionId', 'currentRegionId', 'currentAreaId', 'currentShopId', 'currentClusterId'] as const
+    for (const field of stringFields) {
+      if (data[field] !== undefined) updateData[field] = data[field]
+    }
+    if (data.directManagerId !== undefined) {
+      const oldManagerId = existing.directManagerId
+      updateData.directManagerId = data.directManagerId || null
+      if (String(oldManagerId) !== String(updateData.directManagerId)) {
+        await createAuditLog({
+          userId: session.userId,
+          action: 'MANAGER_CHANGE',
+          entityType: 'Employee',
+          entityId: id,
+          oldValue: { directManagerId: oldManagerId },
+          newValue: { directManagerId: updateData.directManagerId },
+        })
+      }
+    }
+    if (data.accountingReportingManagerId !== undefined) {
+      const oldAcctMgrId = existing.accountingReportingManagerId
+      updateData.accountingReportingManagerId = data.accountingReportingManagerId || null
+      if (String(oldAcctMgrId) !== String(updateData.accountingReportingManagerId)) {
+        await createAuditLog({
+          userId: session.userId,
+          action: 'ACCOUNTING_MANAGER_CHANGE',
+          entityType: 'Employee',
+          entityId: id,
+          oldValue: { accountingReportingManagerId: oldAcctMgrId },
+          newValue: { accountingReportingManagerId: updateData.accountingReportingManagerId },
+        })
+      }
+    }
+    if (data.basicSalary !== undefined) {
+      const oldSalary = existing.basicSalary
+      updateData.basicSalary = data.basicSalary
+      if (String(oldSalary) !== String(data.basicSalary)) {
+        await createAuditLog({
+          userId: session.userId,
+          action: 'SALARY_CHANGE',
+          entityType: 'Employee',
+          entityId: id,
+          oldValue: { basicSalary: oldSalary },
+          newValue: { basicSalary: data.basicSalary },
+        })
+      }
+    }
+    if (data.dateOfBirth !== undefined) updateData.dateOfBirth = data.dateOfBirth ? new Date(data.dateOfBirth) : null
+    if (data.hireDate !== undefined) updateData.hireDate = data.hireDate ? new Date(data.hireDate) : null
 
     if (data.firstName !== undefined || data.lastName !== undefined || data.middleName !== undefined) {
       updateData.fullName = [data.firstName ?? existing.firstName, data.middleName ?? existing.middleName, data.lastName ?? existing.lastName].filter(Boolean).join(' ')
+    }
+
+    if (data.employmentStatus !== undefined && data.employmentStatus !== existing.employmentStatus) {
+      await createAuditLog({
+        userId: session.userId,
+        action: 'EMPLOYEE_STATUS_CHANGE',
+        entityType: 'Employee',
+        entityId: id,
+        oldValue: { employmentStatus: existing.employmentStatus },
+        newValue: { employmentStatus: data.employmentStatus },
+      })
+      await prisma.employeeStatusHistory.create({
+        data: {
+          employeeId: id,
+          previousStatus: existing.employmentStatus,
+          newStatus: data.employmentStatus as never,
+          reason: 'Status updated via profile edit',
+          effectiveDate: new Date(),
+          updatedById: session.userId,
+        },
+      })
     }
 
     updateData.updatedById = session.userId
