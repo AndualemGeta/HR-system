@@ -2,7 +2,10 @@ import { SignJWT, jwtVerify, type JWTPayload } from 'jose'
 import { cookies } from 'next/headers'
 import { SESSION_COOKIE_NAME, SESSION_MAX_AGE_SECONDS } from './constants'
 
-const secret = new TextEncoder().encode(process.env.AUTH_SECRET || 'fallback-secret-do-not-use-in-production')
+if (!process.env.AUTH_SECRET && process.env.NODE_ENV === 'production') {
+  throw new Error('AUTH_SECRET environment variable is required in production')
+}
+const secret = new TextEncoder().encode(process.env.AUTH_SECRET || 'insecure-dev-secret-do-not-use-in-production')
 
 export interface SessionPayload extends JWTPayload {
   userId: string

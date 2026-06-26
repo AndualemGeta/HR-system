@@ -20,4 +20,4 @@ export const GET = withAuth(async () => {
   const childDepts = departments.filter(d => d.parentId)
 
   return success({ rootDepts, childDepts, locations })
-}, 'org.view')
+}, 'organization.view')

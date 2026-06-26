@@ -6,4 +6,4 @@ export const GET = withAuth(async () => {
     orderBy: { name: 'asc' },
   })
   return success(departments)
-}, 'org.view')
+}, 'organization.view')

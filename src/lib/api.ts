@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { getSession } from './session'
+import { prisma } from './prisma'
 import { userHasPermission, type PermissionKey } from './rbac'
 
 export interface ApiError {
@@ -40,6 +41,9 @@ export function withAuth(handler: (req: NextRequest, ctx: { userId: string; emai
     const session = await getSession()
     if (!session) return unauthorized()
 
+    const user = await prisma.user.findUnique({ where: { id: session.userId }, select: { isActive: true } })
+    if (!user || !user.isActive) return unauthorized('Account is inactive')
+
     if (requiredPermission) {
       const hasPermission = await userHasPermission(session.userId, requiredPermission)
       if (!hasPermission) return forbidden()
@@ -53,13 +57,5 @@ export function withAuth(handler: (req: NextRequest, ctx: { userId: string; emai
       console.error('API Error:', err instanceof Error ? err.message : err)
       return internalError()
     }
-  }
-}
-
-export async function getBody<T>(req: NextRequest): Promise<T | null> {
-  try {
-    return await req.json() as T
-  } catch {
-    return null
   }
 }

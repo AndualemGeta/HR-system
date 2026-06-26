@@ -48,7 +48,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     const { id } = await params
     const session = await getSession()
     if (!session) return unauthorized()
-    if (!(await userHasPermission(session.userId, 'employee.edit'))) return forbidden()
+    if (!(await userHasPermission(session.userId, 'employee.update'))) return forbidden()
 
     const existing = await getEmployeeOrNotFound(id)
     if (!existing) return notFound()
