@@ -31,11 +31,12 @@ export default function EditEmployeePage() {
   useEffect(() => {
     const id = params.id as string
     Promise.all([
-      fetch('/api/me').then(r => r.json()),
+      fetch('/api/auth/me').then(r => r.json()),
       fetch('/api/departments').then(r => r.json()),
       fetch('/api/employees?limit=200').then(r => r.json()),
       fetch(`/api/employees/${id}`).then(r => r.json()),
-    ]).then(([me, deptJson, empJson, empDetail]) => {
+    ]).then(([meJson, deptJson, empJson, empDetail]) => {
+      const me = meJson.data || meJson
       if (!me.id) { router.push('/login'); return }
       if (!empDetail.id) { router.push('/employees'); return }
       setDepartments(deptJson.data || [])
@@ -84,7 +85,11 @@ export default function EditEmployeePage() {
 
     const payload: Record<string, unknown> = { ...form }
     if (!payload.basicSalary) delete payload.basicSalary
-    else payload.basicSalary = parseFloat(payload.basicSalary as string)
+    else {
+      const parsed = parseFloat(payload.basicSalary as string)
+      if (isNaN(parsed)) { setError('Invalid salary value'); setSaving(false); return }
+      payload.basicSalary = parsed
+    }
     if (!payload.dateOfBirth) delete payload.dateOfBirth
     if (!payload.hireDate) delete payload.hireDate
     if (!payload.notes) delete payload.notes

@@ -124,7 +124,25 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 
     const stringFields = ['firstName', 'lastName', 'middleName', 'email', 'phoneNumber', 'gender', 'address', 'notes', 'employmentType', 'employmentStatus', 'employeeCategory', 'currentRole', 'currentLevel', 'currentDepartmentId', 'currentDivisionId', 'currentRegionId', 'currentAreaId', 'currentShopId', 'currentClusterId'] as const
     for (const field of stringFields) {
-      if (data[field] !== undefined) updateData[field] = data[field]
+      if (data[field] !== undefined) {
+        const val = data[field]
+        // Convert empty strings to null for nullable fields; keep defaults for non-nullable
+        if (val === '') {
+          if (field === 'employmentType' || field === 'employeeCategory') {
+            updateData[field] = null
+          } else if (field === 'currentLevel') {
+            updateData[field] = 'TO_BE_DEFINED'
+          } else if (field === 'employmentStatus') {
+            updateData[field] = 'DRAFT'
+          } else if (field === 'currentRole') {
+            updateData[field] = 'OTHER'
+          } else {
+            updateData[field] = val
+          }
+        } else {
+          updateData[field] = val
+        }
+      }
     }
     if (data.directManagerId !== undefined) {
       const oldManagerId = existing.directManagerId
