@@ -177,9 +177,10 @@ async function main() {
   })
   await assertAsync('DSP defaults manager to Shop Manager', async () => {
     const region = await prisma.location.findFirst({ where: { type: 'REGION' } })
-    const shop = await prisma.location.findFirst({ where: { type: 'SHOP' } })
+    const shopMgr = await prisma.employee.findFirst({ where: { currentRole: 'SHOP_MANAGER' } })
+    if (!shopMgr || !shopMgr.currentShopId) return false
+    const shop = await prisma.location.findUnique({ where: { id: shopMgr.currentShopId } })
     const admin = await prisma.user.findUnique({ where: { email: 'hr.admin@leapfrog.com' } })
-    const shopMgr = await prisma.employee.findFirst({ where: { currentRole: 'SHOP_MANAGER', currentShopId: shop?.id } })
     if (!admin || !shop || !shopMgr) return false
     const last = await prisma.employee.findFirst({ orderBy: { employeeId: 'desc' } })
     const next = last ? parseInt(last.employeeId.split('_')[1]) + 1 : 1

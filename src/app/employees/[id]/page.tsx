@@ -21,6 +21,8 @@ interface Employee {
 interface Assignment { id: string; role: string; level: string; startDate: string; endDate: string | null; reason: string | null; isActive: boolean }
 interface StatusHist { id: string; newStatus: string; previousStatus: string | null; effectiveDate: string; updatedById: string | null; updatedByName: string | null; reason: string | null }
 interface OnboardingItem { id: string; key: string; label: string; completed: boolean; completedAt: string | null }
+interface EmpDocument { id: string; documentType: string; originalFilename: string | null; fileSize: number | null; mimeType: string | null; visibilityLevel: string; notes: string | null; isActive: boolean; uploadedAt: string; uploadedById: string | null }
+interface RequiredDocStatus { ruleId: string; ruleName: string; documentType: string; isSatisfied: boolean; matchingDocumentId: string | null; matchingDocumentName: string | null }
 
 export default function EmployeeDetailPage() {
   const params = useParams()
@@ -29,9 +31,13 @@ export default function EmployeeDetailPage() {
   const [assignments, setAssignments] = useState<Assignment[]>([])
   const [statusHists, setStatusHists] = useState<StatusHist[]>([])
   const [onboardingItems, setOnboardingItems] = useState<OnboardingItem[]>([])
-  const [tab, setTab] = useState<'profile' | 'assignments' | 'status' | 'onboarding'>('profile')
+  const [tab, setTab] = useState<'profile' | 'assignments' | 'status' | 'onboarding' | 'documents'>('profile')
   const [loading, setLoading] = useState(true)
   const [perms, setPerms] = useState<string[]>([])
+  const [documents, setDocuments] = useState<EmpDocument[]>([])
+  const [requiredDocStatus, setRequiredDocStatus] = useState<RequiredDocStatus[]>([])
+  const [docCompletionPct, setDocCompletionPct] = useState(100)
+  const [docBlockers, setDocBlockers] = useState<string[]>([])
 
   useEffect(() => {
     if (!params.id) return
@@ -41,7 +47,9 @@ export default function EmployeeDetailPage() {
       fetch(`/api/employees/${params.id}/assignments`).then(r => r.json()),
       fetch(`/api/employees/${params.id}/status-history`).then(r => r.json()),
       fetch(`/api/employees/${params.id}/onboarding`).then(r => r.json()),
-    ]).then(([meJson, empJson, assignJson, shJson, obJson]) => {
+      fetch(`/api/employees/${params.id}/documents`).then(r => r.json()),
+      fetch(`/api/employees/${params.id}/required-documents`).then(r => r.json()),
+    ]).then(([meJson, empJson, assignJson, shJson, obJson, docJson, reqDocJson]) => {
       const me = meJson.data || meJson
       setPerms(me.permissions || [])
       if (!empJson.data?.id) { router.push('/employees'); return }
@@ -50,9 +58,33 @@ export default function EmployeeDetailPage() {
       setStatusHists(shJson.data || [])
       if (obJson.data?.items) setOnboardingItems(obJson.data.items)
       else if (obJson.data?.exists && obJson.data.checklist?.items) setOnboardingItems(obJson.data.checklist.items)
+      setDocuments(docJson.data || [])
+      if (reqDocJson.data?.rules) {
+        setRequiredDocStatus(reqDocJson.data.rules)
+        setDocCompletionPct(reqDocJson.data.completionPercentage || 0)
+        setDocBlockers(reqDocJson.data.blockers || [])
+      }
     }).catch(() => router.push('/login'))
     .finally(() => setLoading(false))
   }, [params.id, router])
+
+  async function completeOnboarding() {
+    const reason = prompt('Override reason (leave blank if no override needed):')
+    if (reason === null) return
+    const res = await fetch(`/api/employees/${params.id}/onboarding/complete`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ override: reason.length > 0, overrideReason: reason }),
+    })
+    const json = await res.json()
+    const data = json.data || json
+    if (!data.canComplete && data.blockers?.length > 0) {
+      alert(`Onboarding blocked:\n${data.blockers.join('\n')}\n\nUse override reason to bypass.`)
+      return
+    }
+    alert('Onboarding completed successfully!')
+    window.location.reload()
+  }
 
   if (loading) return <div style={{ padding: '2rem', textAlign: 'center' }}>Loading...</div>
   if (!emp) return null
@@ -93,9 +125,10 @@ export default function EmployeeDetailPage() {
       </div>
 
       <div style={{ display: 'flex', gap: '0.25rem', marginBottom: '1rem', borderBottom: '2px solid #e5e7eb' }}>
-        {([
+        {        ([
           ['profile', 'Profile'], ['assignments', 'Assignments'],
-          ['status', 'Status History'], ['onboarding', 'Onboarding'],
+          ['status', 'Status History'], ['documents', 'Documents'],
+          ['onboarding', 'Onboarding'],
         ] as const).map(([key, label]) => (
           <button key={key} onClick={() => setTab(key)} style={{
             padding: '0.5rem 1rem', border: 'none', background: 'none', cursor: 'pointer',
@@ -205,8 +238,72 @@ export default function EmployeeDetailPage() {
         </div>
       )}
 
+      {tab === 'documents' && (
+        <div>
+          <h3 style={{ margin: '0 0 0.75rem', fontSize: '1rem' }}>Required Documents</h3>
+          {requiredDocStatus.length === 0 ? <p style={{ color: '#888', fontSize: '0.9rem' }}>No document rules configured.</p> : (
+            <>
+              <div style={{ marginBottom: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <div style={{ flex: 1, background: '#e5e7eb', height: 8, borderRadius: 4, overflow: 'hidden' }}>
+                  <div style={{ background: docBlockers.length > 0 ? '#f59e0b' : '#16a34a', height: '100%', width: `${docCompletionPct}%`, transition: 'width 0.3s' }} />
+                </div>
+                <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>{docCompletionPct}%</span>
+              </div>
+              <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '1.5rem' }}>
+                <thead><tr style={{ background: '#f9fafb' }}>
+                  <th style={th}>Document Type</th><th style={th}>Status</th><th style={th}>Uploaded File</th>
+                </tr></thead>
+                <tbody>{requiredDocStatus.filter(r => !r.isSatisfied).map(r => (
+                  <tr key={r.ruleId} style={{ borderBottom: '1px solid #e5e7eb' }}>
+                    <td style={td}>{r.ruleName}</td>
+                    <td style={td}><span style={{ color: '#dc2626', fontWeight: 600 }}>Missing</span></td>
+                    <td style={td}>—</td>
+                  </tr>
+                ))}{requiredDocStatus.filter(r => r.isSatisfied).map(r => (
+                  <tr key={r.ruleId} style={{ borderBottom: '1px solid #e5e7eb' }}>
+                    <td style={td}>{r.ruleName}</td>
+                    <td style={td}><span style={{ color: '#16a34a', fontWeight: 600 }}>Uploaded</span></td>
+                    <td style={td}>{r.matchingDocumentName || '—'}</td>
+                  </tr>
+                ))}</tbody>
+              </table>
+            </>
+          )}
+
+          <h3 style={{ margin: '0 0 0.75rem', fontSize: '1rem' }}>All Documents</h3>
+          {documents.length === 0 ? <p style={{ color: '#888', fontSize: '0.9rem' }}>No documents uploaded.</p> : (
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead><tr style={{ background: '#f9fafb' }}>
+                <th style={th}>Type</th><th style={th}>File</th><th style={th}>Visibility</th><th style={th}>Uploaded</th><th style={th}>Status</th>
+              </tr></thead>
+              <tbody>{documents.map(d => (
+                <tr key={d.id} style={{ borderBottom: '1px solid #e5e7eb' }}>
+                  <td style={td}>{d.documentType}</td>
+                  <td style={td}>{d.originalFilename || '—'}</td>
+                  <td style={td}>{d.visibilityLevel}</td>
+                  <td style={td}>{new Date(d.uploadedAt).toLocaleDateString()}</td>
+                  <td style={td}>{d.isActive ? <span style={{ color: '#16a34a' }}>Active</span> : <span style={{ color: '#888' }}>Inactive</span>}</td>
+                </tr>
+              ))}</tbody>
+            </table>
+          )}
+          {perms.includes('document.upload') && (
+            <div style={{ marginTop: '1rem' }}>
+              <Link href={`/employees/${params.id}/documents/upload`} style={{ background: '#2563eb', color: '#fff', padding: '0.4rem 1rem', borderRadius: 4, textDecoration: 'none', fontSize: '0.9rem', display: 'inline-block' }}>Upload Document</Link>
+            </div>
+          )}
+        </div>
+      )}
+
       {tab === 'onboarding' && (
         <div>
+          <h3 style={{ margin: '0 0 0.75rem', fontSize: '1rem' }}>Onboarding Progress</h3>
+
+          <div style={{ marginBottom: '1rem', padding: '0.75rem', background: '#f9fafb', borderRadius: 6 }}>
+            <p style={{ margin: '0 0 0.25rem', fontSize: '0.9rem' }}><strong>Documents:</strong> {docCompletionPct}% complete</p>
+            {docBlockers.map((b, i) => <p key={i} style={{ margin: '0.15rem 0', color: '#dc2626', fontSize: '0.85rem' }}>• {b}</p>)}
+          </div>
+
           {onboardingItems.length === 0 ? <p style={{ color: '#888' }}>No onboarding checklist found.</p> : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
               <p style={{ fontSize: '0.85rem', color: '#666' }}>{onboardingItems.filter(o => o.completed).length}/{onboardingItems.length} items completed</p>
@@ -220,6 +317,14 @@ export default function EmployeeDetailPage() {
                   {item.completedAt && <span style={{ fontSize: '0.8rem', color: '#888' }}>{new Date(item.completedAt).toLocaleDateString()}</span>}
                 </div>
               ))}
+            </div>
+          )}
+
+          {perms.includes('onboarding.complete') && (
+            <div style={{ marginTop: '1rem' }}>
+              <button onClick={completeOnboarding} style={{ background: '#16a34a', color: '#fff', padding: '0.5rem 1.5rem', border: 'none', borderRadius: 4, cursor: 'pointer', fontSize: '0.9rem' }}>
+                Complete Onboarding
+              </button>
             </div>
           )}
         </div>

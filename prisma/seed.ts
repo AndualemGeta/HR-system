@@ -8,12 +8,13 @@ const ALL_PERMISSIONS = [
   'salary.view', 'salary.update',
   'status.view', 'status.update',
   'assignment.view', 'assignment.update',
-  'onboarding.view', 'onboarding.update',
+  'onboarding.view', 'onboarding.update', 'onboarding.complete',
   'reports.view',
   'audit.view',
   'user.view', 'user.manage',
   'role.view', 'role.manage',
   'organization.view', 'organization.manage',
+  'document.view', 'document.upload', 'document.download', 'document.deactivate', 'document.manageRules',
 ] as const
 
 const ROLE_PERMISSIONS: Record<string, string[]> = {
@@ -23,37 +24,46 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
     'salary.view',
     'status.view', 'status.update',
     'assignment.view', 'assignment.update',
-    'onboarding.view', 'onboarding.update',
+    'onboarding.view', 'onboarding.update', 'onboarding.complete',
     'organization.view',
     'audit.view',
+    'document.view', 'document.upload', 'document.download', 'document.deactivate', 'document.manageRules',
   ],
   HR_OFFICER: [
     'employee.view', 'employee.create', 'employee.update',
     'status.view', 'status.update',
     'assignment.view', 'assignment.update',
-    'onboarding.view', 'onboarding.update',
+    'onboarding.view', 'onboarding.update', 'onboarding.complete',
+    'document.view', 'document.upload',
   ],
   FINANCE_DIRECTOR: [
     'employee.view', 'salary.view', 'salary.update',
     'reports.view', 'audit.view',
+    'document.view', 'document.download',
   ],
   FINANCE_PAYROLL: [
     'employee.view', 'salary.view', 'reports.view',
+    'document.view', 'document.download',
   ],
   TREASURY_MANAGER: [
     'employee.view', 'salary.view',
+    'document.view', 'document.download',
   ],
   ACCOUNTANT: [
     'employee.view', 'salary.view',
+    'document.view',
   ],
   SALES_HEAD: [
     'employee.view', 'reports.view', 'organization.view',
+    'document.view',
   ],
   ASM: [
     'employee.view', 'reports.view',
+    'document.view',
   ],
   SHOP_MANAGER: [
     'employee.view',
+    'document.view',
   ],
   EMPLOYEE: [],
   AUDITOR: [
@@ -448,6 +458,29 @@ async function main() {
     },
   })
   console.log('  Created sample audit log')
+
+  // Create required document rules
+  const commonRules = [
+    { name: 'ID Document', documentType: 'ID' as const },
+    { name: 'Employment Contract', documentType: 'CONTRACT' as const },
+    { name: 'Emergency Contact', documentType: 'EMERGENCY_CONTACT' as const },
+  ]
+  const hoRules = [
+    { name: 'CV / Resume', documentType: 'CV' as const, applicableEmployeeCategory: 'HEAD_OFFICE' as const },
+    { name: 'Confidentiality Agreement', documentType: 'CONFIDENTIALITY_DOCUMENT' as const, applicableEmployeeCategory: 'HEAD_OFFICE' as const },
+  ]
+  const shopFieldRules = [
+    { name: 'Responsibility Document', documentType: 'RESPONSIBILITY_DOCUMENT' as const, applicableEmployeeCategory: 'SHOP_FIELD' as const },
+    { name: 'Assignment Letter', documentType: 'ASSIGNMENT_LETTER' as const, applicableEmployeeCategory: 'SHOP_FIELD' as const },
+  ]
+  const shopAcctRules = [
+    { name: 'Bank / Payment Information', documentType: 'BANK_OR_PAYMENT_INFORMATION' as const, applicableRole: 'SHOP_ACCOUNTANT' as const },
+    { name: 'Confidentiality (Shop Accountant)', documentType: 'CONFIDENTIALITY_DOCUMENT' as const, applicableRole: 'SHOP_ACCOUNTANT' as const },
+  ]
+
+  const allRules = [...commonRules, ...hoRules, ...shopFieldRules, ...shopAcctRules]
+  await prisma.requiredDocumentRule.createMany({ data: allRules })
+  console.log(`  Created ${allRules.length} required document rules`)
 
   console.log('\nSeed complete!')
   console.log('Demo users (password: Test123!):')

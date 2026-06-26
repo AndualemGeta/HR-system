@@ -13,6 +13,7 @@ export type PermissionKey =
   | 'assignment.update'
   | 'onboarding.view'
   | 'onboarding.update'
+  | 'onboarding.complete'
   | 'reports.view'
   | 'audit.view'
   | 'user.view'
@@ -21,6 +22,11 @@ export type PermissionKey =
   | 'role.manage'
   | 'organization.view'
   | 'organization.manage'
+  | 'document.view'
+  | 'document.upload'
+  | 'document.download'
+  | 'document.deactivate'
+  | 'document.manageRules'
 
 export async function getUserPermissions(userId: string): Promise<PermissionKey[]> {
   const roles = await prisma.userRole.findMany({
@@ -75,6 +81,7 @@ const ALL_PERMISSIONS_MAP: Record<string, boolean> = {
   'assignment.update': true,
   'onboarding.view': true,
   'onboarding.update': true,
+  'onboarding.complete': true,
   'reports.view': true,
   'audit.view': true,
   'user.view': true,
@@ -83,6 +90,11 @@ const ALL_PERMISSIONS_MAP: Record<string, boolean> = {
   'role.manage': true,
   'organization.view': true,
   'organization.manage': true,
+  'document.view': true,
+  'document.upload': true,
+  'document.download': true,
+  'document.deactivate': true,
+  'document.manageRules': true,
 }
 
 export const ALL_PERMISSIONS = Object.keys(ALL_PERMISSIONS_MAP)

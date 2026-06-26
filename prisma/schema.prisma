@@ -301,6 +301,14 @@ enum AuditAction {
   PROFILE_CHANGE_REQUEST
   PROFILE_CHANGE_APPROVAL
   DATA_QUALITY_RESOLVE
+  DOCUMENT_DOWNLOAD
+  DOCUMENT_UPDATE
+  DOCUMENT_RULE_CREATE
+  DOCUMENT_RULE_UPDATE
+  DOCUMENT_RULE_DEACTIVATE
+  ONBOARDING_UPDATE
+  ONBOARDING_COMPLETE
+  ONBOARDING_OVERRIDE
   OTHER
 }
 
@@ -535,13 +543,19 @@ model EmployeeDocument {
   documentType     DocumentType
   filePath         String
   originalFilename String?
+  fileSize         Int?
+  mimeType         String?
   uploadedById     String?
   uploadedAt       DateTime           @default(now())
   visibilityLevel  DocumentVisibility @default(PUBLIC_TO_HR)
   notes            String?
   isActive         Boolean            @default(true)
+  deactivatedAt    DateTime?
+  deactivatedById  String?
+  deactivationReason String?
   updatedAt        DateTime           @updatedAt
   employee         Employee           @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
   @@index([employeeId, documentType])
   @@index([visibilityLevel, isActive])
 }
@@ -554,6 +568,7 @@ model RequiredDocumentRule {
   applicableRole           EmployeeRole?
   applicableDepartmentId   String?
   applicableDivisionId     String?
+  applicableEmployeeCategory EmployeeCategory?
   isRequired               Boolean         @default(true)
   isActive                 Boolean         @default(true)
   createdAt                DateTime        @default(now())

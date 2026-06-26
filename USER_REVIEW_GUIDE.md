@@ -1,8 +1,10 @@
-# Leapfrog HRMS — Starter User Review Guide
+# Leapfrog HRMS — Phase 2A User Review Guide
 
 ## Review Scope
 
-This review covers the employee registration starter workflow — Head Office and Shop/Field employees only. The following workflows are ready for validation:
+This review covers Phase 2A: Employee Documents, Required Document Rules, and Onboarding Completion. Baseline v1.0 (employee registration) is also verified for regression.
+
+## Baseline Tests (Quick Check)
 
 ### 1. Login as HR Admin
 - Open `http://localhost:3000`
@@ -91,3 +93,89 @@ This review covers the employee registration starter workflow — Head Office an
 - External integrations
 
 Do not claim these modules are ready.
+
+---
+
+## Phase 2A: Document & Onboarding Workflows
+
+### 1. Upload Employee Documents
+- Login as HR Admin (`hr.admin@leapfrog.com` / `Test123!`)
+- Open an employee profile (e.g., a Shop/Field employee)
+- Click the "Documents" tab
+- Verify the "Required Documents" section shows which documents are missing
+- Click "Upload Document"
+- Select document type: ID, set visibility to "Visible to HR"
+- Upload a small PDF/JPG file
+- Submit — verify you return to the profile and see the document listed
+- Repeat to upload a CONTRACT document
+
+### 2. View Required Document Status
+- Stay on the Documents tab
+- Verify the completion progress bar updates
+- Check that uploaded documents show as "Uploaded" next to their required type
+- Verify missing documents show as "Missing" in red
+
+### 3. Test Document Visibility Permissions
+- Login as a Shop Manager (`shop.manager@leapfrog.com` / `Test123!`)
+- Open the same employee's profile
+- Go to the Documents tab
+- Verify you can see PUBLIC_TO_HR and MANAGER_VISIBLE documents
+- Verify you CANNOT see SENSITIVE_HR_ONLY documents
+
+### 4. Test Salary-Restricted Document Access
+- Login as HR Admin and upload a SALARY_DOCUMENT with SALARY_RESTRICTED visibility
+- Login as Finance Director (`finance.director@leapfrog.com` / `Test123!`)
+- Verify Finance Director CAN view the salary-restricted document (has document.view + salary.view)
+- Login as HR Officer (`hr.officer@leapfrog.com` / `Test123!`)
+- Verify HR Officer CANNOT view the salary-restricted document (no salary.view)
+
+### 5. Manage Required Document Rules
+- Login as HR Admin
+- Navigate to `/document-rules`
+- Verify you see the 9 seeded rules (ID, Contract, Emergency Contact, CV, Confidentiality, Responsibility Document, Assignment Letter, Bank/Payment Information)
+- Click "Add Rule" — create a new rule: Name = "Commission Agreement for DSA", Document Type = COMMISSION_AGREEMENT, Role = DSA
+- Submit and verify it appears in the table
+- Click "Edit" on any rule and change its name
+- Click "Deactivate" on a rule and verify it shows as Inactive
+
+### 6. Complete Onboarding
+- Find an employee with ONBOARDING status (or create a new employee)
+- Upload all required documents (ID, Contract, Emergency Contact)
+- Go to the Onboarding tab
+- Verify document progress shows 100%
+- Click "Complete Onboarding"
+- Verify onboarding completes successfully
+- Check the audit logs (`/audit-logs` or via Auditor login) for ONBOARDING_COMPLETE
+
+### 7. Test Onboarding Blockers
+- Create a new employee and do NOT upload any documents
+- Go to the Onboarding tab and click "Complete Onboarding"
+- Verify you see blockers listing missing documents
+- The onboarding should not complete
+
+### 8. Test HR Admin Override
+- With still-incomplete employee from step 7, click "Complete Onboarding" again
+- Enter an override reason when prompted
+- Verify onboarding completes despite missing documents
+- Check audit logs for ONBOARDING_OVERRIDE with the reason
+
+### 9. Verify Audit Logs
+- Login as Auditor (`auditor@leapfrog.com` / `Test123!`)
+- Navigate to `/audit-logs`
+- Verify you can see DOCUMENT_UPLOAD, DOCUMENT_DEACTIVATE, ONBOARDING_COMPLETE, DOCUMENT_RULE_CREATE entries
+
+### 10. Regression Check
+- Verify Head Office registration still works (Step 2 from baseline)
+- Verify Shop/Field registration still works (Step 3 from baseline)
+- Verify Shop Accountant dual reporting still works (Step 6 from baseline)
+- Verify Salary is still REDACTED for unauthorized users
+- Verify manager scope still restricts visibility
+
+## Known Limitations (Phase 2A)
+
+- File upload uses local filesystem (`uploads/employee-documents/`)
+- No email notifications for document uploads or missing documents
+- Employee self-service for document viewing is limited
+- Onboarding completion does not auto-change employee status to ACTIVE
+- No document preview (download only)
+- No automatic reminders for missing documents

@@ -1,8 +1,16 @@
-# Leapfrog HR Management System — Starter Workflow
+# Leapfrog HR Management System — Phase 2A
 
-Secure, role-based HR employee registration system for Leapfrog Software Technology Africa PLC.
+Secure, role-based HR employee registration and document management system for Leapfrog Software Technology Africa PLC.
 
-**This starter build supports employee registration for Head Office and Shop/Field employees only.** Payroll, leave, documents, evaluations, commission, termination, and advanced workflows are planned for later phases.
+**Phase 2A adds:**
+- Employee document upload
+- Document visibility levels (PUBLIC_TO_HR, MANAGER_VISIBLE, EMPLOYEE_VISIBLE, SENSITIVE_HR_ONLY, SALARY_RESTRICTED)
+- Required document rules (configurable per role, category, employment type)
+- Required document status evaluation
+- Onboarding completion with document and checklist validation
+- Document and onboarding audit logs
+
+**This build supports employee registration (Head Office and Shop/Field) plus document management.**
 
 ## Tech Stack
 
@@ -92,7 +100,7 @@ npm run lint
 npm run build
 ```
 
-All pass clean — 42 tests covering authentication, RBAC, employee ID, Head Office registration, Shop/Field registration, salary visibility, assignments, audit logging, and organization data.
+All pass clean — 42 baseline tests + 35 Phase 2A tests covering authentication, RBAC, employee ID, Head Office registration, Shop/Field registration, salary visibility, assignments, audit logging, organization data, document upload/visibility/deactivation, required document rules, and onboarding integration.
 
 ## Key Design Decisions
 
@@ -106,11 +114,16 @@ All pass clean — 42 tests covering authentication, RBAC, employee ID, Head Off
 - Onboarding checklists are auto-created for DRAFT/ONBOARDING status employees
 - Audit logs record user, action, entity type/id, old/new values
 - All Ethiopia-oriented data — no unrelated sample locations (no Kathmandu)
+- Document visibility levels protect sensitive documents: HR-only, manager-visible, salary-restricted
+- Required document rules are configurable per role, category, and employment type
+- Onboarding completion validates required documents, checklist items, and employee data completeness
+- HR Admin override for onboarding allows bypassing blockers with audit trail
 
 ## Known Limitations
 
-- Employee registration form does not include file/document upload
-- No email delivery is configured
-- No self-service employee/manager views
-- Manager scope (ASM sees own area, Shop Manager sees own shop) is enforced at data level but not yet at API query level
-- Salary redaction for unauthorized roles is handled at API level
+- File upload uses local filesystem (`uploads/employee-documents/`) — no cloud storage integration
+- No email notifications for document uploads or onboarding
+- No self-service employee document viewing/upload (employee can view EMPLOYEE_VISIBLE docs only)
+- Document download does not enforce per-document rate limiting
+- No document expiration or auto-reminder for missing required documents
+- Onboarding completion does not automatically change employee status (requires manual status change)
