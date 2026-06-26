@@ -37,39 +37,40 @@ export default function EditEmployeePage() {
       fetch(`/api/employees/${id}`).then(r => r.json()),
     ]).then(([meJson, deptJson, empJson, empDetail]) => {
       const me = meJson.data || meJson
+      const employee = empDetail.data || empDetail
       if (!me.id) { router.push('/login'); return }
-      if (!empDetail.id) { router.push('/employees'); return }
+      if (!employee.id) { router.push('/employees'); return }
       setDepartments(deptJson.data || [])
       const allManagers = empJson.data?.items || []
       setManagers(allManagers.filter((m: Emp) => m.id !== id))
-      const isHo = empDetail.employeeCategory === 'HEAD_OFFICE'
+      const isHo = employee.employeeCategory === 'HEAD_OFFICE'
       setIsHO(isHo)
-      setEmpIdStr(empDetail.employeeId || '')
+      setEmpIdStr(employee.employeeId || '')
       setForm({
-        firstName: empDetail.firstName || '',
-        middleName: empDetail.middleName || '',
-        lastName: empDetail.lastName || '',
-        email: empDetail.email || '',
-        phoneNumber: empDetail.phoneNumber || '',
-        gender: empDetail.gender || 'NOT_SPECIFIED',
-        dateOfBirth: empDetail.dateOfBirth ? empDetail.dateOfBirth.split('T')[0] : '',
-        address: empDetail.address || '',
-        notes: empDetail.notes || '',
-        hireDate: empDetail.hireDate ? empDetail.hireDate.split('T')[0] : '',
-        employmentType: empDetail.employmentType || '',
-        employmentStatus: empDetail.employmentStatus || 'DRAFT',
-        employeeCategory: empDetail.employeeCategory || '',
-        currentRole: empDetail.currentRole || '',
-        currentLevel: empDetail.currentLevel || '',
-        currentDepartmentId: empDetail.currentDepartmentId || '',
-        currentDivisionId: empDetail.currentDivisionId || '',
-        currentRegionId: empDetail.currentRegionId || '',
-        currentAreaId: empDetail.currentAreaId || '',
-        currentShopId: empDetail.currentShopId || '',
-        currentClusterId: empDetail.currentClusterId || '',
-        directManagerId: empDetail.directManagerId || '',
-        accountingReportingManagerId: empDetail.accountingReportingManagerId || '',
-        basicSalary: empDetail.basicSalary != null && empDetail.basicSalary !== 'REDACTED' ? String(empDetail.basicSalary) : '',
+        firstName: employee.firstName || '',
+        middleName: employee.middleName || '',
+        lastName: employee.lastName || '',
+        email: employee.email || '',
+        phoneNumber: employee.phoneNumber || '',
+        gender: employee.gender || 'NOT_SPECIFIED',
+        dateOfBirth: employee.dateOfBirth ? employee.dateOfBirth.split('T')[0] : '',
+        address: employee.address || '',
+        notes: employee.notes || '',
+        hireDate: employee.hireDate ? employee.hireDate.split('T')[0] : '',
+        employmentType: employee.employmentType || '',
+        employmentStatus: employee.employmentStatus || 'DRAFT',
+        employeeCategory: employee.employeeCategory || '',
+        currentRole: employee.currentRole || '',
+        currentLevel: employee.currentLevel || '',
+        currentDepartmentId: employee.currentDepartmentId || '',
+        currentDivisionId: employee.currentDivisionId || '',
+        currentRegionId: employee.currentRegionId || '',
+        currentAreaId: employee.currentAreaId || '',
+        currentShopId: employee.currentShopId || '',
+        currentClusterId: employee.currentClusterId || '',
+        directManagerId: employee.directManagerId || '',
+        accountingReportingManagerId: employee.accountingReportingManagerId || '',
+        basicSalary: employee.basicSalary != null && employee.basicSalary !== 'REDACTED' ? String(employee.basicSalary) : '',
       })
     }).catch(() => router.push('/login'))
     .finally(() => setLoading(false))
