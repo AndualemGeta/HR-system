@@ -154,7 +154,11 @@ async function main() {
     { email: 'sales.head@leapfrog.com', name: 'Biruk Tadesse', roles: ['SALES_HEAD'] },
     { email: 'asm@leapfrog.com', name: 'Aster Desta', roles: ['ASM'] },
     { email: 'shop.manager@leapfrog.com', name: 'Tesfaye Hailu', roles: ['SHOP_MANAGER'] },
-    { email: 'employee@leapfrog.com', name: 'Kidus Yohannes', roles: ['EMPLOYEE'] },
+    { email: 'shop.manager2@leapfrog.com', name: 'Lemlem Berhe', roles: ['SHOP_MANAGER'] },
+    { email: 'dsp@leapfrog.com', name: 'Kidus Yohannes', roles: ['EMPLOYEE'] },
+    { email: 'dsa@leapfrog.com', name: 'Meron Tadesse', roles: ['EMPLOYEE'] },
+    { email: 'shopacct@leapfrog.com', name: 'Bezawit Assefa', roles: ['EMPLOYEE'] },
+    { email: 'employee@leapfrog.com', name: 'Employee User', roles: ['EMPLOYEE'] },
     { email: 'auditor@leapfrog.com', name: 'Yonas Tadesse', roles: ['AUDITOR'] },
   ]
   const userRecords = await Promise.all(
@@ -383,7 +387,7 @@ async function main() {
     currentShopId: shopMap['SHOP_SHI'],
     currentRole: 'SHOP_MANAGER' as EmployeeRole, currentLevel: 'MANAGER' as EmployeeLevel,
     directManagerId: asmEmployee.id, basicSalary: 35000,
-    userEmail: 'employee@leapfrog.com', // reuse employee user
+    userEmail: 'shop.manager2@leapfrog.com',
   })
 
   const dspEmployee = await createEmployee({
@@ -395,7 +399,7 @@ async function main() {
     currentShopId: shopMap['SHOP_MEG'],
     currentRole: 'DSP' as EmployeeRole, currentLevel: 'JUNIOR' as EmployeeLevel,
     directManagerId: shopManagerMegenagna.id, basicSalary: 12000,
-    userEmail: 'employee@leapfrog.com',
+    userEmail: 'dsp@leapfrog.com',
   })
 
   const dsaEmployee = await createEmployee({
@@ -407,7 +411,7 @@ async function main() {
     currentShopId: shopMap['SHOP_SHI'],
     currentRole: 'DSA' as EmployeeRole, currentLevel: 'JUNIOR' as EmployeeLevel,
     directManagerId: shopManagerShiromeda.id, basicSalary: 8000,
-    userEmail: 'employee@leapfrog.com',
+    userEmail: 'dsa@leapfrog.com',
   })
 
   const shopAccountant = await createEmployee({
@@ -421,7 +425,7 @@ async function main() {
     directManagerId: shopManagerMegenagna.id,
     accountingReportingManagerId: treasuryManager.id,
     basicSalary: 25000,
-    userEmail: 'employee@leapfrog.com',
+    userEmail: 'shopacct@leapfrog.com',
   })
 
   // Auditor (no employee record needed - just a user)

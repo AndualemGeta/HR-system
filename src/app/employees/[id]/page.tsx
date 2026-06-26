@@ -10,18 +10,17 @@ interface Employee {
   notes: string | null; hireDate: string | null; employmentType: string | null; employmentStatus: string | null
   employeeCategory: string | null; currentRole: string | null; currentLevel: string | null
   currentDepartmentId: string | null; currentRegionId: string | null; currentAreaId: string | null
-  currentShopId: string | null; currentClusterId: string | null
-  currentDivisionId: string | null; basicSalary: number | string | null
-  salaryEffectiveDate: string | null; createdAt: string
+  currentShopId: string | null; currentClusterId: string | null; currentDivisionId: string | null
+  basicSalary: number | string | null; salaryEffectiveDate: string | null; createdAt: string
+  _deptName: string | null; _regionName: string | null; _areaName: string | null; _shopName: string | null
   directManager: { id: string; employeeId: string; fullName: string; currentRole: string } | null
   accountingReportingManager: { id: string; employeeId: string; fullName: string; currentRole: string } | null
   assignments: Assignment[]
 }
 
 interface Assignment { id: string; role: string; level: string; startDate: string; endDate: string | null; reason: string | null; isActive: boolean }
-
 interface StatusHist { id: string; status: string; changedAt: string; changedBy: string | null; reason: string | null }
-interface Onboarding { id: string; item: string; isCompleted: boolean; completedAt: string | null; sortOrder: number }
+interface OnboardingItem { id: string; key: string; label: string; completed: boolean; completedAt: string | null }
 
 export default function EmployeeDetailPage() {
   const params = useParams()
@@ -29,38 +28,31 @@ export default function EmployeeDetailPage() {
   const [emp, setEmp] = useState<Employee | null>(null)
   const [assignments, setAssignments] = useState<Assignment[]>([])
   const [statusHists, setStatusHists] = useState<StatusHist[]>([])
-  const [onboarding, setOnboarding] = useState<Onboarding[]>([])
+  const [onboardingItems, setOnboardingItems] = useState<OnboardingItem[]>([])
   const [tab, setTab] = useState<'profile' | 'assignments' | 'status' | 'onboarding'>('profile')
   const [loading, setLoading] = useState(true)
   const [perms, setPerms] = useState<string[]>([])
 
   useEffect(() => {
+    if (!params.id) return
     Promise.all([
-      fetch('/api/me').then(r => r.json()),
+      fetch('/api/auth/me').then(r => r.json()),
       fetch(`/api/employees/${params.id}`).then(r => r.json()),
       fetch(`/api/employees/${params.id}/assignments`).then(r => r.json()),
       fetch(`/api/employees/${params.id}/status-history`).then(r => r.json()),
       fetch(`/api/employees/${params.id}/onboarding`).then(r => r.json()),
-    ]).then(([me, empJson, assignJson, shJson, obJson]) => {
+    ]).then(([meJson, empJson, assignJson, shJson, obJson]) => {
+      const me = meJson.data || meJson
       setPerms(me.permissions || [])
-      if (!empJson.id) { router.push('/employees'); return }
-      setEmp(empJson)
+      if (!empJson.data?.id) { router.push('/employees'); return }
+      setEmp(empJson.data)
       setAssignments(assignJson.data || [])
       setStatusHists(shJson.data || [])
-      setOnboarding(obJson.data || [])
+      if (obJson.data?.items) setOnboardingItems(obJson.data.items)
+      else if (obJson.data?.exists && obJson.data.checklist?.items) setOnboardingItems(obJson.data.checklist.items)
     }).catch(() => router.push('/login'))
     .finally(() => setLoading(false))
   }, [params.id, router])
-
-  const [deptName, setDeptName] = useState('')
-  const deptId = emp?.currentDepartmentId
-  useEffect(() => {
-    if (!deptId) return
-    fetch(`/api/departments`).then(r => r.json()).then(d => {
-      const found = d.data?.find((dept: { id: string }) => dept.id === deptId)
-      if (found) setDeptName(found.name)
-    }).catch(() => {})
-  }, [deptId])
 
   if (loading) return <div style={{ padding: '2rem', textAlign: 'center' }}>Loading...</div>
   if (!emp) return null
@@ -102,10 +94,8 @@ export default function EmployeeDetailPage() {
 
       <div style={{ display: 'flex', gap: '0.25rem', marginBottom: '1rem', borderBottom: '2px solid #e5e7eb' }}>
         {([
-          ['profile', 'Profile'],
-          ['assignments', 'Assignments'],
-          ['status', 'Status History'],
-          ['onboarding', 'Onboarding'],
+          ['profile', 'Profile'], ['assignments', 'Assignments'],
+          ['status', 'Status History'], ['onboarding', 'Onboarding'],
         ] as const).map(([key, label]) => (
           <button key={key} onClick={() => setTab(key)} style={{
             padding: '0.5rem 1rem', border: 'none', background: 'none', cursor: 'pointer',
@@ -143,12 +133,12 @@ export default function EmployeeDetailPage() {
             <InfoRow label="Category" value={isHO ? 'Head Office' : 'Shop / Field'} />
             <InfoRow label="Role / Position" value={emp.currentRole || ''} />
             {isHO ? (
-              <InfoRow label="Department" value={deptName || emp.currentDepartmentId || ''} />
+              <InfoRow label="Department" value={emp._deptName || emp.currentDepartmentId || ''} />
             ) : (
               <>
-                <InfoRow label="Region" value={emp.currentRegionId || ''} />
-                <InfoRow label="Area" value={emp.currentAreaId || ''} />
-                <InfoRow label="Shop" value={emp.currentShopId || ''} />
+                <InfoRow label="Region" value={emp._regionName || emp.currentRegionId || ''} />
+                <InfoRow label="Area" value={emp._areaName || emp.currentAreaId || ''} />
+                <InfoRow label="Shop" value={emp._shopName || emp.currentShopId || ''} />
               </>
             )}
             <hr style={{ border: 'none', borderTop: '1px solid #e5e7eb', margin: '0.5rem 0' }} />
@@ -217,16 +207,16 @@ export default function EmployeeDetailPage() {
 
       {tab === 'onboarding' && (
         <div>
-          {onboarding.length === 0 ? <p style={{ color: '#888' }}>No onboarding checklist found.</p> : (
+          {onboardingItems.length === 0 ? <p style={{ color: '#888' }}>No onboarding checklist found.</p> : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-              <p style={{ fontSize: '0.85rem', color: '#666' }}>{onboarding.filter(o => o.isCompleted).length}/{onboarding.length} items completed</p>
+              <p style={{ fontSize: '0.85rem', color: '#666' }}>{onboardingItems.filter(o => o.completed).length}/{onboardingItems.length} items completed</p>
               <div style={{ background: '#e5e7eb', height: 8, borderRadius: 4, overflow: 'hidden' }}>
-                <div style={{ background: '#2563eb', height: '100%', width: `${(onboarding.filter(o => o.isCompleted).length / onboarding.length) * 100}%`, transition: 'width 0.3s' }} />
+                <div style={{ background: '#2563eb', height: '100%', width: `${(onboardingItems.filter(o => o.completed).length / onboardingItems.length) * 100}%`, transition: 'width 0.3s' }} />
               </div>
-              {onboarding.sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0)).map(item => (
-                <div key={item.id} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.5rem', background: item.isCompleted ? '#f0fdf4' : '#fff', border: '1px solid #e5e7eb', borderRadius: 4 }}>
-                  <span style={{ color: item.isCompleted ? '#16a34a' : '#d1d5db', fontSize: '1.1rem' }}>{item.isCompleted ? '✓' : '○'}</span>
-                  <span style={{ flex: 1, fontSize: '0.9rem', textDecoration: item.isCompleted ? 'line-through' : 'none' }}>{item.item}</span>
+              {onboardingItems.map(item => (
+                <div key={item.id} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.5rem', background: item.completed ? '#f0fdf4' : '#fff', border: '1px solid #e5e7eb', borderRadius: 4 }}>
+                  <span style={{ color: item.completed ? '#16a34a' : '#d1d5db', fontSize: '1.1rem' }}>{item.completed ? '✓' : '○'}</span>
+                  <span style={{ flex: 1, fontSize: '0.9rem', textDecoration: item.completed ? 'line-through' : 'none' }}>{item.label}</span>
                   {item.completedAt && <span style={{ fontSize: '0.8rem', color: '#888' }}>{new Date(item.completedAt).toLocaleDateString()}</span>}
                 </div>
               ))}

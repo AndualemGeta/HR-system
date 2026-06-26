@@ -1,8 +1,10 @@
 import { NextRequest } from 'next/server'
 import { z } from 'zod'
 import { prisma } from '@/lib/prisma'
-import { withAuth, badRequest, success } from '@/lib/api'
+import { withAuth, badRequest, success, forbidden } from '@/lib/api'
 import { createAuditLog } from '@/lib/audit'
+import { userHasPermission } from '@/lib/rbac'
+import { buildEmployeeScopeWhere } from '@/lib/rbac'
 import { PAGINATION_DEFAULT_PAGE, PAGINATION_DEFAULT_LIMIT, PAGINATION_MAX_LIMIT, EMPLOYEE_ID_PREFIX } from '@/lib/constants'
 
 const onboardingItemDefs = [
@@ -44,30 +46,8 @@ const createSchema = z.object({
   directManagerId: z.string().optional(),
   accountingReportingManagerId: z.string().optional(),
   basicSalary: z.number().positive().optional(),
+  salaryEffectiveDate: z.string().optional(),
 })
-
-function validateCategory(data: z.infer<typeof createSchema>): string[] {
-  const errors: string[] = []
-  const cat = data.employeeCategory
-
-  if (cat === 'HEAD_OFFICE') {
-    if (!data.currentDepartmentId) errors.push('Department is required for Head Office employees')
-    if (!data.currentRole) errors.push('Role/position is required for Head Office employees')
-  } else if (cat === 'SHOP_FIELD') {
-    if (!data.currentRegionId && !data.currentAreaId) errors.push('Region or area is required for Shop/Field employees')
-    if (!data.currentRole) errors.push('Role/position is required for Shop/Field employees')
-    const role = data.currentRole
-    if (role === 'SHOP_MANAGER' && !data.currentShopId) errors.push('Shop is required for Shop Manager')
-    if (role === 'DSP' && !data.currentShopId) errors.push('Shop is required for DSP')
-    if (role === 'DSA' && !data.currentShopId) errors.push('Shop is required for DSA')
-    if (role === 'SHOP_ACCOUNTANT') {
-      if (!data.currentShopId) errors.push('Shop is required for Shop Accountant')
-      if (!data.accountingReportingManagerId) errors.push('Accounting reporting manager is required for Shop Accountant')
-    }
-  }
-
-  return errors
-}
 
 async function getNextEmployeeId(): Promise<string> {
   const last = await prisma.employee.findFirst({
@@ -88,7 +68,13 @@ export const GET = withAuth(async (req: NextRequest) => {
   const departmentId = searchParams.get('departmentId') || ''
   const category = searchParams.get('category') || ''
 
-  const where: Record<string, unknown> = {}
+  // Build the base where clause and then merge scope
+  const parsedSession = await (await import('@/lib/session')).getSession()
+  if (!parsedSession) return forbidden()
+
+  const scopeWhere = await buildEmployeeScopeWhere(parsedSession.userId)
+
+  const where: Record<string, unknown> = { ...scopeWhere }
   if (search) {
     where.OR = [
       { fullName: { contains: search, mode: 'insensitive' } },
@@ -142,9 +128,12 @@ export const POST = withAuth(async (req: NextRequest, ctx) => {
 
   const data = parsed.data
 
-  // Category-specific validation
-  const catErrors = validateCategory(data)
-  if (catErrors.length > 0) return badRequest(catErrors.join('; '))
+  // If salary fields are present, require salary.update
+  if (data.basicSalary !== undefined || data.salaryEffectiveDate !== undefined) {
+    if (!(await userHasPermission(ctx.userId, 'salary.update'))) {
+      return forbidden('Salary update permission required to set salary fields')
+    }
+  }
 
   const employeeId = await getNextEmployeeId()
   const fullName = [data.firstName, data.middleName, data.lastName].filter(Boolean).join(' ')
@@ -155,7 +144,6 @@ export const POST = withAuth(async (req: NextRequest, ctx) => {
   let directManagerId = data.directManagerId || null
   const role = data.currentRole
 
-  // Role-based default manager logic
   if (role === 'ASM' && !directManagerId) {
     const salesHead = await prisma.employee.findFirst({ where: { currentRole: 'SALES_HEAD', employmentStatus: 'ACTIVE' } })
     if (salesHead) directManagerId = salesHead.id
@@ -179,6 +167,24 @@ export const POST = withAuth(async (req: NextRequest, ctx) => {
       if (hoAcct) accountingReportingManagerId = hoAcct.id
     }
   }
+
+  // Category-specific validation (after defaults are set)
+  const catErrors: string[] = []
+  if (cat === 'HEAD_OFFICE') {
+    if (!data.currentDepartmentId) catErrors.push('Department is required for Head Office employees')
+    if (!role) catErrors.push('Role/position is required for Head Office employees')
+  } else if (cat === 'SHOP_FIELD') {
+    if (!data.currentRegionId && !data.currentAreaId) catErrors.push('Region or area is required for Shop/Field employees')
+    if (!role) catErrors.push('Role/position is required for Shop/Field employees')
+    if (role === 'SHOP_MANAGER' && !data.currentShopId) catErrors.push('Shop is required for Shop Manager')
+    if (role === 'DSP' && !data.currentShopId) catErrors.push('Shop is required for DSP')
+    if (role === 'DSA' && !data.currentShopId) catErrors.push('Shop is required for DSA')
+    if (role === 'SHOP_ACCOUNTANT') {
+      if (!data.currentShopId) catErrors.push('Shop is required for Shop Accountant')
+      if (!accountingReportingManagerId) catErrors.push('Accounting reporting manager is required for Shop Accountant and no active Treasury Manager or Accountant found')
+    }
+  }
+  if (catErrors.length > 0) return badRequest(catErrors.join('; '))
 
   const employee = await prisma.employee.create({
     data: {
@@ -236,7 +242,7 @@ export const POST = withAuth(async (req: NextRequest, ctx) => {
     },
   })
 
-  // Auto-create assignment if role is set
+  // Auto-create assignment
   if (role) {
     await prisma.employeeAssignment.create({
       data: {
@@ -263,13 +269,7 @@ export const POST = withAuth(async (req: NextRequest, ctx) => {
     action: 'EMPLOYEE_CREATE',
     entityType: 'Employee',
     entityId: employee.id,
-    newValue: {
-      employeeId: employee.employeeId,
-      fullName: employee.fullName,
-      role,
-      status,
-      category: cat,
-    },
+    newValue: { employeeId: employee.employeeId, fullName: employee.fullName, role, status, category: cat },
   })
 
   if (accountingReportingManagerId) {
