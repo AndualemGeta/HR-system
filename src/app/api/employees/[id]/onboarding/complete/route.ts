@@ -24,11 +24,15 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const isOverride = body.override === true
     const overrideReason = body.overrideReason || ''
 
+    if (isOverride && !overrideReason.trim()) {
+      return success({ canComplete: false, blockers: ['Override reason is required when overriding onboarding blockers'], overrideAvailable: true })
+    }
+
     const blockers: string[] = []
 
-    // Check required documents
+    // Check required documents (only applicable rules)
     const docStatus = await getRequiredDocumentStatus(id)
-    const missingDocs = docStatus.filter(d => !d.isSatisfied)
+    const missingDocs = docStatus.filter(d => d.isApplicable && !d.isSatisfied)
     if (missingDocs.length > 0 && !isOverride) {
       blockers.push(`Missing ${missingDocs.length} required document(s)`)
     }

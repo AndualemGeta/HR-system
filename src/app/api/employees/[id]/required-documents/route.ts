@@ -20,13 +20,14 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     if (!employee) return notFound()
 
     const docStatus = await getRequiredDocumentStatus(id)
-    const satisfied = docStatus.filter(d => d.isSatisfied).length
-    const total = docStatus.filter(d => !d.isSatisfied || d.isSatisfied).length
-    const applicable = docStatus.filter(d => !d.isSatisfied)
+    const applicableRules = docStatus.filter(d => d.isApplicable)
+    const satisfied = applicableRules.filter(d => d.isSatisfied).length
+    const total = applicableRules.length
+    const missing = applicableRules.filter(d => !d.isSatisfied)
     const completionPct = total > 0 ? Math.round((satisfied / total) * 100) : 100
 
     const blockers: string[] = []
-    if (applicable.length > 0) blockers.push(`Missing ${applicable.length} required document(s)`)
+    if (missing.length > 0) blockers.push(`Missing ${missing.length} required document(s)`)
 
     return success({
       employee: { id: employee.id, employeeId: employee.employeeId, fullName: employee.fullName },
@@ -34,7 +35,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       satisfied,
       total,
       completionPercentage: completionPct,
-      missing: applicable,
+      missing,
       blockers,
     })
   } catch (err) {

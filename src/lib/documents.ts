@@ -48,6 +48,7 @@ export interface RequiredDocumentStatus {
   ruleId: string
   ruleName: string
   documentType: string
+  isApplicable: boolean
   isSatisfied: boolean
   matchingDocumentId: string | null
   matchingDocumentName: string | null
@@ -102,7 +103,8 @@ export async function getRequiredDocumentStatus(employeeId: string): Promise<Req
         ruleId: rule.id,
         ruleName: rule.name,
         documentType: rule.documentType,
-        isSatisfied: true,
+        isApplicable: false,
+        isSatisfied: false,
         matchingDocumentId: null,
         matchingDocumentName: null,
         visibilityLevel: 'PUBLIC_TO_HR',
@@ -118,6 +120,7 @@ export async function getRequiredDocumentStatus(employeeId: string): Promise<Req
       ruleId: rule.id,
       ruleName: rule.name,
       documentType: rule.documentType,
+      isApplicable: true,
       isSatisfied: !!matchingDoc,
       matchingDocumentId: matchingDoc?.id || null,
       matchingDocumentName: matchingDoc?.originalFilename || null,

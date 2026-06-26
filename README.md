@@ -45,7 +45,6 @@ Secure, role-based HR employee registration and document management system for L
 
 | Feature | Status |
 |---|---|
-| Document upload & management | PLANNED |
 | Leave requests & balances | PLANNED |
 | Employee evaluations | PLANNED |
 | Payroll preparation & calculation | PLANNED |
@@ -56,7 +55,7 @@ Secure, role-based HR employee registration and document management system for L
 | Employee self-service | PLANNED |
 | External integrations | PLANNED |
 
-Schema models for these future features exist in the database but have no APIs, pages, or tests in this starter build.
+Schema models for these future features exist in the database but have no APIs, pages, or tests in this build.
 
 ## Setup
 
@@ -88,19 +87,25 @@ Open `http://localhost:3000`.
 | `sales.head@leapfrog.com` | SALES_HEAD | Biruk Tadesse (Sales Head, Head Office) |
 | `asm@leapfrog.com` | ASM | Aster Desta (ASM, Shop/Field — Megenagna Area) |
 | `shop.manager@leapfrog.com` | SHOP_MANAGER | Tesfaye Hailu (Shop Manager, Shop/Field — Megenagna) |
-| `employee@leapfrog.com` | EMPLOYEE | Kidus Yohannes (DSP), Meron Tadesse (DSA), Bezawit Assefa (Shop Accountant) |
+| `shop.manager2@leapfrog.com` | SHOP_MANAGER | Sintayehu Lemma (Shop Manager, Shop/Field — Shiromeda) |
+| `dsp@leapfrog.com` | DSP | Kidus Yohannes (DSP, Shop/Field — Megenagna) |
+| `dsa@leapfrog.com` | DSA | Meron Tadesse (DSA, Shop/Field — Megenagna) |
+| `shopacct@leapfrog.com` | SHOP_ACCOUNTANT | Bezawit Assefa (Shop Accountant, Shop/Field — Megenagna) |
+| `employee@leapfrog.com` | EMPLOYEE | Solome Abebe (Employee, Shop/Field — Megenagna) |
 | `auditor@leapfrog.com` | AUDITOR | Yonas Tadesse (Auditor) |
 
 ## Tests
 
 ```powershell
-npm test
+npm test              # Run all tests (baseline + Phase 2A)
+npm run test:phase1   # Run baseline tests only
+npm run test:phase2a  # Run Phase 2A tests only
 npm run typecheck
 npm run lint
 npm run build
 ```
 
-All pass clean — 42 baseline tests + 35 Phase 2A tests covering authentication, RBAC, employee ID, Head Office registration, Shop/Field registration, salary visibility, assignments, audit logging, organization data, document upload/visibility/deactivation, required document rules, and onboarding integration.
+All pass clean — 42 baseline tests + 35 Phase 2A tests covering authentication, RBAC, employee ID, Head Office registration, Shop/Field registration, salary visibility, assignments, audit logging, organization data, document upload via API, document visibility enforcement, document download, document deactivation, required document rules with applicability filtering, and onboarding completion with override reason validation.
 
 ## Key Design Decisions
 
@@ -121,9 +126,9 @@ All pass clean — 42 baseline tests + 35 Phase 2A tests covering authentication
 
 ## Known Limitations
 
-- File upload uses local filesystem (`uploads/employee-documents/`) — no cloud storage integration
+- File upload uses local filesystem (`uploads/employee-documents/`) — not production-ready cloud storage
 - No email notifications for document uploads or onboarding
-- No self-service employee document viewing/upload (employee can view EMPLOYEE_VISIBLE docs only)
-- Document download does not enforce per-document rate limiting
+- No employee self-upload (employees can view EMPLOYEE_VISIBLE docs only; upload requires document.upload permission)
 - No document expiration or auto-reminder for missing required documents
 - Onboarding completion does not automatically change employee status (requires manual status change)
+- No document versioning or multi-file per type constraint

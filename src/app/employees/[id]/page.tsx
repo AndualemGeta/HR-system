@@ -68,6 +68,26 @@ export default function EmployeeDetailPage() {
     .finally(() => setLoading(false))
   }, [params.id, router])
 
+  async function downloadDocument(docId: string) {
+    window.open(`/api/employees/${params.id}/documents/${docId}/download`, '_blank')
+  }
+
+  async function deactivateDocument(docId: string) {
+    const reason = prompt('Deactivation reason (required):')
+    if (reason === null || !reason.trim()) return
+    const res = await fetch(`/api/employees/${params.id}/documents/${docId}/deactivate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reason: reason.trim() }),
+    })
+    if (res.ok) {
+      window.location.reload()
+    } else {
+      const json = await res.json()
+      alert(json.error || 'Failed to deactivate document')
+    }
+  }
+
   async function completeOnboarding() {
     const reason = prompt('Override reason (leave blank if no override needed):')
     if (reason === null) return
@@ -274,7 +294,7 @@ export default function EmployeeDetailPage() {
           {documents.length === 0 ? <p style={{ color: '#888', fontSize: '0.9rem' }}>No documents uploaded.</p> : (
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead><tr style={{ background: '#f9fafb' }}>
-                <th style={th}>Type</th><th style={th}>File</th><th style={th}>Visibility</th><th style={th}>Uploaded</th><th style={th}>Status</th>
+                <th style={th}>Type</th><th style={th}>File</th><th style={th}>Visibility</th><th style={th}>Uploaded</th><th style={th}>Status</th><th style={th}>Actions</th>
               </tr></thead>
               <tbody>{documents.map(d => (
                 <tr key={d.id} style={{ borderBottom: '1px solid #e5e7eb' }}>
@@ -283,6 +303,18 @@ export default function EmployeeDetailPage() {
                   <td style={td}>{d.visibilityLevel}</td>
                   <td style={td}>{new Date(d.uploadedAt).toLocaleDateString()}</td>
                   <td style={td}>{d.isActive ? <span style={{ color: '#16a34a' }}>Active</span> : <span style={{ color: '#888' }}>Inactive</span>}</td>
+                  <td style={td}>
+                    {d.isActive && (
+                      <div style={{ display: 'flex', gap: '0.25rem' }}>
+                        {perms.includes('document.download') && (
+                          <button onClick={() => downloadDocument(d.id)} style={{ fontSize: '0.8rem', padding: '0.2rem 0.5rem', background: '#2563eb', color: '#fff', border: 'none', borderRadius: 3, cursor: 'pointer' }}>Download</button>
+                        )}
+                        {perms.includes('document.deactivate') && (
+                          <button onClick={() => deactivateDocument(d.id)} style={{ fontSize: '0.8rem', padding: '0.2rem 0.5rem', background: '#dc2626', color: '#fff', border: 'none', borderRadius: 3, cursor: 'pointer' }}>Deactivate</button>
+                        )}
+                      </div>
+                    )}
+                  </td>
                 </tr>
               ))}</tbody>
             </table>

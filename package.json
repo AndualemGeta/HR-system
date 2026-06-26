@@ -7,7 +7,9 @@
     "build": "prisma generate && next build",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
-    "test": "tsx src/test/phase1-tests.ts",
+    "test": "tsx src/test/phase1-tests.ts && tsx src/test/phase2a-tests.ts",
+    "test:phase1": "tsx src/test/phase1-tests.ts",
+    "test:phase2a": "tsx src/test/phase2a-tests.ts",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:seed": "tsx prisma/seed.ts"
