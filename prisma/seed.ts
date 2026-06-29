@@ -15,6 +15,8 @@ const ALL_PERMISSIONS = [
   'role.view', 'role.manage',
   'organization.view', 'organization.manage',
   'document.view', 'document.upload', 'document.download', 'document.deactivate', 'document.manageRules',
+  'employee.import', 'employee.importPreview', 'employee.importConfirm',
+  'employee.importHistory', 'employee.payrollReadiness.view', 'employee.payrollReadiness.export',
 ] as const
 
 const ROLE_PERMISSIONS: Record<string, string[]> = {
@@ -28,6 +30,8 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
     'organization.view',
     'audit.view',
     'document.view', 'document.upload', 'document.download', 'document.deactivate', 'document.manageRules',
+    'employee.import', 'employee.importPreview', 'employee.importConfirm',
+    'employee.importHistory', 'employee.payrollReadiness.view', 'employee.payrollReadiness.export',
   ],
   HR_OFFICER: [
     'employee.view', 'employee.create', 'employee.update',
@@ -35,15 +39,19 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
     'assignment.view', 'assignment.update',
     'onboarding.view', 'onboarding.update', 'onboarding.complete',
     'document.view', 'document.upload',
+    'employee.import', 'employee.importPreview', 'employee.importConfirm',
+    'employee.importHistory', 'employee.payrollReadiness.view', 'employee.payrollReadiness.export',
   ],
   FINANCE_DIRECTOR: [
     'employee.view', 'salary.view', 'salary.update',
     'reports.view', 'audit.view',
     'document.view', 'document.download',
+    'employee.payrollReadiness.view', 'employee.payrollReadiness.export',
   ],
   FINANCE_PAYROLL: [
     'employee.view', 'salary.view', 'reports.view',
     'document.view', 'document.download',
+    'employee.payrollReadiness.view', 'employee.payrollReadiness.export',
   ],
   TREASURY_MANAGER: [
     'employee.view', 'salary.view',
@@ -90,6 +98,9 @@ async function main() {
 
   // Clean existing data in dependency order
   await prisma.auditLog.deleteMany()
+  await prisma.importRow.deleteMany()
+  await prisma.importSession.deleteMany()
+  await prisma.employeePayrollProfile.deleteMany()
   await prisma.notification.deleteMany()
   await prisma.onboardingChecklistItem.deleteMany()
   await prisma.onboardingChecklist.deleteMany()
@@ -446,6 +457,22 @@ async function main() {
   }
 
   console.log(`  Created employees with assignments and status history`)
+
+  // Create payroll profiles for some employees (variety for payroll readiness testing)
+  const payrollProfiles = [
+    { employeeId: ceo.id, paymentMethod: 'BANK_TRANSFER', bankName: 'Commercial Bank of Ethiopia', bankAccountNumber: '1000123456789', taxId: 'TIN-001', pensionId: 'PEN-001', costCenter: 'CEO-01' },
+    { employeeId: hrManager.id, paymentMethod: 'BANK_TRANSFER', bankName: 'Dashen Bank', bankAccountNumber: '2000987654321', taxId: 'TIN-002', pensionId: 'PEN-002', costCenter: 'HR-01' },
+    { employeeId: accountant.id, paymentMethod: 'BANK_TRANSFER', bankName: 'Awash Bank', bankAccountNumber: '3000555666777', taxId: 'TIN-003', costCenter: 'FIN-01' },
+    { employeeId: shopManagerMegenagna.id, paymentMethod: 'MOBILE_MONEY', mpesaAccount: '+251911100009', costCenter: 'SALES-MEG' },
+    { employeeId: dspEmployee.id, paymentMethod: 'MOBILE_MONEY', mpesaAccount: '+251911100011' },
+    // DSA: no payroll profile (missing payment info)
+    // Shop accountant: has profile but missing tax ID
+    { employeeId: shopAccountant.id, paymentMethod: 'BANK_TRANSFER', bankName: 'CBE', bankAccountNumber: '4000111222333', costCenter: 'SALES-MEG' },
+  ]
+  for (const profile of payrollProfiles) {
+    await prisma.employeePayrollProfile.create({ data: { ...profile, updatedById: userMap['admin@leapfrog.com'] } })
+  }
+  console.log(`  Created ${payrollProfiles.length} payroll profiles`)
 
   // Create sample audit log
   await prisma.auditLog.create({

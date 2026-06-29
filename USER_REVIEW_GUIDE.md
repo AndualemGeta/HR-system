@@ -1,8 +1,8 @@
-# Leapfrog HRMS — Phase 2A User Review Guide
+# Leapfrog HRMS — Phase 2B User Review Guide
 
 ## Review Scope
 
-This review covers Phase 2A: Employee Documents, Required Document Rules, and Onboarding Completion. Baseline v1.0 (employee registration) is also verified for regression.
+This review covers Phase 2B: Employee Import from Excel/CSV, Payroll Readiness Validation, and Employee Payroll Profiles. Baseline v1.0 and Phase 2A are also verified for regression.
 
 ## Baseline Tests (Quick Check)
 
@@ -72,27 +72,10 @@ This review covers Phase 2A: Employee Documents, Required Document Rules, and On
 
 ## Extra: Employee Profile Tabs
 - Navigate to any employee profile
-- Verify tabs: Profile, Assignments, Status History, Onboarding
+- Verify tabs: Profile, Assignments, Status History, Documents, Onboarding
 - Profile tab shows organization info, manager, category badge
 - Assignments tab shows current/past assignments with active indicator
 - Status History tab shows status changes
-
-## Not Enabled in This Starter Build
-
-- Document upload/management
-- Leave requests and balances
-- Employee evaluations
-- Payroll preparation and calculation
-- Commission plans
-- Disciplinary records
-- Termination/exit workflows
-- Transfers/promotions
-- Approval routing
-- Employee/manager self-service
-- Email notifications
-- External integrations
-
-Do not claim these modules are ready.
 
 ---
 
@@ -159,23 +142,101 @@ Do not claim these modules are ready.
 - Verify onboarding completes despite missing documents
 - Check audit logs for ONBOARDING_OVERRIDE with the reason
 
-### 9. Verify Audit Logs
-- Login as Auditor (`auditor@leapfrog.com` / `Test123!`)
-- Navigate to `/audit-logs`
-- Verify you can see DOCUMENT_UPLOAD, DOCUMENT_DEACTIVATE, ONBOARDING_COMPLETE, DOCUMENT_RULE_CREATE entries
+---
 
-### 10. Regression Check
+## Phase 2B: Employee Import & Payroll Readiness
+
+### 9. Import Employees from CSV
+- Login as HR Admin (`hr.admin@leapfrog.com` / `Test123!`)
+- Navigate to Employees → "Import" button (or `/employees/import`)
+- Upload a CSV file with employee data (sample format below)
+- **Step 1:** Upload file — verify file name, size, and row count shown
+- **Step 2:** Map columns — verify auto-detected mappings, confirm or adjust
+- **Step 3:** Preview — verify row-by-row validation with VALID/WARNING/ERROR status
+  - Rows with errors (missing category, missing role, missing shop for Shop Manager) show red ERROR
+  - Rows with warnings (missing optional fields) show yellow WARNING
+  - Duplicate matches show as DUPLICATE
+- **Step 4:** Confirm — review summary, click "Confirm Import" to create employees
+- Verify imported employees appear in the employee list
+
+### 10. Import Sample CSV Format
+```csv
+fullName,gender,employeeCategory,role,employmentStatus,basicSalary,department,shop,region,area,phone,employmentType,level,hireDate
+Abebe Kebede,MALE,HEAD_OFFICE,HR_OFFICER,ACTIVE,45000,Human Resources,,,Addis Ababa,0911100001,FULL_TIME,SENIOR,2024-01-15
+Fikru Tesfaye,MALE,SHOP_FIELD,DSP,ACTIVE,12000,,Megenagna Shop,Addis Ababa,Megenagna,0911100002,FULL_TIME,JUNIOR,2024-03-01
+```
+
+### 11. Verify Import Validation Rules
+Upload a CSV with intentional errors:
+- Row missing employee category → ERROR "Employee category is required"
+- Row missing role → ERROR "Role is required"
+- Shop Manager without shop assignment → ERROR "Shop Manager requires a shop assignment"
+- Head Office without department → ERROR "Head Office employees require a department"
+- Missing basic salary → WARNING "Basic salary is missing"
+- Missing phone number → WARNING "Phone number is missing"
+- Missing hire date → WARNING "Hire date is missing"
+
+### 12. Verify Import Permission Restriction
+- Sign in as `employee@leapfrog.com` (no employee.import permission)
+- Navigate to `/employees/import`
+- Verify you see "Access Denied" and cannot proceed
+
+### 13. Import History
+- After importing, navigate to `/employees/import/history`
+- Verify the import session appears with file name, mode (CREATE_ONLY), row counts, status (COMPLETED)
+- Click a session to see row-level detail (individual row status, errors, matched employees)
+
+### 14. Payroll Readiness Dashboard
+- Login as HR Admin
+- Navigate to Payroll Readiness (`/employees/payroll-readiness`)
+- Verify summary cards show: total employees, ready count, warning count, not ready count
+- Verify the table shows each employee with readiness %, status badge (READY/WARNING/NOT_READY/INACTIVE), and blocker details
+- Test filters: filter by status (READY, WARNING, NOT_READY, INACTIVE)
+
+### 15. Payroll Readiness Checks
+- CEO (`admin@leapfrog.com`) should be READY (has salary, payment info, bank, tax, pension, assignment, manager)
+- Check an employee with no salary → should show NOT_READY
+- Check DSP (`dsp@leapfrog.com`) → may show WARNING (uses mobile money, may lack tax/pension)
+- Check DSA (`dsa@leapfrog.com`) → should show NOT_READY (no payroll profile seeded)
+
+### 16. Export Payroll Readiness
+- On the Payroll Readiness page, click "Export CSV"
+- Verify a CSV file downloads with all employees and their readiness status
+
+### 17. Employee Payroll Profile (Seed Data)
+- Navigate to HR Manager profile (Almaz Tesfaye) — has full payroll profile with bank details
+- Navigate to Shop Manager (Tesfaye Hailu) — uses mobile money (M-PESA)
+- Navigate to DSP (Kidus Yohannes) — uses mobile money, no tax/pension IDs
+
+### 18. Regression Check
 - Verify Head Office registration still works (Step 2 from baseline)
 - Verify Shop/Field registration still works (Step 3 from baseline)
 - Verify Shop Accountant dual reporting still works (Step 6 from baseline)
 - Verify Salary is still REDACTED for unauthorized users
 - Verify manager scope still restricts visibility
+- Verify document upload/download/deactivate still works (Phase 2A steps 1-4)
+- Verify required document rules still exist (Phase 2A step 5)
+- Verify onboarding completion still works (Phase 2A steps 6-8)
 
-## Known Limitations (Phase 2A)
+## Known Limitations
 
-- File upload uses local filesystem (`uploads/employee-documents/`)
-- No email notifications for document uploads or missing documents
-- Employee self-service for document viewing is limited
-- Onboarding completion does not auto-change employee status to ACTIVE
-- No document preview (download only)
-- No automatic reminders for missing documents
+- Import preview creates no records — only ImportSession + ImportRows for validation review
+- Import does not auto-assign employees to shops; assignment must be done separately after import
+- Payroll readiness is informational only — no enforcement or auto-correction
+- No email notifications for import results
+- Import does not support nested JSON (e.g., assignment within import)
+- No auto-reminders for missing payroll information
+
+---
+
+## Test Commands
+
+```powershell
+npm test              # Run all 137 tests (42 baseline + 41 Phase 2A + 54 Phase 2B)
+npm run test:phase1   # Run baseline tests only (42)
+npm run test:phase2a  # Run Phase 2A tests only (41)
+npm run test:phase2b  # Run Phase 2B tests only (54)
+npm run typecheck
+npm run lint
+npm run build
+```

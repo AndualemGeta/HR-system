@@ -27,6 +27,12 @@ export type PermissionKey =
   | 'document.download'
   | 'document.deactivate'
   | 'document.manageRules'
+  | 'employee.import'
+  | 'employee.importPreview'
+  | 'employee.importConfirm'
+  | 'employee.importHistory'
+  | 'employee.payrollReadiness.view'
+  | 'employee.payrollReadiness.export'
 
 export async function getUserPermissions(userId: string): Promise<PermissionKey[]> {
   const roles = await prisma.userRole.findMany({
@@ -95,6 +101,12 @@ const ALL_PERMISSIONS_MAP: Record<string, boolean> = {
   'document.download': true,
   'document.deactivate': true,
   'document.manageRules': true,
+  'employee.import': true,
+  'employee.importPreview': true,
+  'employee.importConfirm': true,
+  'employee.importHistory': true,
+  'employee.payrollReadiness.view': true,
+  'employee.payrollReadiness.export': true,
 }
 
 export const ALL_PERMISSIONS = Object.keys(ALL_PERMISSIONS_MAP)

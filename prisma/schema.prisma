@@ -309,6 +309,14 @@ enum AuditAction {
   ONBOARDING_UPDATE
   ONBOARDING_COMPLETE
   ONBOARDING_OVERRIDE
+  EMPLOYEE_IMPORT_PREVIEW
+  EMPLOYEE_IMPORT_CONFIRM
+  EMPLOYEE_IMPORT_CREATE
+  EMPLOYEE_IMPORT_UPDATE
+  EMPLOYEE_IMPORT_SKIP
+  PAYROLL_READINESS_VIEW
+  PAYROLL_READINESS_EXPORT
+  PAYROLL_PROFILE_UPDATE
   OTHER
 }
 
@@ -328,6 +336,7 @@ model User {
   roles                  UserRole[]
   auditLogs              AuditLog[]
   notifications          Notification[]
+  imports                ImportSession[]
 }
 
 model Role {
@@ -468,6 +477,7 @@ model Employee {
   evaluations                 EmployeeEvaluation[]   @relation("EvaluationEmployee")
   evaluationsGiven            EmployeeEvaluation[]   @relation("EvaluationEvaluator")
   profileChangeRequests       EmployeeProfileChangeRequest[]
+  payrollProfile              EmployeePayrollProfile?
   @@index([employmentStatus])
   @@index([currentRole])
   @@index([currentDepartmentId])
@@ -1196,4 +1206,80 @@ model ExportHistory {
   createdById String?
   metadata    Json?
   createdAt   DateTime @default(now())
+}
+
+model EmployeePayrollProfile {
+  id                 String   @id @default(uuid())
+  employeeId         String   @unique
+  paymentMethod      String?
+  bankName           String?
+  bankAccountNumber  String?
+  mpesaAccount       String?
+  taxId              String?
+  pensionId          String?
+  costCenter         String?
+  updatedById        String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+  employee           Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+}
+
+enum ImportStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum ImportMode {
+  CREATE_ONLY
+  UPDATE_ONLY
+  CREATE_OR_UPDATE
+}
+
+enum ImportRowStatus {
+  PENDING
+  VALID
+  WARNING
+  ERROR
+  DUPLICATE
+  SKIPPED
+}
+
+model ImportSession {
+  id             String       @id @default(uuid())
+  fileName       String
+  importMode     ImportMode
+  status         ImportStatus @default(PENDING)
+  totalRows      Int          @default(0)
+  validRows      Int          @default(0)
+  warningRows    Int          @default(0)
+  errorRows      Int          @default(0)
+  duplicateRows  Int          @default(0)
+  createdCount   Int          @default(0)
+  updatedCount   Int          @default(0)
+  skippedCount   Int          @default(0)
+  uploadedById   String?
+  completedAt    DateTime?
+  errorMessage   String?
+  metadata       Json?
+  createdAt      DateTime     @default(now())
+  rows           ImportRow[]
+  uploadedBy     User?        @relation(fields: [uploadedById], references: [id])
+}
+
+model ImportRow {
+  id              String          @id @default(uuid())
+  sessionId       String
+  rowNumber       Int
+  status          ImportRowStatus @default(PENDING)
+  errors          String          @default("[]")
+  warnings        String          @default("[]")
+  matchedEmployeeId String?
+  rawRow          Json
+  parsedData      Json?
+  createdAt       DateTime        @default(now())
+  session         ImportSession   @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  @@index([sessionId, status])
 }

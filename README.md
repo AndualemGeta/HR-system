@@ -1,26 +1,28 @@
-# Leapfrog HR Management System — Phase 2A
+# Leapfrog HR Management System — Phase 2B
 
-Secure, role-based HR employee registration and document management system for Leapfrog Software Technology Africa PLC.
+Secure, role-based HR employee registration and management system for Leapfrog Software Technology Africa PLC.
 
-**Phase 2A adds:**
-- Employee document upload
-- Document visibility levels (PUBLIC_TO_HR, MANAGER_VISIBLE, EMPLOYEE_VISIBLE, SENSITIVE_HR_ONLY, SALARY_RESTRICTED)
-- Required document rules (configurable per role, category, employment type)
-- Required document status evaluation
-- Onboarding completion with document and checklist validation
-- Document and onboarding audit logs
+**Phase 2B adds:**
+- Employee import from Excel/CSV with column mapping wizard
+- Validation with ERROR/WARNING/DUPLICATE blocking
+- Import history and audit trail
+- Employee payroll readiness dashboard with 8-check assessment
+- Payroll readiness CSV export
+- Employee payroll profiles (payment method, bank, tax ID, pension, cost center)
 
-**This build supports employee registration (Head Office and Shop/Field) plus document management.**
+**This build supports employee registration (Head Office and Shop/Field), document management, employee import, and payroll readiness validation.**
 
 ## Tech Stack
 
 - Next.js 15 App Router + TypeScript
 - Prisma ORM + PostgreSQL
 - Email/password auth with HTTP-only cookies
-- RBAC with 20 granular permission keys across 12 roles
+- RBAC with 32 granular permission keys across 12 roles
 - bcryptjs password hashing (12 rounds)
 - Zod request validation
 - Audit logging for all sensitive actions
+- CSV/XLSX parsing (PapaParse + ExcelJS)
+- File upload to local filesystem
 
 ## What's Implemented
 
@@ -37,7 +39,16 @@ Secure, role-based HR employee registration and document management system for L
 - **Status History:** Record employment status changes with audit trail
 - **Onboarding Checklists:** 11 standard items per employee; toggle completion
 - **Salary:** salary.view permission required for visibility; salary.update for write; REDACTED in API for unauthorized roles
-- **Audit Logs:** Browseable log; audits for employee create/update, status change, salary change, manager change, accounting manager change, login success/failure
+- **Employee Documents:** Upload, list, download, deactivate with visibility levels (PUBLIC_TO_HR, MANAGER_VISIBLE, EMPLOYEE_VISIBLE, SENSITIVE_HR_ONLY, SALARY_RESTRICTED)
+- **Required Document Rules:** Configurable per role, category, employment type with applicability filtering
+- **Onboarding Completion:** Validates required documents, checklist items, and employee data; HR Admin override with audit trail
+- **Employee Import:** Upload CSV/XLSX, auto-map 60+ column name variants, validate all rows, preview with ERROR/WARNING/DUPLICATE status, confirm creates/updates employees
+- **Import History:** Browseable list of all past import sessions with row-level detail
+- **Employee Import Page:** 4-step wizard (upload → map columns → preview validation → confirm import)
+- **Payroll Readiness Dashboard:** 8-check assessment per employee (salary, payment info, method, tax, pension, assignment, manager, category)
+- **Payroll Readiness Export:** CSV export of readiness status with blocker details
+- **Employee Payroll Profiles:** Payment method (bank/mobile money), bank name, account number, tax ID, pension ID, cost center
+- **Audit Logs:** Browseable log; audits for employee create/update, status change, salary change, manager change, accounting manager change, login success/failure, document operations, import operations, payroll readiness views
 - **Page Guards:** All pages check authentication and required permissions; redirect to login if unauthorized
 - **Navigation:** Permission-filtered navigation grouped by HR, Finance, Reports & Audit, Administration sections
 
@@ -45,10 +56,12 @@ Secure, role-based HR employee registration and document management system for L
 
 | Feature | Status |
 |---|---|
+| Payroll calculation & payslips | PLANNED |
+| Allowance rules & calculations | PLANNED |
+| Commission plans | PLANNED |
+| Ethiopian PAYE tax & pension rules | PLANNED |
 | Leave requests & balances | PLANNED |
 | Employee evaluations | PLANNED |
-| Payroll preparation & calculation | PLANNED |
-| Commission plans | PLANNED |
 | Disciplinary records | PLANNED |
 | Termination & exit workflows | PLANNED |
 | Transfers & promotions | PLANNED |
@@ -97,15 +110,16 @@ Open `http://localhost:3000`.
 ## Tests
 
 ```powershell
-npm test              # Run all tests (baseline + Phase 2A)
+npm test              # Run all tests (baseline + Phase 2A + Phase 2B)
 npm run test:phase1   # Run baseline tests only
 npm run test:phase2a  # Run Phase 2A tests only
+npm run test:phase2b  # Run Phase 2B tests only
 npm run typecheck
 npm run lint
 npm run build
 ```
 
-All pass clean — 42 baseline tests + 35 Phase 2A tests covering authentication, RBAC, employee ID, Head Office registration, Shop/Field registration, salary visibility, assignments, audit logging, organization data, document upload via API, document visibility enforcement, document download, document deactivation, required document rules with applicability filtering, and onboarding completion with override reason validation.
+All pass clean — 42 baseline tests + 41 Phase 2A tests + 54 Phase 2B tests covering authentication, RBAC, employee ID, Head Office registration, Shop/Field registration, salary visibility, assignments, audit logging, organization data, document upload/visibility/download/deactivation, required document rules, onboarding completion, import normalization, column mapping, import validation rules, import confirm/create, payroll readiness assessment, payroll readiness export, and regression.
 
 ## Key Design Decisions
 
@@ -123,12 +137,22 @@ All pass clean — 42 baseline tests + 35 Phase 2A tests covering authentication
 - Required document rules are configurable per role, category, and employment type
 - Onboarding completion validates required documents, checklist items, and employee data completeness
 - HR Admin override for onboarding allows bypassing blockers with audit trail
+- Import preview creates no records — only ImportSession + ImportRows for validation review
+- Import validation: ERROR rows block import, WARNING rows importable, DUPLICATE rows blocked by default
+- Import matching priority: employeeId → email → phone → name+role → name+phone
+- Import column mapping auto-detects 60+ friendly column name variants (e.g., "Employee Name" → fullName, "Basic Salary" → basicSalary)
+- Payroll readiness uses 8 independent checks to give granular status per employee
+- Payroll profiles are separate from employee records (EmployeePayrollProfile model) to isolate payroll-specific data
+- EmployeePayrollProfile required fields (payment method + account) enforced on SHOP_FIELD employees at onboarding
 
 ## Known Limitations
 
 - File upload uses local filesystem (`uploads/employee-documents/`) — not production-ready cloud storage
-- No email notifications for document uploads or onboarding
+- Import preview creates no records; confirmed employees go through the same validation as the API
+- No email notifications for document uploads, import results, or onboarding
 - No employee self-upload (employees can view EMPLOYEE_VISIBLE docs only; upload requires document.upload permission)
 - No document expiration or auto-reminder for missing required documents
 - Onboarding completion does not automatically change employee status (requires manual status change)
 - No document versioning or multi-file per type constraint
+- Payroll readiness does not enforce action (informational only)
+- Import does not auto-assign employees to shops during import (assignment must be done separately)
