@@ -47,23 +47,94 @@ export async function POST(req: NextRequest) {
           updatedCount++
           updatedEmployeeIds.push(row.matchedEmployeeId)
           await prisma.importRow.update({ where: { id: row.id }, data: { status: 'VALID' } })
+
+          await createAuditLog({
+            userId: session.userId,
+            action: 'EMPLOYEE_IMPORT_UPDATE',
+            entityType: 'Employee',
+            entityId: row.matchedEmployeeId,
+            newValue: { importSessionId, rowNumber: row.rowNumber, parsedData },
+          })
         } else if (!row.matchedEmployeeId && (importSession.importMode === 'CREATE_ONLY' || importSession.importMode === 'CREATE_OR_UPDATE')) {
           const empId = await createEmployeeFromImport(parsedData, session.userId)
           if (empId) {
             createdCount++
             createdEmployeeIds.push(empId)
             await prisma.importRow.update({ where: { id: row.id }, data: { status: 'VALID' } })
+
+            await createAuditLog({
+              userId: session.userId,
+              action: 'EMPLOYEE_IMPORT_CREATE',
+              entityType: 'Employee',
+              entityId: empId,
+              newValue: { importSessionId, rowNumber: row.rowNumber, parsedData },
+            })
+
+            if (parsedData.paymentMethod || parsedData.bankName || parsedData.bankAccountNumber || parsedData.mpesaAccount || parsedData.taxId || parsedData.pensionId || parsedData.costCenter) {
+              await createAuditLog({
+                userId: session.userId,
+                action: 'PAYROLL_PROFILE_UPDATE',
+                entityType: 'EmployeePayrollProfile',
+                entityId: empId,
+                newValue: {
+                  employeeId: empId,
+                  paymentMethod: parsedData.paymentMethod,
+                  bankName: parsedData.bankName,
+                  bankAccountNumber: parsedData.bankAccountNumber,
+                  mpesaAccount: parsedData.mpesaAccount,
+                  taxId: parsedData.taxId,
+                  pensionId: parsedData.pensionId,
+                  costCenter: parsedData.costCenter,
+                },
+              })
+            }
           } else {
             skippedCount++
-            await prisma.importRow.update({ where: { id: row.id }, data: { status: 'SKIPPED' } })
+            const errorMsg = 'Failed to create employee record'
+            await prisma.importRow.update({
+              where: { id: row.id },
+              data: { status: 'SKIPPED', errors: JSON.stringify([...JSON.parse(row.errors || '[]'), errorMsg]) },
+            })
+
+            await createAuditLog({
+              userId: session.userId,
+              action: 'EMPLOYEE_IMPORT_SKIP',
+              entityType: 'ImportRow',
+              entityId: row.id,
+              newValue: { importSessionId, rowNumber: row.rowNumber, reason: errorMsg },
+            })
           }
         } else {
           skippedCount++
-          await prisma.importRow.update({ where: { id: row.id }, data: { status: 'SKIPPED' } })
+          const reason = row.matchedEmployeeId ? 'No matching import mode for this row' : 'No match and not in create mode'
+          await prisma.importRow.update({
+            where: { id: row.id },
+            data: { status: 'SKIPPED', errors: JSON.stringify([...JSON.parse(row.errors || '[]'), reason]) },
+          })
+
+          await createAuditLog({
+            userId: session.userId,
+            action: 'EMPLOYEE_IMPORT_SKIP',
+            entityType: 'ImportRow',
+            entityId: row.id,
+            newValue: { importSessionId, rowNumber: row.rowNumber, reason },
+          })
         }
-      } catch {
+      } catch (err) {
         skippedCount++
-        await prisma.importRow.update({ where: { id: row.id }, data: { status: 'SKIPPED' } })
+        const errorMsg = err instanceof Error ? err.message : 'Unknown error during import'
+        await prisma.importRow.update({
+          where: { id: row.id },
+          data: { status: 'SKIPPED', errors: JSON.stringify([...JSON.parse(row.errors || '[]'), errorMsg]) },
+        })
+
+        await createAuditLog({
+          userId: session.userId,
+          action: 'EMPLOYEE_IMPORT_SKIP',
+          entityType: 'ImportRow',
+          entityId: row.id,
+          newValue: { importSessionId, rowNumber: row.rowNumber, reason: errorMsg },
+        })
       }
     }
 

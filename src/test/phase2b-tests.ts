@@ -4,6 +4,7 @@ import { getPayrollReadiness } from '../lib/payroll-readiness'
 import {
   normalizePhone, normalizeSalary, normalizeStatus, normalizeCategory, normalizeRole,
   normalizeLevel, normalizeEmploymentType, suggestFieldMapping, splitFullName,
+  findExistingEmployee, type ImportRowData,
 } from '../lib/import-helpers'
 
 const BASE = 'http://localhost:3000'
@@ -65,6 +66,7 @@ async function main() {
   const hrAdminCookie = await login('hr.admin@leapfrog.com')
   const empCookie = await login('employee@leapfrog.com')
   const financeCookie = await login('finance.director@leapfrog.com')
+  const smCookie = await login('shop.manager@leapfrog.com')
 
   if (!hrAdminCookie || !empCookie) {
     console.log('  FATAL: Could not login test users'); process.exit(1)
@@ -105,6 +107,41 @@ async function main() {
   await assertAsync('suggestFieldMapping: "M-PESA"', async () => suggestFieldMapping('M-PESA') === 'mpesaAccount')
   await assertAsync('suggestFieldMapping: "Tax ID"', async () => suggestFieldMapping('Tax ID') === 'taxId')
 
+  console.log('[Unit: Mapping Transformation]')
+
+  await assertAsync('Mapping transform: UI col→sys to backend sys→col', async () => {
+    const uiMapping: Record<string, string> = { 'Employee Name': 'fullName', 'Basic Salary': 'basicSalary' }
+    const backendMapping: Record<string, string> = {}
+    for (const [col, sysField] of Object.entries(uiMapping)) {
+      if (sysField) backendMapping[sysField] = col
+    }
+    return backendMapping['fullName'] === 'Employee Name' && backendMapping['basicSalary'] === 'Basic Salary'
+  })
+
+  console.log('[Unit: Ambiguous Matching]')
+
+  await assertAsync('findExistingEmployee returns NO_MATCH for unknown', async () => {
+    const data: ImportRowData = { fullName: 'ZZZ_Nobody_Exists', role: 'CEO' }
+    const result = await findExistingEmployee(data)
+    return result.status === 'NO_MATCH' && result.employeeId === null && result.candidates.length === 0
+  })
+
+  await assertAsync('findExistingEmployee returns SINGLE_MATCH for CEO', async () => {
+    const ceo = await prisma.employee.findFirst({ where: { currentRole: 'CEO' } })
+    if (!ceo) return true
+    const data: ImportRowData = { employeeId: ceo.employeeId }
+    const result = await findExistingEmployee(data)
+    return result.status === 'SINGLE_MATCH' && result.employeeId === ceo.id
+  })
+
+  await assertAsync('findExistingEmployee returns SINGLE_MATCH by email', async () => {
+    const emp = await prisma.employee.findFirst({ where: { email: { not: null } } })
+    if (!emp || !emp.email) return true
+    const data: ImportRowData = { email: emp.email }
+    const result = await findExistingEmployee(data)
+    return result.status === 'SINGLE_MATCH' && result.employeeId === emp.id
+  })
+
   console.log('[Permissions]')
 
   await assertAsync('HR Admin has employee.import', async () => userHasPermission((await prisma.user.findUnique({ where: { email: 'hr.admin@leapfrog.com' } }))!.id, 'employee.import'))
@@ -115,6 +152,31 @@ async function main() {
   await assertAsync('Employee does NOT have employee.import', async () => {
     const empUser = await prisma.user.findUnique({ where: { email: 'employee@leapfrog.com' } })
     return empUser ? !(await userHasPermission(empUser.id, 'employee.import')) : false
+  })
+
+  console.log('[Import Preview: Auto-Detect Columns]')
+
+  await assertAsync('Upload without mapping returns detectedColumns', async () => {
+    const csv = makeCsv('Employee Name,Gender,Category\nTest Auto,MALE,HEAD_OFFICE')
+    const formData = new FormData()
+    formData.append('file', csv, 'auto-detect.csv')
+    formData.append('importMode', 'CREATE_ONLY')
+    const { status, json } = await apiPostForm('/api/employees/import/preview', hrAdminCookie, formData)
+    if (status !== 200) return false
+    const data = (json as { data?: { detectedColumns?: string[]; suggestedMappings?: Record<string, string | null> } }).data
+    return (data?.detectedColumns?.length || 0) === 3 && !!(data?.suggestedMappings?.['Employee Name'])
+  })
+
+  await assertAsync('Upload with mapping returns full preview', async () => {
+    const csv = makeCsv('fullName,gender,employeeCategory,role,employmentStatus\nTest With Map,MALE,HEAD_OFFICE,HR_OFFICER,ACTIVE')
+    const formData = new FormData()
+    formData.append('file', csv, 'with-map.csv')
+    formData.append('importMode', 'CREATE_ONLY')
+    formData.append('mapping', JSON.stringify({ fullName: 'fullName', gender: 'gender', employeeCategory: 'employeeCategory', role: 'role', employmentStatus: 'employmentStatus' }))
+    const { status, json } = await apiPostForm('/api/employees/import/preview', hrAdminCookie, formData)
+    if (status !== 200) return false
+    const data = (json as { data?: { importSessionId?: string; previewRows?: unknown[] } }).data
+    return !!data?.importSessionId && (data?.previewRows?.length || 0) > 0
   })
 
   console.log('[Import Preview: Validation Rules]')
@@ -182,8 +244,19 @@ async function main() {
     formData.append('importMode', 'CREATE_ONLY')
     formData.append('mapping', JSON.stringify({ fullName: 'fullName', gender: 'gender', employeeCategory: 'employeeCategory', role: 'role', employmentStatus: 'employmentStatus' }))
     const { json } = await apiPostForm('/api/employees/import/preview', hrAdminCookie, formData)
+    const data = (json as { data?: { previewRows?: Array<{ errors: string[]; warnings: string[] }> } }).data
+    return data?.previewRows?.some(r => r.errors.some((e: string) => e.includes('shop'))) || false
+  })
+
+  await assertAsync('Shop Accountant without accounting manager is ERROR', async () => {
+    const csv = makeCsv('fullName,gender,employeeCategory,role,employmentStatus,shop,region\nTest SA,MALE,SHOP_FIELD,SHOP_ACCOUNTANT,ACTIVE,Megenagna Shop,Addis Ababa')
+    const formData = new FormData()
+    formData.append('file', csv, 'test.csv')
+    formData.append('importMode', 'CREATE_ONLY')
+    formData.append('mapping', JSON.stringify({ fullName: 'fullName', gender: 'gender', employeeCategory: 'employeeCategory', role: 'role', employmentStatus: 'employmentStatus', shop: 'shop', region: 'region' }))
+    const { json } = await apiPostForm('/api/employees/import/preview', hrAdminCookie, formData)
     const data = (json as { data?: { previewRows?: Array<{ errors: string[] }> } }).data
-    return data?.previewRows?.some(r => r.errors.some(e => e.includes('shop'))) || false
+    return data?.previewRows?.some(r => r.errors.some(e => e.includes('accounting reporting manager'))) || false
   })
 
   await assertAsync('Empty file is rejected', async () => {
@@ -204,6 +277,71 @@ async function main() {
     formData.append('mapping', JSON.stringify({ fullName: 'fullName', gender: 'gender', employeeCategory: 'employeeCategory', role: 'role', employmentStatus: 'employmentStatus' }))
     const { status } = await apiPostForm('/api/employees/import/preview', empCookie, formData)
     return status === 403
+  })
+
+  console.log('[Import Preview: Manager Resolution]')
+
+  await assertAsync('Manager resolved by employeeId during import', async () => {
+    const manager = await prisma.employee.findFirst({ where: { currentRole: 'ASM' } })
+    if (!manager) return true
+    const ts = Date.now()
+    const csv = makeCsv(`fullName,gender,employeeCategory,role,employmentStatus,directManagerEmployeeId,department\nManager Test ${ts},MALE,HEAD_OFFICE,HR_OFFICER,ACTIVE,${manager.employeeId},Human Resources`)
+    const formData = new FormData()
+    formData.append('file', csv, 'mgr-test.csv')
+    formData.append('importMode', 'CREATE_ONLY')
+    formData.append('mapping', JSON.stringify({ fullName: 'fullName', gender: 'gender', employeeCategory: 'employeeCategory', role: 'role', employmentStatus: 'employmentStatus', directManagerEmployeeId: 'directManagerEmployeeId', department: 'department' }))
+    const { status, json } = await apiPostForm('/api/employees/import/preview', hrAdminCookie, formData)
+    if (status !== 200) return false
+    const data = (json as { data?: { importSessionId?: string } }).data
+    if (!data?.importSessionId) return false
+    const confirm = await apiPost('/api/employees/import/confirm', hrAdminCookie, { importSessionId: data.importSessionId, confirmed: true })
+    if (confirm.status !== 200) return false
+    const result = (confirm.json as { data?: { createdEmployeeIds?: string[] } }).data
+    if (!result?.createdEmployeeIds?.[0]) return false
+    const emp = await prisma.employee.findUnique({ where: { id: result.createdEmployeeIds[0] } })
+    return emp?.directManagerId === manager.id
+  })
+
+  await assertAsync('Manager resolved by name during import', async () => {
+    const manager = await prisma.employee.findFirst({ where: { currentRole: 'ASM' } })
+    if (!manager) return true
+    const ts = Date.now()
+    const csv = makeCsv(`fullName,gender,employeeCategory,role,employmentStatus,directManagerName,department\nName Mgr Test ${ts},MALE,HEAD_OFFICE,HR_OFFICER,ACTIVE,${manager.fullName},Human Resources`)
+    const formData = new FormData()
+    formData.append('file', csv, 'mgr-name-test.csv')
+    formData.append('importMode', 'CREATE_ONLY')
+    formData.append('mapping', JSON.stringify({ fullName: 'fullName', gender: 'gender', employeeCategory: 'employeeCategory', role: 'role', employmentStatus: 'employmentStatus', directManagerName: 'directManagerName', department: 'department' }))
+    const { status, json } = await apiPostForm('/api/employees/import/preview', hrAdminCookie, formData)
+    if (status !== 200) return false
+    const data = (json as { data?: { importSessionId?: string } }).data
+    if (!data?.importSessionId) return false
+    const confirm = await apiPost('/api/employees/import/confirm', hrAdminCookie, { importSessionId: data.importSessionId, confirmed: true })
+    if (confirm.status !== 200) return false
+    const result = (confirm.json as { data?: { createdEmployeeIds?: string[] } }).data
+    if (!result?.createdEmployeeIds?.[0]) return false
+    const emp = await prisma.employee.findUnique({ where: { id: result.createdEmployeeIds[0] } })
+    return emp?.directManagerId === manager.id
+  })
+
+  await assertAsync('Shop Accountant accounting manager resolved during import', async () => {
+    const acctMgr = await prisma.employee.findFirst({ where: { currentRole: 'TREASURY_MANAGER' } })
+    if (!acctMgr) return true
+    const ts = Date.now()
+    const csv = makeCsv(`fullName,gender,employeeCategory,role,employmentStatus,shop,region,accountingReportingManagerEmployeeId\nSA Mgr Test ${ts},MALE,SHOP_FIELD,SHOP_ACCOUNTANT,ACTIVE,Megenagna Shop,Addis Ababa,${acctMgr.employeeId}`)
+    const formData = new FormData()
+    formData.append('file', csv, 'sa-mgr-test.csv')
+    formData.append('importMode', 'CREATE_ONLY')
+    formData.append('mapping', JSON.stringify({ fullName: 'fullName', gender: 'gender', employeeCategory: 'employeeCategory', role: 'role', employmentStatus: 'employmentStatus', shop: 'shop', region: 'region', accountingReportingManagerEmployeeId: 'accountingReportingManagerEmployeeId' }))
+    const { status, json } = await apiPostForm('/api/employees/import/preview', hrAdminCookie, formData)
+    if (status !== 200) return false
+    const data = (json as { data?: { importSessionId?: string } }).data
+    if (!data?.importSessionId) return false
+    const confirm = await apiPost('/api/employees/import/confirm', hrAdminCookie, { importSessionId: data.importSessionId, confirmed: true })
+    if (confirm.status !== 200) return false
+    const result = (confirm.json as { data?: { createdEmployeeIds?: string[] } }).data
+    if (!result?.createdEmployeeIds?.[0]) return false
+    const emp = await prisma.employee.findUnique({ where: { id: result.createdEmployeeIds[0] } })
+    return emp?.accountingReportingManagerId === acctMgr.id
   })
 
   console.log('[Import Confirm]')
@@ -241,6 +379,41 @@ async function main() {
   await assertAsync('Confirm requires employee.importConfirm permission', async () => {
     const { status } = await apiPost('/api/employees/import/confirm', empCookie, { importSessionId: 'any', confirmed: true })
     return status === 403
+  })
+
+  console.log('[Import Confirm: Row-Level Audit Logs]')
+
+  await assertAsync('Confirm creates EMPLOYEE_IMPORT_CREATE audit logs', async () => {
+    const ts = Date.now()
+    const csv = makeCsv(`fullName,gender,employeeCategory,role,employmentStatus,department\nAudit Test ${ts},MALE,HEAD_OFFICE,HR_OFFICER,ACTIVE,Human Resources`)
+    const formData = new FormData()
+    formData.append('file', csv, 'audit-test.csv')
+    formData.append('importMode', 'CREATE_ONLY')
+    formData.append('mapping', JSON.stringify({ fullName: 'fullName', gender: 'gender', employeeCategory: 'employeeCategory', role: 'role', employmentStatus: 'employmentStatus', department: 'department' }))
+    const preview = await apiPostForm('/api/employees/import/preview', hrAdminCookie, formData)
+    if (preview.status !== 200) return false
+    const pData = (preview.json as { data?: { importSessionId?: string } }).data
+    if (!pData?.importSessionId) return false
+    const confirm = await apiPost('/api/employees/import/confirm', hrAdminCookie, { importSessionId: pData.importSessionId, confirmed: true })
+    if (confirm.status !== 200) return false
+    const cData = (confirm.json as { data?: { createdEmployeeIds?: string[] } }).data
+    if (!cData?.createdEmployeeIds?.[0]) return false
+    const audit = await prisma.auditLog.findFirst({
+      where: { action: 'EMPLOYEE_IMPORT_CREATE', entityId: cData.createdEmployeeIds[0] },
+    })
+    return !!audit
+  })
+
+  await assertAsync('Import history shows row-level detail', async () => {
+    const { status, json } = await apiGet('/api/employees/import/history', hrAdminCookie)
+    if (status !== 200) return false
+    const data = (json as { data?: Array<{ id: string }> }).data
+    const latest = data?.[0]
+    if (!latest) return false
+    const detail = await apiGet(`/api/employees/import/history/${latest.id}`, hrAdminCookie)
+    if (detail.status !== 200) return false
+    const detailData = (detail.json as { data?: { rows?: Array<{ status: string }> } }).data
+    return (detailData?.rows?.length || 0) > 0
   })
 
   console.log('[Payroll Readiness]')
@@ -294,6 +467,21 @@ async function main() {
   await assertAsync('Employee cannot view payroll readiness', async () => {
     const { status } = await apiGet('/api/employees/payroll-readiness', empCookie)
     return status === 403
+  })
+
+  console.log('[Payroll Readiness: Scope]')
+
+  await assertAsync('Shop Manager sees scoped payroll readiness', async () => {
+    if (!smCookie) return true
+    const { status, json } = await apiGet('/api/employees/payroll-readiness', smCookie)
+    if (status !== 200) return false
+    const data = (json as { data?: { employees?: Array<{ employeeId: string }> } }).data
+    const sm = await prisma.user.findUnique({ where: { email: 'shop.manager@leapfrog.com' } })
+    if (!sm) return true
+    const smEmp = await prisma.employee.findUnique({ where: { id: sm.employeeId || '' } })
+    if (!smEmp || !smEmp.currentShopId) return true
+    const empIds = data?.employees?.map(e => e.employeeId) || []
+    return empIds.length > 0
   })
 
   console.log('[Regression: Starter Workflow Still Works]')

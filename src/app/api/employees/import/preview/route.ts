@@ -24,7 +24,6 @@ export async function POST(req: NextRequest) {
     const importMode = (formData.get('importMode') as string) || 'CREATE_OR_UPDATE'
 
     if (!file) return badRequest('File is required')
-    if (!mappingStr) return badRequest('Column mapping is required')
 
     const fileName = file.name || 'upload.csv'
     if (importMode !== 'CREATE_ONLY' && importMode !== 'UPDATE_ONLY' && importMode !== 'CREATE_OR_UPDATE') {
@@ -39,13 +38,6 @@ export async function POST(req: NextRequest) {
 
     if (file.size > 10 * 1024 * 1024) {
       return badRequest('File too large. Maximum size is 10 MB')
-    }
-
-    let mapping: Record<string, string>
-    try {
-      mapping = JSON.parse(mappingStr)
-    } catch {
-      return badRequest('Invalid column mapping JSON')
     }
 
     let rawRows: Record<string, unknown>[] = []
@@ -91,9 +83,29 @@ export async function POST(req: NextRequest) {
       return badRequest('No data rows found in file')
     }
 
+    const detectedColumns = Object.keys(rawRows[0] || {})
+    const suggestedMappings = Object.fromEntries(
+      detectedColumns.map(col => [col, suggestFieldMapping(col)])
+    )
+
+    if (!mappingStr) {
+      return success({
+        detectedColumns,
+        suggestedMappings,
+        totalRows: rawRows.length,
+      })
+    }
+
+    let mapping: Record<string, string>
+    try {
+      mapping = JSON.parse(mappingStr)
+    } catch {
+      return badRequest('Invalid column mapping JSON')
+    }
+
     const reverseMapping: Record<string, string> = {}
     for (const [sysField, csvCol] of Object.entries(mapping)) {
-      reverseMapping[csvCol] = sysField
+      if (csvCol) reverseMapping[csvCol] = sysField
     }
 
     const allEmployeeIds = new Set((await prisma.employee.findMany({ select: { employeeId: true } })).map(e => e.employeeId))
@@ -107,6 +119,7 @@ export async function POST(req: NextRequest) {
       errors: string[]
       warnings: string[]
       matchedEmployeeId: string | null
+      matchStatus: string
       data: ImportRowData
     }> = []
 
@@ -114,16 +127,20 @@ export async function POST(req: NextRequest) {
 
     for (let i = 0; i < rawRows.length; i++) {
       const rawRow = rawRows[i]
-      const parsed = parseRow(rawRow, mapping)
+      const parsed = parseRow(rawRow, reverseMapping)
 
-      const matchedId = await findExistingEmployee(parsed)
+      const matchResult = await findExistingEmployee(parsed)
       const result = await validateRow(parsed, i + 1, allEmployeeIds, allEmails, allPhones, importMode)
-      result.matchedEmployeeId = matchedId
+      result.matchedEmployeeId = matchResult.employeeId
+      result.matchStatus = matchResult.status
 
-      if (matchedId) {
+      if (matchResult.status === 'AMBIGUOUS_MATCH') {
+        result.status = 'ERROR'
+        result.errors.push(`Multiple employees match this row: ${matchResult.candidates.join(', ')}`)
+      } else if (matchResult.employeeId) {
         if (importMode === 'CREATE_ONLY') {
           result.status = 'DUPLICATE'
-          result.errors.push(`Employee already exists (matched: ${matchedId})`)
+          result.errors.push(`Employee already exists (matched: ${matchResult.employeeId})`)
         }
       } else if (importMode === 'UPDATE_ONLY') {
         result.status = 'ERROR'
@@ -142,11 +159,12 @@ export async function POST(req: NextRequest) {
         errors: result.errors,
         warnings: result.warnings,
         matchedEmployeeId: result.matchedEmployeeId,
+        matchStatus: matchResult.status,
         data: parsed,
       })
     }
 
-    const session2 = await prisma.importSession.create({
+    const importSession = await prisma.importSession.create({
       data: {
         fileName: file.name,
         importMode: importMode as never,
@@ -157,14 +175,14 @@ export async function POST(req: NextRequest) {
         errorRows: errorCount,
         duplicateRows: duplicateCount,
         uploadedById: session.userId,
-        metadata: { mapping, detectedColumns: Object.keys(rawRows[0] || {}) },
+        metadata: { mapping: reverseMapping, detectedColumns },
       },
     })
 
     for (const vr of validationResults) {
       await prisma.importRow.create({
         data: {
-          sessionId: session2.id,
+          sessionId: importSession.id,
           rowNumber: vr.rowNumber,
           status: vr.status as never,
           errors: JSON.stringify(vr.errors),
@@ -180,7 +198,7 @@ export async function POST(req: NextRequest) {
       userId: session.userId,
       action: 'EMPLOYEE_IMPORT_PREVIEW',
       entityType: 'ImportSession',
-      entityId: session2.id,
+      entityId: importSession.id,
       newValue: {
         fileName: file.name,
         importMode,
@@ -193,17 +211,15 @@ export async function POST(req: NextRequest) {
     })
 
     return success({
-      importSessionId: session2.id,
+      importSessionId: importSession.id,
       totalRows: rawRows.length,
       validRows: validCount,
       warningRows: warningCount,
       errorRows: errorCount,
       duplicateRows: duplicateCount,
       previewRows: validationResults.slice(0, 50),
-      detectedColumns: Object.keys(rawRows[0] || {}),
-      suggestedMappings: Object.fromEntries(
-        Object.keys(rawRows[0] || {}).map(col => [col, suggestFieldMapping(col)])
-      ),
+      detectedColumns,
+      suggestedMappings,
     })
   } catch (err) {
     console.error(err)

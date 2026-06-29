@@ -132,6 +132,7 @@ export async function getPayrollReadinessList(filters: {
   role?: string
   employmentStatus?: string
   readinessStatus?: string
+  scopeWhere?: Record<string, unknown>
 }): Promise<PayrollReadinessResult[]> {
   const where: Record<string, unknown> = {}
   if (filters.departmentId) where.currentDepartmentId = filters.departmentId
@@ -140,6 +141,10 @@ export async function getPayrollReadinessList(filters: {
   if (filters.shopId) where.currentShopId = filters.shopId
   if (filters.role) where.currentRole = filters.role
   if (filters.employmentStatus) where.employmentStatus = filters.employmentStatus
+
+  if (filters.scopeWhere && Object.keys(filters.scopeWhere).length > 0) {
+    where.AND = [where.AND, filters.scopeWhere].filter(Boolean)
+  }
 
   const employees = await prisma.employee.findMany({ where, select: { id: true } })
   const results: PayrollReadinessResult[] = []

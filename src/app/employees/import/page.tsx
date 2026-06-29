@@ -116,7 +116,11 @@ export default function EmployeeImportPage() {
       const formData = new FormData()
       if (file) formData.append('file', file)
       formData.append('importMode', importMode)
-      formData.append('mapping', JSON.stringify(mapping))
+      const backendMapping: Record<string, string> = {}
+      for (const [col, sysField] of Object.entries(mapping)) {
+        if (sysField) backendMapping[sysField] = col
+      }
+      formData.append('mapping', JSON.stringify(backendMapping))
       const res = await fetch('/api/employees/import/preview', { method: 'POST', body: formData })
       const json = await res.json()
       if (!res.ok) { setError(json.error || 'Preview failed'); setLoading(false); return }

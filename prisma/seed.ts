@@ -72,6 +72,7 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
   SHOP_MANAGER: [
     'employee.view',
     'document.view',
+    'employee.payrollReadiness.view',
   ],
   EMPLOYEE: [],
   AUDITOR: [

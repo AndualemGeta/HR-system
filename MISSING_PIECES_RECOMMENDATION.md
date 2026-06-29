@@ -124,6 +124,15 @@ These models exist in the Prisma schema but have no implementation:
 
 ## Recommendation
 
-**READY FOR PHASE 2B USER REVIEW** — The employee import, payroll readiness validation, and employee payroll profiles are complete, tested, and verified. All 137 tests pass. All quality gates pass. Reviewers should follow `USER_REVIEW_GUIDE.md` for test scenarios.
+**READY FOR PHASE 2B USER REVIEW** — The employee import (with auto-detect columns, column mapping transformation, manager resolution, ambiguous matching, row-level error recording, row-level audit logs), payroll readiness validation (with scope enforcement), and employee payroll profiles are complete, tested, and verified. All 150 tests pass. All quality gates pass. Reviewers should follow `USER_REVIEW_GUIDE.md` for test scenarios.
 
-**Next Phase Recommendation:** Phase 2C — Payroll calculation, allowance rules, Ethiopian tax/pension, leave management.
+### Phase 2B Stabilization Changes
+- Auto-detect columns: preview endpoint returns `detectedColumns` + `suggestedMappings` when mapping is omitted
+- Mapping direction: UI transforms `col→sysField` to `sysField→col` before submitting preview
+- Manager resolution: `resolveManagerIds()` resolves `directManagerEmployeeId`/`directManagerName` → `directManagerId` and `accountingReportingManagerEmployeeId`/`accountingReportingManagerName` → `accountingReportingManagerId` on both Employee and EmployeeAssignment
+- Shop Accountant accounting manager: rows without resolvable accounting manager get ERROR during validation
+- Ambiguous matching: `findExistingEmployee()` returns `NO_MATCH`/`SINGLE_MATCH`/`AMBIGUOUS_MATCH` status; ambiguous rows are marked ERROR
+- Skipped row error recording: failed confirm rows store error message on ImportRow.errors; visible in import history detail
+- Row-level audit logs: `EMPLOYEE_IMPORT_CREATE`, `EMPLOYEE_IMPORT_UPDATE`, `EMPLOYEE_IMPORT_SKIP`, `PAYROLL_PROFILE_UPDATE` for each row
+- Payroll-readiness scope: `buildEmployeeScopeWhere()` applied before listing; SHOP_MANAGER granted `employee.payrollReadiness.view`
+- 67 Phase 2B tests (up from 54), 150 total (42 baseline + 41 Phase 2A + 67 Phase 2B)

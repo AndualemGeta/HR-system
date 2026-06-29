@@ -306,6 +306,7 @@ export interface ValidationResult {
   errors: string[]
   warnings: string[]
   matchedEmployeeId: string | null
+  matchStatus?: string
 }
 
 export function parseRow(rawRow: Record<string, unknown>, mapping: Record<string, string>): ImportRowData {
@@ -386,29 +387,71 @@ export async function resolveOrganizationRefs(data: ImportRowData): Promise<{ de
   return refs
 }
 
-export async function findExistingEmployee(data: ImportRowData): Promise<string | null> {
+export async function resolveManagerIds(data: ImportRowData): Promise<{ directManagerId?: string; accountingReportingManagerId?: string }> {
+  const result: { directManagerId?: string; accountingReportingManagerId?: string } = {}
+
+  if (data.directManagerEmployeeId) {
+    const emp = await prisma.employee.findFirst({ where: { employeeId: data.directManagerEmployeeId } })
+    if (emp) result.directManagerId = emp.id
+  }
+  if (!result.directManagerId && data.directManagerName) {
+    const emp = await prisma.employee.findFirst({
+      where: { fullName: { contains: data.directManagerName, mode: 'insensitive' } },
+    })
+    if (emp) result.directManagerId = emp.id
+  }
+
+  if (data.accountingReportingManagerEmployeeId) {
+    const emp = await prisma.employee.findFirst({ where: { employeeId: data.accountingReportingManagerEmployeeId } })
+    if (emp) result.accountingReportingManagerId = emp.id
+  }
+  if (!result.accountingReportingManagerId && data.accountingReportingManagerName) {
+    const emp = await prisma.employee.findFirst({
+      where: { fullName: { contains: data.accountingReportingManagerName, mode: 'insensitive' } },
+    })
+    if (emp) result.accountingReportingManagerId = emp.id
+  }
+
+  return result
+}
+
+export interface EmployeeMatchResult {
+  status: 'NO_MATCH' | 'SINGLE_MATCH' | 'AMBIGUOUS_MATCH'
+  employeeId: string | null
+  candidates: string[]
+}
+
+export async function findExistingEmployee(data: ImportRowData): Promise<EmployeeMatchResult> {
+  const found = new Map<string, string>() // key → employeeId
+
   if (data.employeeId) {
     const emp = await prisma.employee.findFirst({ where: { employeeId: data.employeeId } })
-    if (emp) return emp.id
+    if (emp) found.set('employeeId:' + emp.employeeId, emp.id)
   }
   if (data.email) {
     const emp = await prisma.employee.findFirst({ where: { email: data.email } })
-    if (emp) return emp.id
+    if (emp) found.set('email:' + data.email, emp.id)
   }
   if (data.phoneNumber) {
     const emp = await prisma.employee.findFirst({ where: { phoneNumber: data.phoneNumber } })
-    if (emp) return emp.id
+    if (emp) found.set('phone:' + data.phoneNumber, emp.id)
   }
   if (data.fullName && data.role) {
-    const emp = await prisma.employee.findFirst({
+    const emps = await prisma.employee.findMany({
       where: {
         fullName: { contains: data.fullName, mode: 'insensitive' },
         currentRole: data.role,
       },
     })
-    if (emp) return emp.id
+    for (const emp of emps) {
+      found.set('name+role:' + emp.id, emp.id)
+    }
   }
-  return null
+
+  const uniqueIds = [...new Set(found.values())]
+  if (uniqueIds.length === 0) return { status: 'NO_MATCH', employeeId: null, candidates: [] }
+  if (uniqueIds.length === 1) return { status: 'SINGLE_MATCH', employeeId: uniqueIds[0], candidates: uniqueIds }
+  return { status: 'AMBIGUOUS_MATCH', employeeId: null, candidates: uniqueIds }
 }
 
 export async function validateRow(data: ImportRowData, rowIndex: number, existingIds: Set<string>, existingEmails: Set<string>, existingPhones: Set<string>, importMode: string): Promise<ValidationResult> {
@@ -491,6 +534,7 @@ export async function createEmployeeFromImport(data: ImportRowData, userId: stri
   const employeeId = data.employeeId || await getNextEmployeeId()
 
   const refs = await resolveOrganizationRefs(data)
+  const managers = await resolveManagerIds(data)
 
   const employee = await prisma.employee.create({
     data: {
@@ -515,6 +559,8 @@ export async function createEmployeeFromImport(data: ImportRowData, userId: stri
       currentClusterId: refs.clusterId || null,
       currentRole: data.role || 'EMPLOYEE',
       currentLevel: data.level || 'TO_BE_DEFINED',
+      directManagerId: managers.directManagerId || null,
+      accountingReportingManagerId: managers.accountingReportingManagerId || null,
       basicSalary: data.basicSalary || null,
       salaryEffectiveDate: data.salaryEffectiveDate || null,
       address: data.address || null,
@@ -535,6 +581,8 @@ export async function createEmployeeFromImport(data: ImportRowData, userId: stri
       clusterId: refs.clusterId || null,
       role: data.role || 'EMPLOYEE',
       level: data.level || 'TO_BE_DEFINED',
+      directManagerId: managers.directManagerId || null,
+      accountingReportingManagerId: managers.accountingReportingManagerId || null,
       startDate: data.hireDate || new Date(),
       reason: 'Imported via employee import',
     },
@@ -573,6 +621,7 @@ export async function createEmployeeFromImport(data: ImportRowData, userId: stri
 
 export async function updateEmployeeFromImport(data: ImportRowData, employeeId: string, userId: string): Promise<boolean> {
   const refs = await resolveOrganizationRefs(data)
+  const managers = await resolveManagerIds(data)
 
   const updateData: Record<string, unknown> = {}
   if (data.firstName) updateData.firstName = data.firstName
@@ -595,6 +644,8 @@ export async function updateEmployeeFromImport(data: ImportRowData, employeeId: 
   if (refs.areaId) updateData.currentAreaId = refs.areaId
   if (refs.shopId) updateData.currentShopId = refs.shopId
   if (refs.clusterId) updateData.currentClusterId = refs.clusterId
+  if (managers.directManagerId) updateData.directManagerId = managers.directManagerId
+  if (managers.accountingReportingManagerId) updateData.accountingReportingManagerId = managers.accountingReportingManagerId
   if (data.role) updateData.currentRole = data.role
   if (data.level) updateData.currentLevel = data.level
   if (data.basicSalary !== null && data.basicSalary !== undefined) updateData.basicSalary = data.basicSalary
