@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/session'
-import { userHasPermission } from '@/lib/rbac'
+import { userHasPermission, buildEmployeeScopeWhere } from '@/lib/rbac'
 import { unauthorized, forbidden, internalError } from '@/lib/api'
 import { createAuditLog } from '@/lib/audit'
 import { getPayrollReadinessList } from '@/lib/payroll-readiness'
@@ -21,8 +21,11 @@ export async function GET(req: NextRequest) {
     const employmentStatus = searchParams.get('employmentStatus') || undefined
     const readinessStatus = searchParams.get('readinessStatus') || undefined
 
+    const scopeWhere = await buildEmployeeScopeWhere(session.userId)
+
     const results = await getPayrollReadinessList({
       departmentId, regionId, areaId, shopId, role, employmentStatus, readinessStatus,
+      scopeWhere,
     })
 
     const csvData = results.map(r => ({

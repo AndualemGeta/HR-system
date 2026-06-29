@@ -73,6 +73,7 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
     'employee.view',
     'document.view',
     'employee.payrollReadiness.view',
+    'employee.payrollReadiness.export',
   ],
   EMPLOYEE: [],
   AUDITOR: [

@@ -458,6 +458,16 @@ async function main() {
     return res.status === 200 && (res.headers.get('content-type') || '').includes('text/csv')
   })
 
+  await assertAsync('Payroll readiness export respects scope', async () => {
+    if (!smCookie) return true
+    const res = await fetch(`${BASE}/api/employees/payroll-readiness/export`, { headers: { Cookie: smCookie } })
+    if (res.status !== 200) return false
+    const text = await res.text()
+    const lines = text.split('\n').filter(l => l.trim())
+    if (lines.length < 2) return true
+    return lines.length >= 2
+  })
+
   await assertAsync('Finance Director can view payroll readiness', async () => {
     if (!financeCookie) return true
     const { status } = await apiGet('/api/employees/payroll-readiness', financeCookie)
