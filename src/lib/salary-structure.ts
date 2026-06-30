@@ -13,6 +13,80 @@ interface TierConfig {
   amount?: number
 }
 
+export interface ValidationError {
+  field: string
+  message: string
+}
+
+export function validateRuleFields(body: Record<string, unknown>, isUpdate = false): ValidationError[] {
+  const errors: ValidationError[] = []
+
+  const method = (body.calculationMethod as string) || (body.ruleType as string)
+  const thresholdValue = body.thresholdValue
+  const percentageRate = body.percentageRate
+  const baseAmount = body.baseAmount
+  const maxAmount = body.maxAmount
+  const minAmount = body.minAmount
+  const tierConfigJson = body.tierConfigJson
+
+  if (!isUpdate) {
+    if (method === 'FIXED_AMOUNT' && !baseAmount) {
+      errors.push({ field: 'baseAmount', message: 'baseAmount is required for FIXED_AMOUNT method' })
+    }
+    if (method === 'PERCENTAGE' && (!percentageRate || Number(percentageRate) <= 0)) {
+      errors.push({ field: 'percentageRate', message: 'percentageRate (>0) is required for PERCENTAGE method' })
+    }
+    if (method === 'THRESHOLD' && thresholdValue === undefined) {
+      errors.push({ field: 'thresholdValue', message: 'thresholdValue is required for THRESHOLD method' })
+    }
+    if (method === 'TIERED' && !tierConfigJson) {
+      errors.push({ field: 'tierConfigJson', message: 'tierConfigJson is required for TIERED method' })
+    }
+  }
+
+  if (thresholdValue !== undefined && Number(thresholdValue) < 0) {
+    errors.push({ field: 'thresholdValue', message: 'thresholdValue cannot be negative' })
+  }
+  if (percentageRate !== undefined && (Number(percentageRate) < 0 || Number(percentageRate) > 100)) {
+    errors.push({ field: 'percentageRate', message: 'percentageRate must be between 0 and 100' })
+  }
+  if (baseAmount !== undefined && Number(baseAmount) < 0) {
+    errors.push({ field: 'baseAmount', message: 'baseAmount cannot be negative' })
+  }
+  if (maxAmount !== undefined && Number(maxAmount) < 0) {
+    errors.push({ field: 'maxAmount', message: 'maxAmount cannot be negative' })
+  }
+  if (minAmount !== undefined && Number(minAmount) < 0) {
+    errors.push({ field: 'minAmount', message: 'minAmount cannot be negative' })
+  }
+
+  if (tierConfigJson) {
+    try {
+      const tiers = JSON.parse(tierConfigJson as string) as TierConfig[]
+      if (!Array.isArray(tiers) || tiers.length === 0) {
+        errors.push({ field: 'tierConfigJson', message: 'Tier config must be a non-empty array' })
+      } else {
+        for (let i = 0; i < tiers.length; i++) {
+          const t = tiers[i]
+          if (t.min < 0) errors.push({ field: 'tierConfigJson', message: `Tier ${i}: min value cannot be negative` })
+          if (t.amount !== undefined && t.amount < 0) errors.push({ field: 'tierConfigJson', message: `Tier ${i}: amount cannot be negative` })
+        }
+        const mins = tiers.map(t => t.min)
+        for (let i = 1; i < mins.length; i++) {
+          if (mins[i] >= mins[i - 1]) {
+            errors.push({ field: 'tierConfigJson', message: 'Tier min values must be in descending order (highest first)' })
+            break
+          }
+        }
+      }
+    } catch {
+      errors.push({ field: 'tierConfigJson', message: 'Invalid tier config JSON' })
+    }
+  }
+
+  return errors
+}
+
 function parseTiers(tierConfigJson: string | null): TierConfig[] {
   if (!tierConfigJson) return []
   try {
@@ -214,12 +288,19 @@ export async function validateRuleForActivation(ruleId: string): Promise<{ valid
       role: rule.role,
       employeeCategory: rule.employeeCategory,
       departmentId: rule.departmentId,
+      regionId: rule.regionId,
+      areaId: rule.areaId,
+      shopId: rule.shopId,
+      employmentType: rule.employmentType,
       status: 'ACTIVE',
-      effectiveFrom: rule.effectiveFrom,
+      effectiveFrom: { lte: rule.effectiveTo || new Date('9999-12-31') },
+      AND: [
+        { OR: [{ effectiveTo: null }, { effectiveTo: { gte: rule.effectiveFrom } }] },
+      ],
     },
   })
   if (existingActive) {
-    errors.push('An active rule already exists for the same component, scope, and effective date')
+    errors.push('An active rule already exists for the same component, scope, and overlapping effective date range')
   }
 
   return { valid: errors.length === 0, errors }

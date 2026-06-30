@@ -2,8 +2,9 @@ import { NextRequest } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getSession } from '@/lib/session'
 import { userHasPermission } from '@/lib/rbac'
-import { success, unauthorized, forbidden, notFound, internalError } from '@/lib/api'
+import { success, unauthorized, forbidden, notFound, internalError, badRequest } from '@/lib/api'
 import { createAuditLog } from '@/lib/audit'
+import { validateRuleFields } from '@/lib/salary-structure'
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -35,6 +36,11 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
     if (body.status === 'ACTIVE') {
       return new Response(JSON.stringify({ error: 'Cannot set ACTIVE via PATCH; use the activate endpoint' }), { status: 400, headers: { 'Content-Type': 'application/json' } })
+    }
+
+    if (body.calculationMethod || body.ruleType || body.baseAmount !== undefined || body.percentageRate !== undefined || body.thresholdValue !== undefined || body.maxAmount !== undefined || body.minAmount !== undefined || body.tierConfigJson !== undefined) {
+      const fieldErrors = validateRuleFields(body as Record<string, unknown>, true)
+      if (fieldErrors.length > 0) return badRequest(fieldErrors.map(e => e.message).join('; '))
     }
 
     const upd: Record<string, unknown> = { updatedById: session.userId }
