@@ -214,12 +214,17 @@ This review covers Phase 3: Salary Structure, Pay Components, Pay Rules, and Rul
 
 ### 14. Preview Different Calculation Methods
 - Select DSA Transport Allowance (THRESHOLD)
-- Input = 50 (below threshold of 80) → Calculated Amount = 0
-- Input = 100 (above threshold) → Calculated Amount = 40 (100 * 40%)
+- Input = 45 (above threshold of 40) → Calculated Amount = 1500 (flat amount)
+- Input = 40 (at threshold of 40) → Calculated Amount = 1500 (flat amount)
+- Input = 39.99 (below threshold) → Calculated Amount = 0
+- Input = 35 (below threshold) → Calculated Amount = 0
 - Select DSA KPI Allowance (TIERED)
-- Input = 90 → Calculated Amount = 2000 (highest tier)
-- Input = 60 → Calculated Amount = 1000 (mid tier)
-- Input = 30 → Calculated Amount = 0 (lowest tier)
+- Input = 65 → Calculated Amount = 2000 (>=60% tier — flat amount)
+- Input = 60 → Calculated Amount = 2000 (>=60% tier — flat amount)
+- Input = 50 → Calculated Amount = 1000 (>=40% tier — flat amount)
+- Input = 40 → Calculated Amount = 1000 (>=40% tier — flat amount)
+- Input = 39.99 → Calculated Amount = 0 (bottom tier)
+- Input = 35 → Calculated Amount = 0 (bottom tier)
 
 ### 15. Verify Permission Restrictions
 - Login as `employee@leapfrog.com`
@@ -227,8 +232,13 @@ This review covers Phase 3: Salary Structure, Pay Components, Pay Rules, and Rul
 - Directly visit `/api/salary-structure/components` — verify 403 response
 - Login as `hr.admin@leapfrog.com`
 - Navigate to `/salary-structure` — verify visible
-- Try to create a component — verify button is NOT shown (no manageComponents permission)
 - Verify HR Admin CAN view components and rules
+- Verify HR Admin CAN create/edit components (now has manageComponents)
+- Verify HR Admin CAN create/edit rules (now has manageRules)
+- Verify HR Admin CAN activate/deactivate rules (now has activateRule/deactivateRule)
+- Verify HR Admin CAN preview rules (now has preview)
+- Login as `hr.officer@leapfrog.com`
+- Verify HR Officer can view BUT CANNOT create components (no manageComponents)
 
 ### 16. Audit Logging Verification
 - Login as `auditor@leapfrog.com` / `Test123!`
@@ -241,7 +251,25 @@ This review covers Phase 3: Salary Structure, Pay Components, Pay Rules, and Rul
   - PAY_RULE_DEACTIVATE (for deactivated rule)
   - PAY_RULE_PREVIEW (for each preview calculation)
 
-### 17. Regression Check
+### 17. Safe Activation (Cannot Set ACTIVE via Create/PATCH)
+- Login as Finance Director
+- Create a new rule via POST — try setting `status: "ACTIVE"` in the request body
+- Verify the API returns error: "Cannot create rule with ACTIVE status; use the activate endpoint"
+- Use PATCH on a DRAFT rule — try setting `status: "ACTIVE"` in the request body
+- Verify the API returns error: "Cannot set ACTIVE via PATCH; use the activate endpoint"
+- Verify only the dedicated activate endpoint (`POST /rules/:id/activate`) can transition a rule to ACTIVE
+- Verify the new-rule form only offers "Draft" status (no "Active" option)
+
+### 18. Component Inline Edit
+- Navigate to `/salary-structure/components`
+- Click "Edit" on any active component (e.g., TRANSPORT_ALLOWANCE)
+- Verify inline editing opens for: Name, Description, Type, Tax Treatment, Flags
+- Verify Code field is NOT editable (immutable after creation)
+- Change the name to "Transport Allowance (Updated)", click "Save"
+- Verify the table row updates without page reload
+- Click "Cancel" on another component to verify cancel works
+
+### 19. Regression Check
 - Verify Head Office registration still works
 - Verify Shop/Field registration still works
 - Verify Shop Accountant dual reporting preserved
@@ -254,11 +282,14 @@ This review covers Phase 3: Salary Structure, Pay Components, Pay Rules, and Rul
 
 ## Known Limitations (Phase 3)
 
+- Phase 3 is salary-structure setup only — no monthly payroll, payslips, tax, pension, or payment export
 - Rule preview is calculation-only — does not create actual payroll records
 - No monthly payroll run, payslips, tax, pension, or payment export in Phase 3
 - Commission rules are structural — no final commission calculation
 - Component tax treatment is UNKNOWN by default — tax behavior finalized in a later phase
 - No approval workflow for rule changes — activation is immediate
+- DSA Transport Allowance pays flat 1,500 birr when sales >= 40% (not a percentage calculation)
+- DSA KPI Allowance pays flat amounts per tier (2000, 1000, 0 — no percentage component)
 
 ## Test Commands
 

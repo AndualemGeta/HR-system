@@ -137,15 +137,19 @@ All pass clean — 223 total tests covering authentication, RBAC, employee regis
 - Import matching priority: employeeId → email → phone → name+role → name+phone
 - Import returns NO_MATCH/SINGLE_MATCH/AMBIGUOUS_MATCH; ambiguous rows blocked
 - Payroll readiness: 8 independent checks (salary, payment info, method, tax, pension, assignment, manager, category)
+- Phase 3 is salary-structure setup only — no monthly payroll, payslips, tax, pension, or payment export
 - Phase 3 rule preview is preview-only — does not create payroll records
 - Phase 3 PayComponent.taxTreatment defaults to UNKNOWN — finalized in later phase
 - Phase 3 rule activation blocks duplicates for same component+scope+effectiveDate
 - Phase 3 tier config values must be ordered correctly; no negative amounts
+- Phase 3 DSA Transport: THRESHOLD rule pays 1,500 birr flat when sales >= 40%, 0 below
+- Phase 3 DSA KPI: TIERED rule with flat amounts (2000 >=60%, 1000 >=40%, 0 below)
 
 ## Known Limitations
 
 - File upload uses local filesystem (`uploads/employee-documents/`)
-- Phase 3 rule preview is informational — no monthly payroll, payslips, tax, pension, or payment export
+- Phase 3 is salary-structure setup only — no monthly payroll, payslips, tax, pension, or payment export
+- Phase 3 rule preview is informational — does not create actual payroll records
 - Payroll readiness is informational only — no enforcement or auto-correction
 - No email notifications for any system event
 - Pay component tax treatment defaults to UNKNOWN — Ethiopian tax rules not hardcoded

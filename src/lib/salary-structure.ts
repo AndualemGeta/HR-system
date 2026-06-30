@@ -46,13 +46,13 @@ export function calculateRulePreview(rule: PayRule, inputValue: number): Preview
 
     case 'THRESHOLD': {
       const threshold = Number(rule.thresholdValue ?? 0)
-      const rate = Number(rule.percentageRate ?? 0)
       if (inputValue < threshold) {
         calculatedAmount = 0
         explanation = `Threshold not met: input ${inputValue} < threshold ${threshold}`
       } else {
-        calculatedAmount = (inputValue * rate) / 100
-        explanation = `Threshold met (${inputValue} ≥ ${threshold}): ${inputValue} × ${rate}% = ${calculatedAmount}`
+        const flatAmount = rule.baseAmount !== null ? Number(rule.baseAmount) : (inputValue * Number(rule.percentageRate ?? 0)) / 100
+        calculatedAmount = flatAmount
+        explanation = `Threshold met (${inputValue} ≥ ${threshold}): flat amount ${flatAmount}`
       }
       break
     }
@@ -195,14 +195,16 @@ export async function validateRuleForActivation(ruleId: string): Promise<{ valid
 
   const method = rule.calculationMethod || rule.ruleType
   const calcMethodsNeedingTiers = ['TIERED']
-  const calcMethodsNeedingRate = ['PERCENTAGE', 'THRESHOLD']
 
   if (calcMethodsNeedingTiers.includes(method) && !rule.tierConfigJson) {
     errors.push('Tier config is required for TIERED calculation method')
   }
 
-  if (calcMethodsNeedingRate.includes(method) && (rule.percentageRate === null || Number(rule.percentageRate) <= 0)) {
-    errors.push('Percentage rate is required for PERCENTAGE/THRESHOLD methods')
+  if (method === 'PERCENTAGE' && (rule.percentageRate === null || Number(rule.percentageRate) <= 0)) {
+    errors.push('Percentage rate is required for PERCENTAGE calculation method')
+  }
+  if (method === 'THRESHOLD' && rule.baseAmount === null && (rule.percentageRate === null || Number(rule.percentageRate) <= 0)) {
+    errors.push('Either baseAmount or percentageRate is required for THRESHOLD method')
   }
 
   const existingActive = await prisma.payRule.findFirst({

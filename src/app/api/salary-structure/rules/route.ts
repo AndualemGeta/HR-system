@@ -28,6 +28,19 @@ export const POST = withAuth(async (req: NextRequest, ctx) => {
 
   if (!componentId || !name || !effectiveFrom) return badRequest('Component ID, name, and effectiveFrom are required')
 
+  if (status === 'ACTIVE') return badRequest('Cannot create rule with ACTIVE status; use the activate endpoint')
+
+  const method = calculationMethod || ruleType
+  if (method === 'FIXED_AMOUNT' && !baseAmount) return badRequest('baseAmount is required for FIXED_AMOUNT method')
+  if (method === 'PERCENTAGE' && (!percentageRate || Number(percentageRate) <= 0)) return badRequest('percentageRate (>0) is required for PERCENTAGE method')
+  if (method === 'THRESHOLD' && thresholdValue === undefined) return badRequest('thresholdValue is required for THRESHOLD method')
+  if (method === 'TIERED' && !tierConfigJson) return badRequest('tierConfigJson is required for TIERED method')
+  if (thresholdValue !== undefined && Number(thresholdValue) < 0) return badRequest('thresholdValue cannot be negative')
+  if (percentageRate !== undefined && (Number(percentageRate) < 0 || Number(percentageRate) > 100)) return badRequest('percentageRate must be between 0 and 100')
+  if (baseAmount !== undefined && Number(baseAmount) < 0) return badRequest('baseAmount cannot be negative')
+  if (maxAmount !== undefined && Number(maxAmount) < 0) return badRequest('maxAmount cannot be negative')
+  if (minAmount !== undefined && Number(minAmount) < 0) return badRequest('minAmount cannot be negative')
+
   const component = await prisma.payComponent.findUnique({ where: { id: componentId } })
   if (!component) return badRequest('Component not found')
 

@@ -32,6 +32,11 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     if (!rule) return notFound('Rule not found')
 
     const body = await req.json()
+
+    if (body.status === 'ACTIVE') {
+      return new Response(JSON.stringify({ error: 'Cannot set ACTIVE via PATCH; use the activate endpoint' }), { status: 400, headers: { 'Content-Type': 'application/json' } })
+    }
+
     const upd: Record<string, unknown> = { updatedById: session.userId }
     const fields = ['name', 'description', 'employeeCategory', 'role', 'departmentId', 'regionId', 'areaId', 'shopId', 'employmentType', 'ruleType', 'calculationMethod', 'baseAmount', 'percentageRate', 'maxAmount', 'minAmount', 'thresholdValue', 'thresholdMetric', 'tierConfigJson', 'formulaJson', 'requiresManualInput', 'requiresApproval', 'status', 'priority'] as const
     for (const f of fields) {
