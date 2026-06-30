@@ -53,28 +53,37 @@ export async function POST(req: NextRequest) {
       try {
         const ExcelJS = await import('exceljs')
         const fileBytes = new Uint8Array(await file.arrayBuffer())
+        if (fileBytes.length === 0) return badRequest('Excel file is empty')
         const workbook = new ExcelJS.Workbook()
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        await workbook.xlsx.load(fileBytes as any)
+        await workbook.xlsx.load(fileBytes as never)
         const sheet = workbook.worksheets[0]
-        if (!sheet || sheet.rowCount < 2) return badRequest('Excel file is empty or has no data rows')
+        if (!sheet || sheet.rowCount < 2) return badRequest('Excel file has no data rows after header')
 
         const headers: string[] = []
         sheet.getRow(1).eachCell((cell, colNumber) => {
           headers[colNumber] = String(cell.value || '').trim()
         })
 
+        let dataRowCount = 0
         sheet.eachRow((row, rowNumber) => {
           if (rowNumber === 1) return
+          let hasValue = false
           const rowData: Record<string, unknown> = {}
           row.eachCell((cell, colNumber) => {
-            if (headers[colNumber]) {
+            if (headers[colNumber] && cell.value !== null && cell.value !== undefined) {
               rowData[headers[colNumber]] = cell.value
+              hasValue = true
             }
           })
-          rawRows.push(rowData)
+          if (hasValue) {
+            rawRows.push(rowData)
+            dataRowCount++
+          }
         })
-      } catch {
+
+        if (dataRowCount === 0) return badRequest('Excel file has no data rows')
+      } catch (err) {
+        console.error('Excel parse error:', err)
         return badRequest('Failed to parse Excel file')
       }
     }

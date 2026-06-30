@@ -17,6 +17,14 @@ export default function EmployeesPage() {
   const [page, setPage] = useState(1)
   const [search, setSearch] = useState('')
   const [categoryFilter, setCategoryFilter] = useState('')
+  const [perms, setPerms] = useState<string[]>([])
+
+  useEffect(() => {
+    fetch('/api/auth/me').then(r => r.json()).then(json => {
+      const me = json.data || json
+      setPerms(me.permissions || [])
+    }).catch(() => {})
+  }, [])
 
   useEffect(() => {
     const params = new URLSearchParams({ page: String(page), limit: '20' })
@@ -40,7 +48,16 @@ export default function EmployeesPage() {
     <div style={{ maxWidth: 1000, margin: '0 auto', padding: '2rem 1rem' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
         <h1 style={{ margin: 0 }}>Employees</h1>
-        <div style={{ display: 'flex', gap: '0.5rem' }}>
+        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
+          {perms.includes('employee.import') && (
+            <Link href="/employees/import" style={{ background: '#7c3aed', color: '#fff', padding: '0.35rem 1rem', borderRadius: 4, textDecoration: 'none', fontSize: '0.9rem' }}>Import Employees</Link>
+          )}
+          {perms.includes('employee.importHistory') && (
+            <Link href="/employees/import/history" style={{ color: '#7c3aed', padding: '0.35rem 0.75rem', fontSize: '0.9rem', textDecoration: 'none' }}>Import History</Link>
+          )}
+          {perms.includes('employee.payrollReadiness.view') && (
+            <Link href="/employees/payroll-readiness" style={{ color: '#7c3aed', padding: '0.35rem 0.75rem', fontSize: '0.9rem', textDecoration: 'none' }}>Payroll Readiness</Link>
+          )}
           <Link href="/employees/new" style={{ background: '#2563eb', color: '#fff', padding: '0.35rem 1rem', borderRadius: 4, textDecoration: 'none', fontSize: '0.9rem' }}>+ Register Employee</Link>
           <Link href="/dashboard" style={{ color: '#2563eb', padding: '0.35rem 0.75rem', fontSize: '0.9rem' }}>Dashboard</Link>
         </div>

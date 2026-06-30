@@ -144,13 +144,9 @@ export const POST = withAuth(async (req: NextRequest, ctx) => {
   let directManagerId = data.directManagerId || null
   const role = data.currentRole
 
-  if (role === 'ASM' && !directManagerId) {
+  if ((role === 'ASM' || role === 'SHOP_MANAGER') && !directManagerId) {
     const salesHead = await prisma.employee.findFirst({ where: { currentRole: 'SALES_HEAD', employmentStatus: 'ACTIVE' } })
     if (salesHead) directManagerId = salesHead.id
-  }
-  if (role === 'SHOP_MANAGER' && !directManagerId && data.currentAreaId) {
-    const asm = await prisma.employee.findFirst({ where: { currentRole: 'ASM', currentAreaId: data.currentAreaId, employmentStatus: 'ACTIVE' } })
-    if (asm) directManagerId = asm.id
   }
   if ((role === 'DSP' || role === 'DSA') && !directManagerId && data.currentShopId) {
     const shopMgr = await prisma.employee.findFirst({ where: { currentRole: 'SHOP_MANAGER', currentShopId: data.currentShopId, employmentStatus: 'ACTIVE' } })
