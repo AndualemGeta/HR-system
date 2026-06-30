@@ -250,6 +250,57 @@ enum NotificationType {
   SYSTEM
 }
 
+enum PayComponentType {
+  BASIC_SALARY
+  ALLOWANCE
+  KPI
+  TRANSPORT
+  OVERTIME
+  COMMISSION
+  BONUS
+  ADJUSTMENT
+  DEDUCTION
+  STATUTORY
+  OTHER
+}
+
+enum TaxTreatment {
+  TAXABLE
+  NON_TAXABLE
+  PARTIALLY_TAXABLE
+  STATUTORY
+  UNKNOWN
+}
+
+enum PayRuleStatus {
+  DRAFT
+  ACTIVE
+  INACTIVE
+  EXPIRED
+}
+
+enum PayRuleType {
+  FIXED_AMOUNT
+  PERCENTAGE
+  THRESHOLD
+  TIERED
+  PER_UNIT
+  MANUAL_INPUT
+  FORMULA
+  CAP_ONLY
+}
+
+enum ThresholdMetric {
+  SALES_ACHIEVEMENT_PERCENT
+  DAILY_ACTIVE_MERCHANT
+  GA_COUNT
+  QGA_COUNT
+  RECHARGE_COUNT
+  ATTENDANCE_DAYS
+  OVERTIME_HOURS
+  MANUAL_VALUE
+}
+
 enum AuditAction {
   LOGIN
   LOGOUT
@@ -317,6 +368,14 @@ enum AuditAction {
   PAYROLL_READINESS_VIEW
   PAYROLL_READINESS_EXPORT
   PAYROLL_PROFILE_UPDATE
+  PAY_COMPONENT_CREATE
+  PAY_COMPONENT_UPDATE
+  PAY_COMPONENT_DEACTIVATE
+  PAY_RULE_CREATE
+  PAY_RULE_UPDATE
+  PAY_RULE_ACTIVATE
+  PAY_RULE_DEACTIVATE
+  PAY_RULE_PREVIEW
   OTHER
 }
 
@@ -337,6 +396,10 @@ model User {
   auditLogs              AuditLog[]
   notifications          Notification[]
   imports                ImportSession[]
+  payComponentsCreated   PayComponent[] @relation("PayComponentCreatedBy")
+  payComponentsUpdated   PayComponent[] @relation("PayComponentUpdatedBy")
+  payRulesCreated        PayRule[]      @relation("PayRuleCreatedBy")
+  payRulesUpdated        PayRule[]      @relation("PayRuleUpdatedBy")
 }
 
 model Role {
@@ -1222,6 +1285,67 @@ model EmployeePayrollProfile {
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
   employee           Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+}
+
+model PayComponent {
+  id            String          @id @default(uuid())
+  code          String          @unique
+  name          String
+  description   String?
+  componentType PayComponentType @default(OTHER)
+  taxTreatment  TaxTreatment    @default(UNKNOWN)
+  isEarning     Boolean         @default(true)
+  isDeduction   Boolean         @default(false)
+  isStatutory   Boolean         @default(false)
+  isVariable    Boolean         @default(false)
+  isActive      Boolean         @default(true)
+  createdById   String?
+  updatedById   String?
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+  createdBy     User?           @relation("PayComponentCreatedBy", fields: [createdById], references: [id])
+  updatedBy     User?           @relation("PayComponentUpdatedBy", fields: [updatedById], references: [id])
+  rules         PayRule[]       @relation("PayRuleComponent")
+}
+
+model PayRule {
+  id                String          @id @default(uuid())
+  componentId       String
+  name              String
+  description       String?
+  employeeCategory  EmployeeCategory?
+  role              EmployeeRole?
+  departmentId      String?
+  regionId          String?
+  areaId            String?
+  shopId            String?
+  employmentType    EmploymentType?
+  ruleType          PayRuleType     @default(FIXED_AMOUNT)
+  calculationMethod PayRuleType     @default(FIXED_AMOUNT)
+  baseAmount        Decimal?        @db.Decimal(12, 2)
+  percentageRate    Decimal?        @db.Decimal(8, 4)
+  maxAmount         Decimal?        @db.Decimal(12, 2)
+  minAmount         Decimal?        @db.Decimal(12, 2)
+  thresholdValue    Decimal?        @db.Decimal(12, 4)
+  thresholdMetric   ThresholdMetric?
+  tierConfigJson    String?
+  formulaJson       String?
+  requiresManualInput Boolean      @default(false)
+  requiresApproval    Boolean      @default(false)
+  effectiveFrom     DateTime
+  effectiveTo       DateTime?
+  status            PayRuleStatus   @default(DRAFT)
+  priority          Int             @default(0)
+  createdById       String?
+  updatedById       String?
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+  component         PayComponent    @relation("PayRuleComponent", fields: [componentId], references: [id])
+  createdBy         User?           @relation("PayRuleCreatedBy", fields: [createdById], references: [id])
+  updatedBy         User?           @relation("PayRuleUpdatedBy", fields: [updatedById], references: [id])
+  @@index([componentId, status])
+  @@index([role, employeeCategory, status])
+  @@index([effectiveFrom, effectiveTo])
 }
 
 enum ImportStatus {

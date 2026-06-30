@@ -1,0 +1,139 @@
+'use client'
+
+import { useEffect, useState } from 'react'
+
+interface PayComponent {
+  id: string; code: string; name: string; description: string | null
+  componentType: string; taxTreatment: string; isEarning: boolean
+  isDeduction: boolean; isStatutory: boolean; isVariable: boolean; isActive: boolean
+  createdAt: string
+}
+
+export default function ComponentsPage() {
+  const [components, setComponents] = useState<PayComponent[]>([])
+  const [perms, setPerms] = useState<string[]>([])
+  const [loading, setLoading] = useState(true)
+  const [showForm, setShowForm] = useState(false)
+  const [form, setForm] = useState({ code: '', name: '', description: '', componentType: 'ALLOWANCE', taxTreatment: 'TAXABLE', isEarning: 'true', isDeduction: 'false' })
+  const [error, setError] = useState('')
+
+  const fetchData = () => {
+    Promise.all([
+      fetch('/api/auth/me').then(r => r.json()).then(j => setPerms(j.data?.permissions || [])).catch(() => {}),
+      fetch('/api/salary-structure/components').then(r => r.json()).then(j => setComponents(j.data || [])),
+    ]).finally(() => setLoading(false))
+  }
+
+  useEffect(() => { fetchData() }, [])
+
+  const has = (p: string) => perms.includes(p)
+
+  const handleCreate = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setError('')
+    const res = await fetch('/api/salary-structure/components', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...form, isEarning: form.isEarning === 'true', isDeduction: form.isDeduction === 'true' }),
+    })
+    const json = await res.json()
+    if (!res.ok) { setError(json.error || 'Failed to create'); return }
+    setShowForm(false)
+    setForm({ code: '', name: '', description: '', componentType: 'ALLOWANCE', taxTreatment: 'TAXABLE', isEarning: 'true', isDeduction: 'false' })
+    fetchData()
+  }
+
+  const handleDeactivate = async (id: string) => {
+    if (!confirm('Deactivate this component?')) return
+    await fetch(`/api/salary-structure/components/${id}/deactivate`, { method: 'POST' })
+    fetchData()
+  }
+
+  if (loading) return <div style={{ padding: '2rem', textAlign: 'center' }}>Loading...</div>
+
+  return (
+    <div style={{ maxWidth: 900, margin: '0 auto', padding: '2rem 1rem' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+        <h1 style={{ margin: 0 }}>Pay Components</h1>
+        <div style={{ display: 'flex', gap: '0.5rem' }}>
+          {has('salaryStructure.manageComponents') && (
+            <button onClick={() => setShowForm(!showForm)} style={{ background: '#2563eb', color: '#fff', padding: '0.35rem 1rem', borderRadius: 4, border: 'none', cursor: 'pointer', fontSize: '0.9rem' }}>
+              {showForm ? 'Cancel' : '+ New Component'}
+            </button>
+          )}
+        </div>
+      </div>
+
+      {error && <p style={{ color: 'red', marginBottom: '0.5rem' }}>{error}</p>}
+
+      {showForm && (
+        <form onSubmit={handleCreate} style={{ background: '#f9fafb', padding: '1rem', borderRadius: 6, marginBottom: '1rem', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+          <input placeholder="Code *" value={form.code} onChange={e => setForm(f => ({ ...f, code: e.target.value.toUpperCase() }))} required style={{ padding: '0.4rem', border: '1px solid #ccc', borderRadius: 4 }} />
+          <input placeholder="Name *" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} required style={{ padding: '0.4rem', border: '1px solid #ccc', borderRadius: 4 }} />
+          <input placeholder="Description" value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} style={{ padding: '0.4rem', border: '1px solid #ccc', borderRadius: 4, gridColumn: '1/-1' }} />
+          <select value={form.componentType} onChange={e => setForm(f => ({ ...f, componentType: e.target.value }))} style={{ padding: '0.4rem', border: '1px solid #ccc', borderRadius: 4 }}>
+            <option value="BASIC_SALARY">Basic Salary</option>
+            <option value="ALLOWANCE">Allowance</option>
+            <option value="KPI">KPI</option>
+            <option value="TRANSPORT">Transport</option>
+            <option value="OVERTIME">Overtime</option>
+            <option value="COMMISSION">Commission</option>
+            <option value="BONUS">Bonus</option>
+            <option value="ADJUSTMENT">Adjustment</option>
+            <option value="DEDUCTION">Deduction</option>
+            <option value="STATUTORY">Statutory</option>
+            <option value="OTHER">Other</option>
+          </select>
+          <select value={form.taxTreatment} onChange={e => setForm(f => ({ ...f, taxTreatment: e.target.value }))} style={{ padding: '0.4rem', border: '1px solid #ccc', borderRadius: 4 }}>
+            <option value="TAXABLE">Taxable</option>
+            <option value="NON_TAXABLE">Non-Taxable</option>
+            <option value="PARTIALLY_TAXABLE">Partially Taxable</option>
+            <option value="STATUTORY">Statutory</option>
+            <option value="UNKNOWN">Unknown</option>
+          </select>
+          <label style={{ fontSize: '0.9rem' }}><input type="checkbox" checked={form.isEarning === 'true'} onChange={e => setForm(f => ({ ...f, isEarning: e.target.checked ? 'true' : 'false' }))} /> Is Earning</label>
+          <label style={{ fontSize: '0.9rem' }}><input type="checkbox" checked={form.isDeduction === 'true'} onChange={e => setForm(f => ({ ...f, isDeduction: e.target.checked ? 'true' : 'false' }))} /> Is Deduction</label>
+          <button type="submit" style={{ gridColumn: '1/-1', background: '#059669', color: '#fff', padding: '0.4rem', border: 'none', borderRadius: 4, cursor: 'pointer' }}>Create Component</button>
+        </form>
+      )}
+
+      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+        <thead>
+          <tr style={{ textAlign: 'left', borderBottom: '2px solid #e5e7eb' }}>
+            <th style={{ padding: '0.5rem', fontSize: '0.85rem' }}>Code</th>
+            <th style={{ padding: '0.5rem', fontSize: '0.85rem' }}>Name</th>
+            <th style={{ padding: '0.5rem', fontSize: '0.85rem' }}>Type</th>
+            <th style={{ padding: '0.5rem', fontSize: '0.85rem' }}>Tax</th>
+            <th style={{ padding: '0.5rem', fontSize: '0.85rem' }}>Status</th>
+            <th style={{ padding: '0.5rem', fontSize: '0.85rem' }}>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {components.map(c => (
+            <tr key={c.id} style={{ borderBottom: '1px solid #e5e7eb' }}>
+              <td style={{ padding: '0.5rem', fontSize: '0.9rem', fontWeight: 600 }}>{c.code}</td>
+              <td style={{ padding: '0.5rem', fontSize: '0.9rem' }}>{c.name}</td>
+              <td style={{ padding: '0.5rem', fontSize: '0.9rem' }}>{c.componentType}</td>
+              <td style={{ padding: '0.5rem', fontSize: '0.9rem' }}>{c.taxTreatment}</td>
+              <td style={{ padding: '0.5rem', fontSize: '0.9rem' }}>
+                {c.isActive ? <span style={{ padding: '0.15rem 0.4rem', borderRadius: 4, fontSize: '0.75rem', fontWeight: 600, background: '#d1fae5', color: '#065f46' }}>Active</span> : <span style={{ padding: '0.15rem 0.4rem', borderRadius: 4, fontSize: '0.75rem', fontWeight: 600, background: '#fee2e2', color: '#991b1b' }}>Inactive</span>}
+              </td>
+              <td style={{ padding: '0.5rem', fontSize: '0.9rem' }}>
+                {c.isActive && has('salaryStructure.manageComponents') && (
+                  <button onClick={() => handleDeactivate(c.id)} style={{ background: 'none', border: 'none', color: '#dc2626', cursor: 'pointer', fontSize: '0.85rem', textDecoration: 'underline' }}>Deactivate</button>
+                )}
+              </td>
+            </tr>
+          ))}
+          {components.length === 0 && (
+            <tr><td colSpan={6} style={{ padding: '1rem', textAlign: 'center', color: '#666' }}>No components found</td></tr>
+          )}
+        </tbody>
+      </table>
+
+      <div style={{ marginTop: '1rem' }}>
+        <a href="/salary-structure" style={{ color: '#2563eb', fontSize: '0.9rem' }}>&larr; Back to Salary Structure</a>
+      </div>
+    </div>
+  )
+}

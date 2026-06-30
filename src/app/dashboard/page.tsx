@@ -58,6 +58,7 @@ export default function DashboardPage() {
       title: 'Finance',
       links: [
         { label: 'Salary Records', href: '/salary', permission: 'salary.view' },
+        { label: 'Salary Structure', href: '/salary-structure', permission: 'salaryStructure.view' },
       ],
     },
     {

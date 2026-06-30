@@ -503,7 +503,7 @@ async function main() {
   })
 
   await assertAsync('Shop Accountant dual reporting preserved', async () => {
-    const sa = await prisma.employee.findFirst({ where: { currentRole: 'SHOP_ACCOUNTANT' } })
+    const sa = await prisma.employee.findFirst({ where: { currentRole: 'SHOP_ACCOUNTANT' }, orderBy: { createdAt: 'asc' } })
     return !!sa && !!sa.directManagerId && !!sa.accountingReportingManagerId
   })
 

@@ -33,6 +33,13 @@ export type PermissionKey =
   | 'employee.importHistory'
   | 'employee.payrollReadiness.view'
   | 'employee.payrollReadiness.export'
+  | 'salaryStructure.view'
+  | 'salaryStructure.manageComponents'
+  | 'salaryStructure.manageRules'
+  | 'salaryStructure.preview'
+  | 'salaryStructure.activateRule'
+  | 'salaryStructure.deactivateRule'
+  | 'salaryStructure.auditView'
 
 export async function getUserPermissions(userId: string): Promise<PermissionKey[]> {
   const roles = await prisma.userRole.findMany({
@@ -107,6 +114,13 @@ const ALL_PERMISSIONS_MAP: Record<string, boolean> = {
   'employee.importHistory': true,
   'employee.payrollReadiness.view': true,
   'employee.payrollReadiness.export': true,
+  'salaryStructure.view': true,
+  'salaryStructure.manageComponents': true,
+  'salaryStructure.manageRules': true,
+  'salaryStructure.preview': true,
+  'salaryStructure.activateRule': true,
+  'salaryStructure.deactivateRule': true,
+  'salaryStructure.auditView': true,
 }
 
 export const ALL_PERMISSIONS = Object.keys(ALL_PERMISSIONS_MAP)

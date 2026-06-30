@@ -17,6 +17,9 @@ const ALL_PERMISSIONS = [
   'document.view', 'document.upload', 'document.download', 'document.deactivate', 'document.manageRules',
   'employee.import', 'employee.importPreview', 'employee.importConfirm',
   'employee.importHistory', 'employee.payrollReadiness.view', 'employee.payrollReadiness.export',
+  'salaryStructure.view', 'salaryStructure.manageComponents', 'salaryStructure.manageRules',
+  'salaryStructure.preview', 'salaryStructure.activateRule', 'salaryStructure.deactivateRule',
+  'salaryStructure.auditView',
 ] as const
 
 const ROLE_PERMISSIONS: Record<string, string[]> = {
@@ -32,6 +35,7 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
     'document.view', 'document.upload', 'document.download', 'document.deactivate', 'document.manageRules',
     'employee.import', 'employee.importPreview', 'employee.importConfirm',
     'employee.importHistory', 'employee.payrollReadiness.view', 'employee.payrollReadiness.export',
+    'salaryStructure.view', 'salaryStructure.auditView',
   ],
   HR_OFFICER: [
     'employee.view', 'employee.create', 'employee.update',
@@ -41,25 +45,32 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
     'document.view', 'document.upload',
     'employee.import', 'employee.importPreview', 'employee.importConfirm',
     'employee.importHistory', 'employee.payrollReadiness.view', 'employee.payrollReadiness.export',
+    'salaryStructure.view',
   ],
   FINANCE_DIRECTOR: [
     'employee.view', 'salary.view', 'salary.update',
     'reports.view', 'audit.view',
     'document.view', 'document.download',
     'employee.payrollReadiness.view', 'employee.payrollReadiness.export',
+    'salaryStructure.view', 'salaryStructure.manageComponents', 'salaryStructure.manageRules',
+    'salaryStructure.preview', 'salaryStructure.activateRule', 'salaryStructure.deactivateRule',
+    'salaryStructure.auditView',
   ],
   FINANCE_PAYROLL: [
     'employee.view', 'salary.view', 'reports.view',
     'document.view', 'document.download',
     'employee.payrollReadiness.view', 'employee.payrollReadiness.export',
+    'salaryStructure.view', 'salaryStructure.preview',
   ],
   TREASURY_MANAGER: [
     'employee.view', 'salary.view',
     'document.view', 'document.download',
+    'salaryStructure.view', 'salaryStructure.preview',
   ],
   ACCOUNTANT: [
     'employee.view', 'salary.view',
     'document.view',
+    'salaryStructure.view', 'salaryStructure.preview',
   ],
   SALES_HEAD: [
     'employee.view', 'reports.view', 'organization.view',
@@ -130,6 +141,8 @@ async function main() {
   await prisma.payeTaxBracket.deleteMany()
   await prisma.pensionRule.deleteMany()
   await prisma.payrollRule.deleteMany()
+  await prisma.payRule.deleteMany()
+  await prisma.payComponent.deleteMany()
   await prisma.employee.deleteMany()
   await prisma.location.deleteMany()
   await prisma.department.deleteMany()
@@ -510,6 +523,108 @@ async function main() {
   const allRules = [...commonRules, ...hoRules, ...shopFieldRules, ...shopAcctRules]
   await prisma.requiredDocumentRule.createMany({ data: allRules })
   console.log(`  Created ${allRules.length} required document rules`)
+
+  // Create default pay components
+  const defaultComponents = [
+    { code: 'BASIC_SALARY', name: 'Basic Salary', componentType: 'BASIC_SALARY' as const, isEarning: true, isDeduction: false, isStatutory: false, isVariable: false, taxTreatment: 'TAXABLE' as const },
+    { code: 'TRANSPORT_ALLOWANCE', name: 'Transport Allowance', componentType: 'TRANSPORT' as const, isEarning: true, isDeduction: false, isStatutory: false, isVariable: false, taxTreatment: 'NON_TAXABLE' as const },
+    { code: 'KPI_ALLOWANCE', name: 'KPI Allowance', componentType: 'KPI' as const, isEarning: true, isDeduction: false, isStatutory: false, isVariable: true, taxTreatment: 'TAXABLE' as const },
+    { code: 'OVERTIME', name: 'Overtime', componentType: 'OVERTIME' as const, isEarning: true, isDeduction: false, isStatutory: false, isVariable: true, taxTreatment: 'TAXABLE' as const },
+    { code: 'SALES_COMMISSION', name: 'Sales Commission', componentType: 'COMMISSION' as const, isEarning: true, isDeduction: false, isStatutory: false, isVariable: true, taxTreatment: 'TAXABLE' as const },
+    { code: 'BONUS', name: 'Bonus', componentType: 'BONUS' as const, isEarning: true, isDeduction: false, isStatutory: false, isVariable: true, taxTreatment: 'TAXABLE' as const },
+    { code: 'ADJUSTMENT', name: 'Adjustment', componentType: 'ADJUSTMENT' as const, isEarning: false, isDeduction: false, isStatutory: false, isVariable: true, taxTreatment: 'TAXABLE' as const },
+    { code: 'DEDUCTION', name: 'General Deduction', componentType: 'DEDUCTION' as const, isEarning: false, isDeduction: true, isStatutory: false, isVariable: false, taxTreatment: 'NON_TAXABLE' as const },
+  ]
+  const componentRecords = await Promise.all(
+    defaultComponents.map(c =>
+      prisma.payComponent.create({ data: { ...c, description: `${c.name} component`, createdById: userMap['admin@leapfrog.com'] } })
+    )
+  )
+  const compMap = Object.fromEntries(componentRecords.map(c => [c.code, c.id]))
+  console.log(`  Created ${componentRecords.length} pay components`)
+
+  // Create default pay rules for DSA roles
+  const kpiAllowanceId = compMap['KPI_ALLOWANCE']
+  const transportAllowanceId = compMap['TRANSPORT_ALLOWANCE']
+  const adjustmentId = compMap['ADJUSTMENT']
+  const salesCommissionId = compMap['SALES_COMMISSION']
+
+  if (kpiAllowanceId && transportAllowanceId && adjustmentId && salesCommissionId) {
+    const rules = [
+      {
+        componentId: transportAllowanceId,
+        name: 'DSA Transport Allowance',
+        description: 'Transport allowance for DSA roles based on sales achievement',
+        employeeCategory: 'SHOP_FIELD' as const,
+        role: 'DSA' as const,
+        ruleType: 'THRESHOLD' as const,
+        calculationMethod: 'THRESHOLD' as const,
+        percentageRate: 40,
+        maxAmount: 1500,
+        minAmount: 0,
+        thresholdValue: 0,
+        thresholdMetric: 'SALES_ACHIEVEMENT_PERCENT' as const,
+        effectiveFrom: new Date('2024-01-01'),
+        status: 'ACTIVE' as const,
+        priority: 10,
+      },
+      {
+        componentId: kpiAllowanceId,
+        name: 'DSA KPI Allowance',
+        description: 'Performance-based KPI allowance for DSA roles',
+        employeeCategory: 'SHOP_FIELD' as const,
+        role: 'DSA' as const,
+        ruleType: 'TIERED' as const,
+        calculationMethod: 'TIERED' as const,
+        maxAmount: 2000,
+        minAmount: 0,
+        tierConfigJson: JSON.stringify([
+          { min: 80, percent: 60, amount: 2000 },
+          { min: 50, percent: 40, amount: 1000 },
+          { min: 0, percent: 0, amount: 0 },
+        ]),
+        effectiveFrom: new Date('2024-01-01'),
+        status: 'ACTIVE' as const,
+        priority: 10,
+      },
+      {
+        componentId: adjustmentId,
+        name: 'Manual Adjustment',
+        description: 'Manual payroll adjustment requiring approval',
+        ruleType: 'MANUAL_INPUT' as const,
+        calculationMethod: 'MANUAL_INPUT' as const,
+        requiresManualInput: true,
+        requiresApproval: true,
+        effectiveFrom: new Date('2024-01-01'),
+        status: 'ACTIVE' as const,
+        priority: 0,
+      },
+      {
+        componentId: salesCommissionId,
+        name: 'DSA Sales Commission',
+        description: 'Tiered sales commission structure for DSA',
+        employeeCategory: 'SHOP_FIELD' as const,
+        role: 'DSA' as const,
+        ruleType: 'TIERED' as const,
+        calculationMethod: 'TIERED' as const,
+        maxAmount: 5000,
+        minAmount: 0,
+        tierConfigJson: JSON.stringify([
+          { min: 100, percent: 5, amount: 5000 },
+          { min: 80, percent: 3, amount: 3000 },
+          { min: 50, percent: 1, amount: 1000 },
+          { min: 0, percent: 0, amount: 0 },
+        ]),
+        effectiveFrom: new Date('2024-01-01'),
+        status: 'DRAFT' as const,
+        priority: 10,
+      },
+    ]
+    await prisma.payRule.createMany({
+      data: rules.map(r => ({ ...r, createdById: userMap['admin@leapfrog.com'] })),
+    })
+    console.log(`  Created ${rules.length} pay rules`)
+  }
 
   console.log('\nSeed complete!')
   console.log('Demo users (password: Test123!):')
