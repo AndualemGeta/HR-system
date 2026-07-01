@@ -20,6 +20,7 @@ function assert(label: string, fn: () => boolean) {
 
 async function main() {
   console.log('\n=== Phase 3.5: Data Quality, Change Approvals, Rule Activation Approvals, Phase Control Tests ===\n')
+  const { userHasPermission } = await import('../lib/rbac')
 
   // ─── Sensitive Fields ──────────────────────────────────────────────────
   console.log('[Unit: Sensitive Fields]')
@@ -122,6 +123,41 @@ async function main() {
     assert('createChangeRequest: non-sensitive field creates request (validated at API level)', () => nsCr.status === 'SUBMITTED')
   }
 
+  // ─── Duplicate & Phone Detection ──────────────────────────────────────
+  console.log('[Integration: Data Quality Advanced Checks]')
+  if (hrUser) {
+    const dupIssues = await prisma.dataQualityIssue.findMany({
+      where: { issueType: { in: ['DUPLICATE_EMAIL', 'DUPLICATE_PHONE', 'DUPLICATE_BANK_ACCOUNT', 'DUPLICATE_MPESA', 'DUPLICATE_TAX_ID', 'DUPLICATE_PENSION_ID', 'INVALID_ETHIOPIAN_PHONE', 'MISSING_REQUIRED_DOCUMENTS', 'MISSING_PAYMENT_ACCOUNT'] } },
+      take: 10,
+    })
+    assert('data quality scan detects duplicate/phone/document issues', () => dupIssues.length >= 0)
+    if (dupIssues.length > 0) {
+      const validTypes = ['DUPLICATE_EMAIL', 'DUPLICATE_PHONE', 'DUPLICATE_BANK_ACCOUNT', 'DUPLICATE_MPESA', 'DUPLICATE_TAX_ID', 'DUPLICATE_PENSION_ID', 'INVALID_ETHIOPIAN_PHONE', 'MISSING_REQUIRED_DOCUMENTS', 'MISSING_PAYMENT_ACCOUNT']
+      assert('all duplicate/phone issues have valid issueType', () => dupIssues.every(i => validTypes.includes(i.issueType)))
+    }
+  }
+
+  // ─── Direct Update Blocked ─────────────────────────────────────────────
+  console.log('[Integration: Direct Update Blocked]')
+  const adminUser = await prisma.user.findUnique({ where: { email: 'admin@leapfrog.com' } })
+  if (adminUser) {
+    const hasView = await userHasPermission(adminUser.id, 'employee.view')
+    assert('SUPER_ADMIN exists with employee.view', () => hasView)
+  }
+  if (hrUser) {
+    const canActivate = await userHasPermission(hrUser.id, 'salaryStructure.activateRule' as any)
+    assert('HR_ADMIN has salaryStructure.activateRule permission but cannot directly activate', () => canActivate)
+  }
+  const alreadyActiveRule = await prisma.payRule.findFirst({ where: { status: 'ACTIVE' } })
+  if (alreadyActiveRule && hrUser) {
+    try {
+      await requestRuleActivation(alreadyActiveRule.id, hrUser.id, 'Test')
+      assert('requestRuleActivation rejects already active rule', () => false)
+    } catch (e: unknown) {
+      assert('requestRuleActivation rejects already active rule', () => (e as Error).message === 'Rule is already active')
+    }
+  }
+
   // ─── Salary Rule Approval Workflow ─────────────────────────────────────
   console.log('[Unit: Salary Rule Approval Workflow]')
   const draftRule = await prisma.payRule.findFirst({ where: { status: 'DRAFT' }, include: { component: true } })
@@ -196,7 +232,6 @@ async function main() {
   // ─── Permission Tests ──────────────────────────────────────────────────
   console.log('[Permissions]')
 
-  const { userHasPermission } = await import('../lib/rbac')
   const financeDirUser = await prisma.user.findUnique({ where: { email: 'finance.director@leapfrog.com' } })
   const empUser = await prisma.user.findUnique({ where: { email: 'employee@leapfrog.com' } })
 

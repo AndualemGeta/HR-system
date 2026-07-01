@@ -113,11 +113,9 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 
     const data = parsed.data
 
-    // If salary fields are present, require salary.update
+    // Block direct sensitive payroll field updates — must use change request approval
     if (data.basicSalary !== undefined || data.salaryEffectiveDate !== undefined) {
-      if (!(await userHasPermission(session.userId, 'salary.update'))) {
-        return forbidden('Salary update permission required to modify salary fields')
-      }
+      return badRequest('Sensitive payroll fields must be changed through change request approval.')
     }
 
     const updateData: Record<string, unknown> = {}
@@ -164,19 +162,8 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
         })
       }
     }
-    if (data.basicSalary !== undefined) {
-      const oldSalary = existing.basicSalary
-      updateData.basicSalary = data.basicSalary
-      if (String(oldSalary) !== String(data.basicSalary)) {
-        await createAuditLog({
-          userId: session.userId, action: 'SALARY_CHANGE', entityType: 'Employee', entityId: id,
-          oldValue: { basicSalary: oldSalary }, newValue: { basicSalary: data.basicSalary },
-        })
-      }
-    }
     if (data.dateOfBirth !== undefined) updateData.dateOfBirth = data.dateOfBirth ? new Date(data.dateOfBirth) : null
     if (data.hireDate !== undefined) updateData.hireDate = data.hireDate ? new Date(data.hireDate) : null
-    if (data.salaryEffectiveDate !== undefined) updateData.salaryEffectiveDate = data.salaryEffectiveDate ? new Date(data.salaryEffectiveDate) : null
 
     if (data.firstName !== undefined || data.lastName !== undefined || data.middleName !== undefined) {
       updateData.fullName = [data.firstName ?? existing.firstName, data.middleName ?? existing.middleName, data.lastName ?? existing.lastName].filter(Boolean).join(' ')

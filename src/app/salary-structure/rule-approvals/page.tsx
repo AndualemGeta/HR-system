@@ -49,10 +49,15 @@ export default function RuleApprovalsPage() {
 
   if (loading) return <div style={{ padding: '2rem', textAlign: 'center' }}>Loading...</div>
 
+  const isPending = (s: string) => s === 'SUBMITTED' || s === 'UNDER_REVIEW'
+
   const badge: Record<string, React.CSSProperties> = {
-    PENDING: { background: '#fef3c7', color: '#92400e' },
+    SUBMITTED: { background: '#fef3c7', color: '#92400e' },
+    UNDER_REVIEW: { background: '#dbeafe', color: '#1e40af' },
     APPROVED: { background: '#d1fae5', color: '#065f46' },
     REJECTED: { background: '#fee2e2', color: '#991b1b' },
+    APPLIED: { background: '#d1fae5', color: '#065f46' },
+    CANCELLED: { background: '#e5e7eb', color: '#374151' },
   }
 
   return (
@@ -66,9 +71,12 @@ export default function RuleApprovalsPage() {
       <div style={{ marginBottom: '0.75rem' }}>
         <select value={filter} onChange={e => setFilter(e.target.value)} style={{ padding: '0.35rem', border: '1px solid #ccc', borderRadius: 4 }}>
           <option value="">All Status</option>
-          <option value="PENDING">Pending</option>
+          <option value="SUBMITTED">Submitted</option>
+          <option value="UNDER_REVIEW">Under Review</option>
           <option value="APPROVED">Approved</option>
           <option value="REJECTED">Rejected</option>
+          <option value="APPLIED">Applied</option>
+          <option value="CANCELLED">Cancelled</option>
         </select>
       </div>
 
@@ -98,7 +106,7 @@ export default function RuleApprovalsPage() {
               </td>
               <td style={{ padding: '0.5rem', fontSize: '0.85rem' }}>{new Date(a.createdAt).toLocaleDateString()}</td>
               <td style={{ padding: '0.5rem', fontSize: '0.85rem', whiteSpace: 'nowrap' }}>
-                {a.status === 'PENDING' && (
+                {isPending(a.status) && (
                   <>
                     {reviewing === a.id ? (
                       <span>
