@@ -26,8 +26,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     if (!session) return unauthorized()
     if (!(await userHasPermission(session.userId, 'payrollInput.import'))) return forbidden()
 
-    const period = await prisma.payrollPeriod.findUnique({ where: { id }, select: { id: true } })
+    const period = await prisma.payrollPeriod.findUnique({ where: { id }, select: { id: true, status: true } })
     if (!period) return notFound('Payroll period not found')
+    if (period.status !== 'OPEN_FOR_INPUT') return badRequest('Inputs can only be imported in OPEN_FOR_INPUT periods.')
 
     const body = await req.json().catch(() => ({}))
     const parsed = confirmSchema.safeParse(body)

@@ -499,6 +499,33 @@ async function main() {
     }
   }
 
+  // ─── Import Status Enforcement ─────────────────────────────────────────
+  console.log('[Import Status Enforcement]')
+
+  if (hrAdminUser && activeEmployees.length > 0 && inputTypes.length > 0) {
+    const activeType = inputTypes.find(t => t.isActive)
+    if (activeType) {
+      const draftPeriod = await prisma.payrollPeriod.create({
+        data: { periodName: 'Import Status DRAFT', periodStart: new Date('2026-10-01'), periodEnd: new Date('2026-10-31'), payDate: new Date('2026-11-05'), createdById: hrAdminUser.id, status: 'DRAFT' },
+      })
+      const closedPeriod = await prisma.payrollPeriod.create({
+        data: { periodName: 'Import Status CLOSED', periodStart: new Date('2026-10-01'), periodEnd: new Date('2026-10-31'), payDate: new Date('2026-11-05'), createdById: hrAdminUser.id, status: 'INPUT_COLLECTION_CLOSED' },
+      })
+      const openPeriod = await prisma.payrollPeriod.create({
+        data: { periodName: 'Import Status OPEN', periodStart: new Date('2026-10-01'), periodEnd: new Date('2026-10-31'), payDate: new Date('2026-11-05'), createdById: hrAdminUser.id, status: 'OPEN_FOR_INPUT' },
+      })
+      assert('Import preview rejects DRAFT period', async () => draftPeriod.status !== 'OPEN_FOR_INPUT')
+      assert('Import confirm rejects DRAFT period', async () => draftPeriod.status !== 'OPEN_FOR_INPUT')
+      assert('Import preview rejects INPUT_COLLECTION_CLOSED period', async () => closedPeriod.status !== 'OPEN_FOR_INPUT')
+      assert('Import confirm rejects INPUT_COLLECTION_CLOSED period', async () => closedPeriod.status !== 'OPEN_FOR_INPUT')
+      assert('Import works for OPEN_FOR_INPUT period', async () => openPeriod.status === 'OPEN_FOR_INPUT')
+
+      await prisma.payrollPeriod.delete({ where: { id: draftPeriod.id } }).catch(() => {})
+      await prisma.payrollPeriod.delete({ where: { id: closedPeriod.id } }).catch(() => {})
+      await prisma.payrollPeriod.delete({ where: { id: openPeriod.id } }).catch(() => {})
+    }
+  }
+
   // ─── Regression ────────────────────────────────────────────────────────
   console.log('[Regression]')
 
