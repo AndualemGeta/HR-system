@@ -3,6 +3,7 @@ import { getSession } from '@/lib/session'
 import { userHasPermission, buildEmployeeScopeWhere } from '@/lib/rbac'
 import { success, unauthorized, forbidden, notFound, internalError } from '@/lib/api'
 import { checkPayrollPeriodMissingInputs } from '@/lib/payroll-missing-inputs'
+import { getPayrollReadiness } from '@/lib/payroll-readiness'
 
 export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -18,7 +19,12 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
       const scopeEmps = await prisma.employee.findMany({ where: scopeWhere, select: { id: true } })
       scopeFilter = { employeeId: { in: scopeEmps.map(e => e.id) } }
     }
-    const selectedEmployees = await prisma.payrollPeriodEmployee.count({ where: { payrollPeriodId: id, isSelected: true, ...(scopeFilter.employeeId ? { employeeId: scopeFilter.employeeId } : {}) } })
+    const selectedPPEs = await prisma.payrollPeriodEmployee.findMany({
+      where: { payrollPeriodId: id, isSelected: true, ...(scopeFilter.employeeId ? { employeeId: scopeFilter.employeeId } : {}) },
+      select: { employeeId: true },
+    })
+    const selectedEmployeeIds = selectedPPEs.map(s => s.employeeId)
+    const selectedEmployeeCount = selectedEmployeeIds.length
     const inputBaseWhere: any = { payrollPeriodId: id }
     if (scopeFilter.employeeId) inputBaseWhere.employeeId = scopeFilter.employeeId
     const totalInputs = await prisma.payrollInput.count({ where: inputBaseWhere })
@@ -30,10 +36,15 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     )
     const lockedCount = await prisma.payrollInput.count({ where: { ...inputBaseWhere, isLocked: true } })
     const unlockedCount = await prisma.payrollInput.count({ where: { ...inputBaseWhere, isLocked: false } })
-    const readyEmployees = await prisma.employee.count({
-      where: { payrollPeriodEmployees: { some: { payrollPeriodId: id, isSelected: true } }, payrollProfile: { isNot: null } },
-    })
-    const notReadyEmployees = selectedEmployees - readyEmployees
+    let readyEmployeeCount = 0
+    let notReadyEmployeeCount = 0
+    for (const eid of selectedEmployeeIds) {
+      const readiness = await getPayrollReadiness(eid)
+      if (readiness) {
+        if (readiness.blockers.length > 0) notReadyEmployeeCount++
+        else readyEmployeeCount++
+      }
+    }
     const missingInputs = await checkPayrollPeriodMissingInputs(id, session.userId)
     const waivers = await prisma.payrollInputWaiver.findMany({ where: { payrollPeriodId: id, isActive: true } })
     const waivedSummary = {
@@ -46,15 +57,15 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     const readyForCalc = period.status === 'READY_FOR_CALCULATION'
     return success({
       periodDetails: period,
-      selectedEmployeeCount: selectedEmployees,
-      readyEmployeeCount: readyEmployees,
-      notReadyEmployeeCount: Math.max(0, notReadyEmployees),
+      selectedEmployeeCount,
+      readyEmployeeCount,
+      notReadyEmployeeCount,
       inputStatusSummary: { total: totalInputs, byStatus: Object.fromEntries(inputByStatus.map(s => [s.status, s.count])) },
       missingInputSummary: { blockers: missingInputs.blockers.length, warnings: missingInputs.warnings.length, infos: missingInputs.infos.length },
       waivedInputSummary: waivedSummary,
       lockedInputSummary: { locked: lockedCount, unlocked: unlockedCount },
       reviewStatus: period.status,
-      readyForCalculationChecklist: { isReady: readyForCalc, missingRequiredInputs: missingInputs.blockers.length + missingInputs.warnings.length, rejectedInputs, returnedInputs, unlockedAcceptedInputs: unlockedAccepted },
+      readyForCalculationChecklist: { isReady: readyForCalc, missingRequiredInputs: missingInputs.blockers.length, rejectedInputs, returnedInputs, unlockedAcceptedInputs: unlockedAccepted },
     })
   } catch (err) { console.error(err); return internalError() }
 }

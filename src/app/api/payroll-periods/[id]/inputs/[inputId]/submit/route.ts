@@ -19,6 +19,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
     const input = await prisma.payrollInput.findUnique({ where: { id: inputId, payrollPeriodId: id } })
     if (!input) return notFound('Input record not found')
+    if (input.isLocked) return badRequest('Input is locked and cannot be submitted')
     if (input.status !== 'DRAFT' && input.status !== 'RETURNED') return badRequest('Only DRAFT or RETURNED inputs can be submitted')
 
     const scopeCheck = await assertPayrollInputInUserScope(session.userId, inputId)

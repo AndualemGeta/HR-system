@@ -94,6 +94,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       })
 
       if (existing) {
+        if (existing.isLocked) {
+          errors++
+          details.push({ employeeId: row.employeeId, inputTypeCode: row.inputTypeCode, status: 'ERROR', error: 'Record is locked and cannot be overwritten by import.' })
+          continue
+        }
+
         if (importMode === 'CREATE_ONLY') {
           errors++
           details.push({ employeeId: row.employeeId, inputTypeCode: row.inputTypeCode, status: 'ERROR', error: 'Record already exists. CREATE_ONLY mode disallows updates.' })

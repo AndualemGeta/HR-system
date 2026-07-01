@@ -305,6 +305,8 @@ enum PayrollPeriodStatus {
   DRAFT
   OPEN_FOR_INPUT
   INPUT_COLLECTION_CLOSED
+  REVIEW_IN_PROGRESS
+  READY_FOR_CALCULATION
   READY_FOR_REVIEW
   CANCELLED
 }
@@ -447,6 +449,18 @@ enum AuditAction {
   PAYROLL_INPUT_RETURN
   PAYROLL_INPUT_IMPORT_PREVIEW
   PAYROLL_INPUT_IMPORT_CONFIRM
+  PAYROLL_INPUT_REQUIREMENT_CREATE
+  PAYROLL_INPUT_REQUIREMENT_UPDATE
+  PAYROLL_INPUT_REQUIREMENT_DEACTIVATE
+  PAYROLL_MISSING_INPUT_CHECK
+  PAYROLL_INPUT_LOCK
+  PAYROLL_INPUT_UNLOCK
+  PAYROLL_INPUT_LOCK_ACCEPTED
+  PAYROLL_INPUT_WAIVER_CREATE
+  PAYROLL_INPUT_WAIVER_DEACTIVATE
+  PAYROLL_PERIOD_REVIEW_START
+  PAYROLL_PERIOD_READY_FOR_CALCULATION
+  PAYROLL_PREPARATION_SUMMARY_EXPORT
   OTHER
 }
 
@@ -477,6 +491,10 @@ model User {
   payrollPeriodEmployeesAdded   PayrollPeriodEmployee[] @relation("PPEmployeeAddedBy")
   payrollPeriodEmployeesRemoved PayrollPeriodEmployee[] @relation("PPEmployeeRemovedBy")
   payrollInputsSubmitted  PayrollInput[] @relation("PayrollInputSubmittedBy")
+  payrollInputsLocked     PayrollInput[] @relation("PayrollInputLockedBy")
+  inputRequirementsCreated PayrollInputRequirement[] @relation("InputRequirementCreatedBy")
+  inputRequirementsUpdated PayrollInputRequirement[] @relation("InputRequirementUpdatedBy")
+  inputWaiversCreated     PayrollInputWaiver[] @relation("InputWaiverCreatedBy")
 }
 
 model Role {
@@ -620,6 +638,7 @@ model Employee {
   payrollProfile              EmployeePayrollProfile?
   payrollPeriodEmployees      PayrollPeriodEmployee[]
   payrollInputs               PayrollInput[]
+  payrollInputWaivers         PayrollInputWaiver[]
   @@index([employmentStatus])
   @@index([currentRole])
   @@index([currentDepartmentId])
@@ -1543,6 +1562,7 @@ model PayrollPeriod {
   createdBy  User?                @relation(fields: [createdById], references: [id])
   employees  PayrollPeriodEmployee[]
   inputs     PayrollInput[]
+  waivers    PayrollInputWaiver[]
   @@index([status])
   @@index([createdById])
 }
@@ -1564,6 +1584,8 @@ model PayrollInputType {
   createdBy        User?                      @relation("InputTypeCreatedBy", fields: [createdById], references: [id])
   updatedBy        User?                      @relation("InputTypeUpdatedBy", fields: [updatedById], references: [id])
   inputs           PayrollInput[]
+  requirements     PayrollInputRequirement[]
+  waivers          PayrollInputWaiver[]
   @@index([code])
   @@index([category])
   @@index([isActive])
@@ -1599,15 +1621,63 @@ model PayrollInput {
   status          PayrollInputStatus   @default(DRAFT)
   submittedById   String?
   submittedAt     DateTime?
+  isLocked        Boolean              @default(false)
+  lockedById      String?
+  lockedAt        DateTime?
+  lockReason      String?
   createdAt       DateTime             @default(now())
   updatedAt       DateTime             @updatedAt
   payrollPeriod   PayrollPeriod        @relation(fields: [payrollPeriodId], references: [id], onDelete: Cascade)
   employee        Employee             @relation(fields: [employeeId], references: [id], onDelete: Cascade)
   inputType       PayrollInputType     @relation(fields: [inputTypeId], references: [id])
   submittedBy     User?                @relation("PayrollInputSubmittedBy", fields: [submittedById], references: [id])
+  lockedBy        User?                @relation("PayrollInputLockedBy", fields: [lockedById], references: [id])
   @@index([payrollPeriodId, employeeId])
   @@index([payrollPeriodId, inputTypeId])
   @@index([payrollPeriodId, status])
   @@index([employeeId])
   @@unique([payrollPeriodId, employeeId, inputTypeId])
+}
+
+model PayrollInputRequirement {
+  id               String             @id @default(uuid())
+  inputTypeId      String
+  employeeCategory EmployeeCategory?
+  role             EmployeeRole?
+  departmentId     String?
+  regionId         String?
+  areaId           String?
+  shopId           String?
+  employmentType   EmploymentType?
+  isRequired       Boolean            @default(true)
+  severity         String             @default("BLOCKER")
+  isActive         Boolean            @default(true)
+  createdById      String?
+  updatedById      String?
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+  inputType        PayrollInputType   @relation(fields: [inputTypeId], references: [id])
+  createdBy        User?              @relation("InputRequirementCreatedBy", fields: [createdById], references: [id])
+  updatedBy        User?              @relation("InputRequirementUpdatedBy", fields: [updatedById], references: [id])
+  @@index([inputTypeId, isActive])
+  @@index([employeeCategory, role])
+}
+
+model PayrollInputWaiver {
+  id              String       @id @default(uuid())
+  payrollPeriodId String
+  employeeId      String
+  inputTypeId     String
+  reason          String
+  severity        String       @default("WARNING")
+  createdById     String?
+  createdAt       DateTime     @default(now())
+  isActive        Boolean      @default(true)
+  payrollPeriod   PayrollPeriod @relation(fields: [payrollPeriodId], references: [id], onDelete: Cascade)
+  employee        Employee     @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  inputType       PayrollInputType @relation(fields: [inputTypeId], references: [id])
+  createdBy       User?        @relation("InputWaiverCreatedBy", fields: [createdById], references: [id])
+  @@unique([payrollPeriodId, employeeId, inputTypeId])
+  @@index([payrollPeriodId])
+  @@index([employeeId])
 }

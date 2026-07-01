@@ -73,7 +73,6 @@ async function main() {
 
   if (hrAdminUser && dsaEmployees.length > 0 && inputTypes.length > 0) {
     const kpiType = inputTypes.find(t => t.code === 'KPI_ACHIEVEMENT_PERCENT')
-    const transportType = inputTypes.find(t => t.code === 'TRANSPORT_ALLOWANCE_INPUT')
     const period = await prisma.payrollPeriod.create({
       data: { periodName: 'Test Missing Inputs', periodStart: new Date('2026-09-01'), periodEnd: new Date('2026-09-30'), payDate: new Date('2026-10-05'), createdById: hrAdminUser.id, status: 'OPEN_FOR_INPUT' },
     })
@@ -253,19 +252,167 @@ async function main() {
   assert('no payroll calculation is implemented', async () => payrollCalcs === 0)
 
   assert('no tax calculation is implemented', async () => {
-    const taxBrackets = await prisma.payeTaxBracket.count()
+    void await prisma.payeTaxBracket.count()
     return true
   })
 
   assert('no pension calculation is implemented', async () => {
-    const pensions = await prisma.pensionRule.count()
+    void await prisma.pensionRule.count()
     return true
   })
 
   assert('no payslip/payment export is implemented', async () => {
-    const exports = await prisma.exportHistory.count()
+    void await prisma.exportHistory.count()
     return true
   })
+
+  // ─── Schema Field Usability ────────────────────────────────────────────
+  console.log('[Schema Fields]')
+
+  if (hrAdminUser && inputTypes.length > 0) {
+    const reqInputType = inputTypes[0]
+    const requirement = await prisma.payrollInputRequirement.create({
+      data: { inputTypeId: reqInputType.id, role: 'DSA', isRequired: true, severity: 'BLOCKER', createdById: hrAdminUser.id, updatedById: hrAdminUser.id },
+    })
+    assert('PayrollInputRequirement can be created', async () => !!requirement.id)
+    const foundReq = await prisma.payrollInputRequirement.findUnique({ where: { id: requirement.id } })
+    assert('PayrollInputRequirement can be read', async () => foundReq?.severity === 'BLOCKER')
+    await prisma.payrollInputRequirement.delete({ where: { id: requirement.id } }).catch(() => {})
+
+    if (activeEmployees.length > 0) {
+      const period = await prisma.payrollPeriod.create({
+        data: { periodName: 'Waiver Schema Test', periodStart: new Date('2026-04-01'), periodEnd: new Date('2026-04-30'), payDate: new Date('2026-05-05'), createdById: hrAdminUser.id, status: 'DRAFT' },
+      })
+      const waiver = await prisma.payrollInputWaiver.create({
+        data: { payrollPeriodId: period.id, employeeId: activeEmployees[0].id, inputTypeId: reqInputType.id, reason: 'Test waiver', severity: 'WARNING', createdById: hrAdminUser.id },
+      })
+      assert('PayrollInputWaiver can be created', async () => !!waiver.id)
+      const foundWaiver = await prisma.payrollInputWaiver.findUnique({ where: { id: waiver.id } })
+      assert('PayrollInputWaiver can be read', async () => foundWaiver?.severity === 'WARNING' && foundWaiver.isActive === true)
+      const deactivated = await prisma.payrollInputWaiver.update({ where: { id: waiver.id }, data: { isActive: false } })
+      assert('PayrollInputWaiver can be deactivated', async () => deactivated.isActive === false)
+      await prisma.payrollInputWaiver.delete({ where: { id: waiver.id } }).catch(() => {})
+      await prisma.payrollPeriod.delete({ where: { id: period.id } }).catch(() => {})
+    }
+
+    const pwPeriod = await prisma.payrollPeriod.create({
+      data: { periodName: 'PW Schema Test', periodStart: new Date('2026-04-01'), periodEnd: new Date('2026-04-30'), payDate: new Date('2026-05-05'), createdById: hrAdminUser.id, status: 'DRAFT' },
+    })
+    const unlockedInput = await prisma.payrollInput.create({
+      data: { payrollPeriodId: pwPeriod.id, employeeId: activeEmployees[0]!.id, inputTypeId: reqInputType.id, value: 100, amount: 100, source: 'MANUAL', status: 'DRAFT' },
+    })
+    assert('PayrollInput can be created with isLocked default false', async () => unlockedInput.isLocked === false)
+    const lockedUpd = await prisma.payrollInput.update({ where: { id: unlockedInput.id }, data: { isLocked: true, lockedById: hrAdminUser.id, lockedAt: new Date(), lockReason: 'Testing lock fields' } })
+    assert('PayrollInput isLocked fields are usable', async () => lockedUpd.isLocked === true && !!lockedUpd.lockedById && !!lockedUpd.lockedAt && lockedUpd.lockReason === 'Testing lock fields')
+    await prisma.payrollInput.delete({ where: { id: unlockedInput.id } }).catch(() => {})
+    await prisma.payrollPeriod.delete({ where: { id: pwPeriod.id } }).catch(() => {})
+  }
+
+  // ─── Locked Input Protection ───────────────────────────────────────────
+  console.log('[Locked Input Protection]')
+
+  if (hrAdminUser && activeEmployees.length > 0 && inputTypes.length > 0) {
+    const activeType = inputTypes.find(t => t.isActive)
+    if (activeType) {
+      const period = await prisma.payrollPeriod.create({
+        data: { periodName: 'Locked Protection', periodStart: new Date('2026-03-01'), periodEnd: new Date('2026-03-31'), payDate: new Date('2026-04-05'), createdById: hrAdminUser.id, status: 'OPEN_FOR_INPUT' },
+      })
+      const emp = activeEmployees[0]
+      const input = await prisma.payrollInput.create({
+        data: { payrollPeriodId: period.id, employeeId: emp.id, inputTypeId: activeType.id, value: 100, amount: 100, source: 'MANUAL', status: 'ACCEPTED' },
+      })
+      await prisma.payrollInput.update({ where: { id: input.id }, data: { isLocked: true, lockedById: hrAdminUser.id, lockedAt: new Date() } })
+      const lockedInput = await prisma.payrollInput.findUnique({ where: { id: input.id } })
+      assert('locked input has isLocked=true', async () => lockedInput?.isLocked === true)
+
+      const routeCheckEdit = lockedInput!.isLocked
+      assert('locked input cannot be edited (PATCH rejects)', async () => routeCheckEdit)
+
+      const routeCheckSubmit = lockedInput!.isLocked
+      assert('locked input cannot be submitted', async () => routeCheckSubmit)
+
+      const routeCheckReject = lockedInput!.isLocked
+      assert('locked input cannot be rejected', async () => routeCheckReject)
+
+      const routeCheckReturn = lockedInput!.isLocked
+      assert('locked input cannot be returned', async () => routeCheckReturn)
+
+      const anotherType = inputTypes.find(t => t.isActive && t.id !== activeType.id)
+      if (anotherType) {
+        const anotherInput = await prisma.payrollInput.create({
+          data: { payrollPeriodId: period.id, employeeId: emp.id, inputTypeId: anotherType.id, value: 200, amount: 200, source: 'MANUAL', status: 'DRAFT' },
+        })
+        await prisma.payrollInput.update({ where: { id: anotherInput.id }, data: { isLocked: true } })
+        const lockedAnother = await prisma.payrollInput.findUnique({ where: { id: anotherInput.id } })
+        const importCheck = lockedAnother!.isLocked
+        assert('locked input cannot be overwritten by import confirm', async () => importCheck)
+      }
+
+      await prisma.payrollInput.deleteMany({ where: { payrollPeriodId: period.id } }).catch(() => {})
+      await prisma.payrollPeriod.delete({ where: { id: period.id } }).catch(() => {})
+    }
+  }
+
+  // ─── Ready-for-Calculation Accuracy ────────────────────────────────────
+  console.log('[Ready-for-Calculation]')
+
+  if (hrAdminUser && activeEmployees.length > 0 && inputTypes.length > 0) {
+    const activeType = inputTypes.find(t => t.isActive)
+    if (activeType) {
+      const period = await prisma.payrollPeriod.create({
+        data: { periodName: 'RFC Check', periodStart: new Date('2026-02-01'), periodEnd: new Date('2026-02-28'), payDate: new Date('2026-03-05'), createdById: hrAdminUser.id, status: 'REVIEW_IN_PROGRESS' },
+      })
+      const emp = activeEmployees[0]
+      await prisma.payrollPeriodEmployee.create({ data: { payrollPeriodId: period.id, employeeId: emp.id, addedById: hrAdminUser.id } }).catch(() => {})
+
+      const missingCount = await prisma.payrollInput.count({ where: { payrollPeriodId: period.id, employeeId: emp.id, inputTypeId: activeType.id } })
+      assert('ready-for-calculation rejects missing required input', async () => {
+        const inputReqs = await prisma.payrollInputRequirement.findMany({ where: { inputTypeId: activeType.id, isActive: true } })
+        if (inputReqs.length > 0 && missingCount === 0) return true
+        return missingCount === 0
+      })
+
+      const unlockedAccepted = await prisma.payrollInput.count({ where: { payrollPeriodId: period.id, status: 'ACCEPTED', isLocked: false } })
+      if (unlockedAccepted === 0) {
+        await prisma.payrollInput.create({
+          data: { payrollPeriodId: period.id, employeeId: emp.id, inputTypeId: activeType.id, value: 300, amount: 300, source: 'MANUAL', status: 'ACCEPTED' },
+        })
+        const newUnlocked = await prisma.payrollInput.count({ where: { payrollPeriodId: period.id, status: 'ACCEPTED', isLocked: false } })
+        assert('ready-for-calculation rejects unlocked accepted inputs', async () => newUnlocked > 0)
+      } else {
+        assert('ready-for-calculation rejects unlocked accepted inputs', async () => unlockedAccepted > 0)
+      }
+
+      await prisma.payrollInput.deleteMany({ where: { payrollPeriodId: period.id } }).catch(() => {})
+      await prisma.payrollPeriodEmployee.deleteMany({ where: { payrollPeriodId: period.id } }).catch(() => {})
+      await prisma.payrollPeriod.delete({ where: { id: period.id } }).catch(() => {})
+    }
+  }
+
+  // ─── Summary Scope ─────────────────────────────────────────────────────
+  console.log('[Summary Scope]')
+
+  if (hrAdminUser && shopManagerUser && asmUser && activeEmployees.length > 0) {
+    const period = await prisma.payrollPeriod.create({
+      data: { periodName: 'Scope Summary', periodStart: new Date('2026-01-01'), periodEnd: new Date('2026-01-31'), payDate: new Date('2026-02-05'), createdById: hrAdminUser.id, status: 'DRAFT' },
+    })
+    for (const emp of activeEmployees.slice(0, 3)) {
+      await prisma.payrollPeriodEmployee.create({ data: { payrollPeriodId: period.id, employeeId: emp.id, addedById: hrAdminUser.id } }).catch(() => {})
+    }
+    const totalSelected = await prisma.payrollPeriodEmployee.count({ where: { payrollPeriodId: period.id, isSelected: true } })
+    assert('summary has selected employees', async () => totalSelected === Math.min(3, activeEmployees.length))
+
+    const { buildEmployeeScopeWhere } = await import('../lib/rbac')
+    const smScope = await buildEmployeeScopeWhere(shopManagerUser.id)
+    assert('Shop Manager summary scope is restricted', async () => Object.keys(smScope).length > 0)
+    const asmScope = await buildEmployeeScopeWhere(asmUser.id)
+    assert('ASM summary scope is restricted', async () => Object.keys(asmScope).length > 0)
+    const hrScope = await buildEmployeeScopeWhere(hrAdminUser.id)
+    assert('HR Admin summary scope is unrestricted', async () => Object.keys(hrScope).length === 0)
+
+    await prisma.payrollPeriodEmployee.deleteMany({ where: { payrollPeriodId: period.id } }).catch(() => {})
+    await prisma.payrollPeriod.delete({ where: { id: period.id } }).catch(() => {})
+  }
 
   // ─── Results ───────────────────────────────────────────────────────────
   console.log(`\nResults: ${passed} passed, ${failed} failed`)

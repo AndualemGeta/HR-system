@@ -26,6 +26,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
     const input = await prisma.payrollInput.findUnique({ where: { id: inputId, payrollPeriodId: id } })
     if (!input) return notFound('Input record not found')
+    if (input.isLocked) return badRequest('Input is locked and cannot be edited')
     if (input.status !== 'DRAFT' && input.status !== 'RETURNED') return badRequest('Only DRAFT or RETURNED inputs can be edited')
 
     const scopeCheck = await assertPayrollInputInUserScope(session.userId, inputId)

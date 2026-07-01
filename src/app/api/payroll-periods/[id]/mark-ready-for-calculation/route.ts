@@ -4,6 +4,7 @@ import { userHasPermission } from '@/lib/rbac'
 import { success, badRequest, unauthorized, forbidden, notFound, internalError } from '@/lib/api'
 import { createAuditLog } from '@/lib/audit'
 import { checkPayrollPeriodMissingInputs } from '@/lib/payroll-missing-inputs'
+import { getPayrollReadiness } from '@/lib/payroll-readiness'
 
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -20,20 +21,23 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     const rejectedCount = await prisma.payrollInput.count({ where: { payrollPeriodId: id, status: 'REJECTED' } })
     const returnedCount = await prisma.payrollInput.count({ where: { payrollPeriodId: id, status: 'RETURNED' } })
     const unlockedAccepted = await prisma.payrollInput.count({ where: { payrollPeriodId: id, status: 'ACCEPTED', isLocked: false } })
-    const blockedEmployees = await prisma.employee.count({
-      where: {
-        payrollPeriodEmployees: { some: { payrollPeriodId: id, isSelected: true } },
-        payrollProfile: { is: { id: { not: undefined } } },
-      },
+    const selectedEmployees = await prisma.payrollPeriodEmployee.findMany({
+      where: { payrollPeriodId: id, isSelected: true },
+      select: { employeeId: true },
     })
+    let blockedEmployeeCount = 0
+    for (const se of selectedEmployees) {
+      const readiness = await getPayrollReadiness(se.employeeId)
+      if (readiness && readiness.blockers.length > 0) blockedEmployeeCount++
+    }
     const checklist = {
-      missingRequiredInputs: missingInputs.blockers.length + missingInputs.warnings.length,
+      missingRequiredInputs: missingInputs.blockers.length,
       rejectedInputs: rejectedCount,
       returnedInputs: returnedCount,
       unlockedAcceptedInputs: unlockedAccepted,
-      employeesWithPayrollReadinessBlockers: blockedEmployees,
+      employeesWithPayrollReadinessBlockers: blockedEmployeeCount,
     }
-    if (checklist.missingRequiredInputs > 0 || checklist.rejectedInputs > 0 || checklist.returnedInputs > 0 || checklist.unlockedAcceptedInputs > 0) {
+    if (checklist.missingRequiredInputs > 0 || checklist.rejectedInputs > 0 || checklist.returnedInputs > 0 || checklist.unlockedAcceptedInputs > 0 || checklist.employeesWithPayrollReadinessBlockers > 0) {
       return badRequest('Period is not ready for calculation', checklist)
     }
     const updated = await prisma.payrollPeriod.update({ where: { id }, data: { status: 'READY_FOR_CALCULATION' } })
