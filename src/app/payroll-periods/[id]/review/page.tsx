@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
-import { requirePagePermission } from '@/lib/page-guard'
 
 interface Period { id: string; periodName: string; status: string; periodStart: string; periodEnd: string }
 interface InputRecord { id: string; employeeId: string; employee: { employeeId: string; fullName: string; currentRole: string }; inputType: { code: string; name: string }; value: number | null; amount: number | null; status: string; source: string; note: string | null; isLocked: boolean; submittedById: string | null; submittedAt: string | null; submittedBy: { name: string } | null }
@@ -17,7 +16,6 @@ export default function PayrollReviewPage() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    requirePagePermission('payrollPeriod.view')
     async function load() {
       const [periodRes, inputsRes, missingRes] = await Promise.all([
         fetch(`/api/payroll-periods/${id}`).then(r => r.json()),

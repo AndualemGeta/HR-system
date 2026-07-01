@@ -3,7 +3,6 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Plus, EyeOff } from 'lucide-react'
-import { requirePagePermission } from '@/lib/page-guard'
 
 interface Requirement {
   id: string
@@ -28,7 +27,6 @@ export default function PayrollInputRequirementsPage() {
   const router = useRouter()
 
   useEffect(() => {
-    requirePagePermission('payrollInputRequirement.view')
     fetch('/api/payroll-input-requirements').then(r => r.json()).then(d => setRequirements(d.data || []))
   }, [])
 

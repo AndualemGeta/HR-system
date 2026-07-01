@@ -414,6 +414,83 @@ async function main() {
     await prisma.payrollPeriod.delete({ where: { id: period.id } }).catch(() => {})
   }
 
+  // ─── Waiver Scope + Lock Safeguard ────────────────────────────────────
+  console.log('[Waiver Scope & Lock Safeguard]')
+
+  if (hrAdminUser && shopManagerUser && asmUser && activeEmployees.length > 0 && inputTypes.length > 0) {
+    const activeType = inputTypes.find(t => t.isActive)
+    if (activeType) {
+      const period = await prisma.payrollPeriod.create({
+        data: { periodName: 'Waiver Scope Test', periodStart: new Date('2025-12-01'), periodEnd: new Date('2025-12-31'), payDate: new Date('2026-01-05'), createdById: hrAdminUser.id, status: 'OPEN_FOR_INPUT' },
+      })
+      for (const emp of activeEmployees.slice(0, 2)) {
+        await prisma.payrollPeriodEmployee.create({ data: { payrollPeriodId: period.id, employeeId: emp.id, addedById: hrAdminUser.id } }).catch(() => {})
+      }
+
+      const { buildEmployeeScopeWhere } = await import('../lib/rbac')
+      const { assertEmployeeInUserScope } = await import('../lib/payroll-scope')
+      const smScope = await buildEmployeeScopeWhere(shopManagerUser.id)
+      const smScopeEmpIds = Object.keys(smScope).length > 0
+        ? (await prisma.employee.findMany({ where: smScope, select: { id: true } })).map(e => e.id)
+        : activeEmployees.map(e => e.id)
+
+      const outOfScopeEmp = activeEmployees.find(e => !smScopeEmpIds.includes(e.id))
+      const inScopeEmp = activeEmployees.find(e => smScopeEmpIds.includes(e.id))
+
+      if (outOfScopeEmp && inScopeEmp) {
+        await prisma.payrollInputWaiver.create({
+          data: { payrollPeriodId: period.id, employeeId: outOfScopeEmp.id, inputTypeId: activeType.id, reason: 'Out of scope waiver', createdById: hrAdminUser.id },
+        }).catch(() => {})
+        await prisma.payrollInputWaiver.create({
+          data: { payrollPeriodId: period.id, employeeId: inScopeEmp.id, inputTypeId: activeType.id, reason: 'In scope waiver', createdById: hrAdminUser.id },
+        }).catch(() => {})
+
+        const allWaivers = await prisma.payrollInputWaiver.findMany({ where: { payrollPeriodId: period.id } })
+        assert('waivers exist for both employees', async () => allWaivers.length >= 2)
+
+        const outOfScopeCheck = await assertEmployeeInUserScope(shopManagerUser.id, outOfScopeEmp.id)
+        assert('Shop Manager cannot create waiver for out-of-scope employee', async () => !outOfScopeCheck.allowed)
+
+        const inScopeCheck = await assertEmployeeInUserScope(shopManagerUser.id, inScopeEmp.id)
+        assert('Shop Manager can create waiver for in-scope employee', async () => inScopeCheck.allowed)
+
+        const asmOutCheck = await assertEmployeeInUserScope(asmUser.id, outOfScopeEmp.id)
+        assert('ASM cannot create waiver for out-of-scope employee', async () => !asmOutCheck.allowed)
+      }
+
+      const anotherType2 = inputTypes.find(t => t.isActive && t.id !== activeType.id)
+      const empWithExistingInput = activeEmployees[0]
+      await prisma.payrollInput.create({
+        data: { payrollPeriodId: period.id, employeeId: empWithExistingInput.id, inputTypeId: activeType.id, value: 500, amount: 500, source: 'MANUAL', status: 'ACCEPTED' },
+      })
+
+      const acceptedInput = anotherType2 ? await prisma.payrollInput.create({
+        data: { payrollPeriodId: period.id, employeeId: empWithExistingInput.id, inputTypeId: anotherType2.id, value: 600, amount: 600, source: 'MANUAL', status: 'ACCEPTED' },
+      }) : null
+      if (acceptedInput) {
+        await prisma.payrollInput.update({ where: { id: acceptedInput.id }, data: { isLocked: true } })
+        const lockedCheck = await prisma.payrollInput.findUnique({ where: { id: acceptedInput.id } })
+        assert('locked accepted input has isLocked=true', async () => lockedCheck?.isLocked === true)
+
+        const acceptRejectsLocked = lockedCheck?.isLocked === true
+        assert('locked input cannot be accepted', async () => acceptRejectsLocked)
+      }
+
+      if (outOfScopeEmp) {
+        const outOfScopeWaiver = await prisma.payrollInputWaiver.findFirst({ where: { payrollPeriodId: period.id, employeeId: outOfScopeEmp.id } })
+        if (outOfScopeWaiver) {
+          const deactivateScopeCheck = await assertEmployeeInUserScope(shopManagerUser.id, outOfScopeWaiver.employeeId)
+          assert('Shop Manager cannot deactivate waiver for out-of-scope employee', async () => !deactivateScopeCheck.allowed)
+        }
+      }
+
+      await prisma.payrollInput.deleteMany({ where: { payrollPeriodId: period.id } }).catch(() => {})
+      await prisma.payrollInputWaiver.deleteMany({ where: { payrollPeriodId: period.id } }).catch(() => {})
+      await prisma.payrollPeriodEmployee.deleteMany({ where: { payrollPeriodId: period.id } }).catch(() => {})
+      await prisma.payrollPeriod.delete({ where: { id: period.id } }).catch(() => {})
+    }
+  }
+
   // ─── Results ───────────────────────────────────────────────────────────
   console.log(`\nResults: ${passed} passed, ${failed} failed`)
   if (failed > 0) {
