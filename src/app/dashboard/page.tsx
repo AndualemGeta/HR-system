@@ -75,6 +75,7 @@ export default function DashboardPage() {
       links: [
         { label: 'Payroll Periods', href: '/payroll-periods', permission: 'payrollPeriod.view' },
         { label: 'Payroll Input Types', href: '/payroll-input-types', permission: 'payrollInputType.view' },
+        { label: 'Input Requirements', href: '/payroll-input-requirements', permission: 'payrollInputRequirement.view' },
       ],
     },
     {

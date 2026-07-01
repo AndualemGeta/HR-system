@@ -27,6 +27,11 @@ const ALL_PERMISSIONS = [
   'payrollPeriod.view', 'payrollPeriod.create', 'payrollPeriod.update', 'payrollPeriod.open', 'payrollPeriod.close', 'payrollPeriod.cancel',
   'payrollInputType.view', 'payrollInputType.manage',
   'payrollInput.view', 'payrollInput.create', 'payrollInput.submit', 'payrollInput.review', 'payrollInput.import', 'payrollInput.export',
+  'payrollInput.lock', 'payrollInput.unlock',
+  'payrollInputRequirement.view', 'payrollInputRequirement.manage',
+  'payrollInputWaiver.view', 'payrollInputWaiver.create', 'payrollInputWaiver.deactivate',
+  'payrollPeriod.review', 'payrollPeriod.markReadyForCalculation',
+  'payrollPreparationSummary.view', 'payrollPreparationSummary.export',
 ] as const
 
 const ROLE_PERMISSIONS: Record<string, string[]> = {
@@ -52,6 +57,11 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
     'payrollPeriod.view', 'payrollPeriod.create', 'payrollPeriod.update', 'payrollPeriod.open', 'payrollPeriod.close', 'payrollPeriod.cancel',
     'payrollInputType.view', 'payrollInputType.manage',
     'payrollInput.view', 'payrollInput.create', 'payrollInput.submit', 'payrollInput.review', 'payrollInput.import', 'payrollInput.export',
+    'payrollInput.lock', 'payrollInput.unlock',
+    'payrollInputRequirement.view', 'payrollInputRequirement.manage',
+    'payrollInputWaiver.view', 'payrollInputWaiver.create', 'payrollInputWaiver.deactivate',
+    'payrollPeriod.review', 'payrollPeriod.markReadyForCalculation',
+    'payrollPreparationSummary.view', 'payrollPreparationSummary.export',
   ],
   HR_OFFICER: [
     'employee.view', 'employee.create', 'employee.update',
@@ -69,6 +79,10 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
     'payrollPeriod.view',
     'payrollInput.view', 'payrollInput.create', 'payrollInput.submit', 'payrollInput.import',
     'payrollInputType.view',
+    'payrollInputRequirement.view',
+    'payrollInputWaiver.view', 'payrollInputWaiver.create',
+    'payrollPeriod.review',
+    'payrollPreparationSummary.view',
   ],
   FINANCE_DIRECTOR: [
     'employee.view', 'salary.view', 'salary.update',
@@ -85,6 +99,11 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
     'payrollPeriod.view', 'payrollPeriod.open', 'payrollPeriod.close',
     'payrollInput.view', 'payrollInput.review', 'payrollInput.export',
     'payrollInputType.view',
+    'payrollInput.lock', 'payrollInput.unlock',
+    'payrollInputRequirement.view',
+    'payrollInputWaiver.view', 'payrollInputWaiver.create', 'payrollInputWaiver.deactivate',
+    'payrollPeriod.review', 'payrollPeriod.markReadyForCalculation',
+    'payrollPreparationSummary.view', 'payrollPreparationSummary.export',
   ],
   FINANCE_PAYROLL: [
     'employee.view', 'salary.view', 'reports.view',
@@ -97,6 +116,11 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
     'payrollPeriod.view', 'payrollPeriod.create', 'payrollPeriod.update',
     'payrollInput.view', 'payrollInput.create', 'payrollInput.submit', 'payrollInput.review', 'payrollInput.import', 'payrollInput.export',
     'payrollInputType.view',
+    'payrollInput.lock',
+    'payrollInputRequirement.view',
+    'payrollInputWaiver.view', 'payrollInputWaiver.create',
+    'payrollPeriod.review',
+    'payrollPreparationSummary.view', 'payrollPreparationSummary.export',
   ],
   TREASURY_MANAGER: [
     'employee.view', 'salary.view',
@@ -115,12 +139,14 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
     'phaseControl.view',
     'payrollPeriod.view',
     'payrollInput.view', 'payrollInput.create', 'payrollInput.submit',
+    'payrollPreparationSummary.view',
   ],
   ASM: [
     'employee.view', 'reports.view',
     'document.view',
     'payrollPeriod.view',
     'payrollInput.view', 'payrollInput.create', 'payrollInput.submit',
+    'payrollPreparationSummary.view',
   ],
   SHOP_MANAGER: [
     'employee.view',
@@ -129,6 +155,7 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
     'employee.payrollReadiness.export',
     'payrollPeriod.view',
     'payrollInput.view', 'payrollInput.create', 'payrollInput.submit',
+    'payrollPreparationSummary.view',
   ],
   EMPLOYEE: [],
   AUDITOR: [
@@ -140,6 +167,9 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
     'payrollPeriod.view',
     'payrollInput.view',
     'payrollInputType.view',
+    'payrollInputRequirement.view',
+    'payrollInputWaiver.view',
+    'payrollPreparationSummary.view', 'payrollPreparationSummary.export',
   ],
 }
 
@@ -164,6 +194,8 @@ async function main() {
   await prisma.auditLog.deleteMany()
   await prisma.importRow.deleteMany()
   await prisma.importSession.deleteMany()
+  await prisma.payrollInputWaiver.deleteMany()
+  await prisma.payrollInputRequirement.deleteMany()
   await prisma.payrollInput.deleteMany()
   await prisma.payrollPeriodEmployee.deleteMany()
   await prisma.payrollPeriod.deleteMany()
@@ -699,6 +731,22 @@ async function main() {
     })
   }
   console.log(`  Created ${defaultInputTypes.length} default payroll input types`)
+
+  // Seed default PayrollInputRequirements
+  const transportType = await prisma.payrollInputType.findUnique({ where: { code: 'TRANSPORT_ALLOWANCE_INPUT' } })
+  const kpiType = await prisma.payrollInputType.findUnique({ where: { code: 'KPI_ACHIEVEMENT_PERCENT' } })
+  const commissionType = await prisma.payrollInputType.findUnique({ where: { code: 'SALES_COMMISSION_INPUT' } })
+  const adminUser = userRecords.find(u => u.email === 'admin@leapfrog.com')
+  if (adminUser && transportType) {
+    await prisma.payrollInputRequirement.create({ data: { inputTypeId: transportType.id, role: 'DSA', isRequired: true, severity: 'BLOCKER', createdById: adminUser.id, updatedById: adminUser.id } }).catch(() => {})
+  }
+  if (adminUser && kpiType) {
+    await prisma.payrollInputRequirement.create({ data: { inputTypeId: kpiType.id, role: 'DSA', isRequired: true, severity: 'BLOCKER', createdById: adminUser.id, updatedById: adminUser.id } }).catch(() => {})
+  }
+  if (adminUser && commissionType) {
+    await prisma.payrollInputRequirement.create({ data: { inputTypeId: commissionType.id, role: 'DSA', isRequired: true, severity: 'BLOCKER', createdById: adminUser.id, updatedById: adminUser.id } }).catch(() => {})
+  }
+  console.log('  Created 3 default payroll input requirements (DSA)')
 
   console.log('\nSeed complete!')
   console.log('Demo users (password: Test123!):')

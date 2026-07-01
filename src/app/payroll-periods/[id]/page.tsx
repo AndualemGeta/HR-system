@@ -206,6 +206,12 @@ export default function PayrollPeriodDetailPage() {
             {has('payrollInput.import') && (
               <a href={`/payroll-periods/${id}/inputs/import`} style={{ background: '#6b7280', color: '#fff', padding: '0.35rem 0.75rem', borderRadius: 4, textDecoration: 'none', fontSize: '0.85rem' }}>Import</a>
             )}
+            {has('payrollPeriod.review') && (
+              <a href={`/payroll-periods/${id}/review`} style={{ background: '#8b5cf6', color: '#fff', padding: '0.35rem 0.75rem', borderRadius: 4, textDecoration: 'none', fontSize: '0.85rem' }}>Review</a>
+            )}
+            {has('payrollPreparationSummary.view') && (
+              <a href={`/payroll-periods/${id}/preparation-summary`} style={{ background: '#8b5cf6', color: '#fff', padding: '0.35rem 0.75rem', borderRadius: 4, textDecoration: 'none', fontSize: '0.85rem' }}>Summary</a>
+            )}
           </div>
         </div>
       </div>
