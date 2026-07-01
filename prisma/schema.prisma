@@ -301,6 +301,48 @@ enum ThresholdMetric {
   MANUAL_VALUE
 }
 
+enum PayrollPeriodStatus {
+  DRAFT
+  OPEN_FOR_INPUT
+  INPUT_COLLECTION_CLOSED
+  READY_FOR_REVIEW
+  CANCELLED
+}
+
+enum PayrollInputTypeCategory {
+  ALLOWANCE
+  DEDUCTION
+  COMMISSION
+  KPI
+  TRANSPORT
+  OVERTIME
+  BONUS
+  ADJUSTMENT
+  OTHER
+}
+
+enum PayrollInputTypeValueType {
+  AMOUNT
+  NUMBER
+  PERCENTAGE
+  BOOLEAN
+  TEXT
+}
+
+enum PayrollInputSource {
+  MANUAL
+  IMPORT
+  SYSTEM
+}
+
+enum PayrollInputStatus {
+  DRAFT
+  SUBMITTED
+  RETURNED
+  ACCEPTED
+  REJECTED
+}
+
 enum AuditAction {
   LOGIN
   LOGOUT
@@ -387,6 +429,24 @@ enum AuditAction {
   SALARY_RULE_APPROVAL_APPROVE
   SALARY_RULE_APPROVAL_REJECT
   PHASE_CONTROL_UPDATE
+  PAYROLL_PERIOD_CREATE
+  PAYROLL_PERIOD_UPDATE
+  PAYROLL_PERIOD_OPEN
+  PAYROLL_PERIOD_CLOSE
+  PAYROLL_PERIOD_CANCEL
+  PAYROLL_EMPLOYEE_ADD
+  PAYROLL_EMPLOYEE_REMOVE
+  PAYROLL_INPUT_TYPE_CREATE
+  PAYROLL_INPUT_TYPE_UPDATE
+  PAYROLL_INPUT_TYPE_DEACTIVATE
+  PAYROLL_INPUT_CREATE
+  PAYROLL_INPUT_UPDATE
+  PAYROLL_INPUT_SUBMIT
+  PAYROLL_INPUT_ACCEPT
+  PAYROLL_INPUT_REJECT
+  PAYROLL_INPUT_RETURN
+  PAYROLL_INPUT_IMPORT_PREVIEW
+  PAYROLL_INPUT_IMPORT_CONFIRM
   OTHER
 }
 
@@ -411,6 +471,12 @@ model User {
   payComponentsUpdated   PayComponent[] @relation("PayComponentUpdatedBy")
   payRulesCreated        PayRule[]      @relation("PayRuleCreatedBy")
   payRulesUpdated        PayRule[]      @relation("PayRuleUpdatedBy")
+  payrollPeriodsCreated  PayrollPeriod[]
+  inputTypesCreated      PayrollInputType[] @relation("InputTypeCreatedBy")
+  inputTypesUpdated      PayrollInputType[] @relation("InputTypeUpdatedBy")
+  payrollPeriodEmployeesAdded   PayrollPeriodEmployee[] @relation("PPEmployeeAddedBy")
+  payrollPeriodEmployeesRemoved PayrollPeriodEmployee[] @relation("PPEmployeeRemovedBy")
+  payrollInputsSubmitted  PayrollInput[] @relation("PayrollInputSubmittedBy")
 }
 
 model Role {
@@ -552,6 +618,8 @@ model Employee {
   evaluationsGiven            EmployeeEvaluation[]   @relation("EvaluationEvaluator")
   profileChangeRequests       EmployeeProfileChangeRequest[]
   payrollProfile              EmployeePayrollProfile?
+  payrollPeriodEmployees      PayrollPeriodEmployee[]
+  payrollInputs               PayrollInput[]
   @@index([employmentStatus])
   @@index([currentRole])
   @@index([currentDepartmentId])
@@ -1460,4 +1528,86 @@ model ImportRow {
   createdAt       DateTime        @default(now())
   session         ImportSession   @relation(fields: [sessionId], references: [id], onDelete: Cascade)
   @@index([sessionId, status])
+}
+
+model PayrollPeriod {
+  id         String               @id @default(uuid())
+  periodName String
+  periodStart DateTime
+  periodEnd  DateTime
+  payDate    DateTime
+  status     PayrollPeriodStatus  @default(DRAFT)
+  createdById String?
+  createdAt  DateTime             @default(now())
+  updatedAt  DateTime             @updatedAt
+  createdBy  User?                @relation(fields: [createdById], references: [id])
+  employees  PayrollPeriodEmployee[]
+  inputs     PayrollInput[]
+  @@index([status])
+  @@index([createdById])
+}
+
+model PayrollInputType {
+  id               String                     @id @default(uuid())
+  code             String                     @unique
+  name             String
+  description      String?
+  category         PayrollInputTypeCategory
+  valueType        PayrollInputTypeValueType
+  defaultAmount    Decimal?                   @db.Decimal(12, 2)
+  requiresApproval Boolean                    @default(false)
+  isActive         Boolean                    @default(true)
+  createdById      String?
+  updatedById      String?
+  createdAt        DateTime                   @default(now())
+  updatedAt        DateTime                   @updatedAt
+  createdBy        User?                      @relation("InputTypeCreatedBy", fields: [createdById], references: [id])
+  updatedBy        User?                      @relation("InputTypeUpdatedBy", fields: [updatedById], references: [id])
+  inputs           PayrollInput[]
+  @@index([code])
+  @@index([category])
+  @@index([isActive])
+}
+
+model PayrollPeriodEmployee {
+  id               String   @id @default(uuid())
+  payrollPeriodId  String
+  employeeId       String
+  addedById        String?
+  addedAt          DateTime @default(now())
+  removedAt        DateTime?
+  removedById      String?
+  isSelected       Boolean  @default(true)
+  payrollPeriod    PayrollPeriod @relation(fields: [payrollPeriodId], references: [id], onDelete: Cascade)
+  employee         Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  addedBy          User?    @relation("PPEmployeeAddedBy", fields: [addedById], references: [id])
+  removedBy        User?    @relation("PPEmployeeRemovedBy", fields: [removedById], references: [id])
+  @@unique([payrollPeriodId, employeeId])
+  @@index([payrollPeriodId, isSelected])
+  @@index([employeeId])
+}
+
+model PayrollInput {
+  id              String               @id @default(uuid())
+  payrollPeriodId String
+  employeeId      String
+  inputTypeId     String
+  value           Decimal?             @db.Decimal(12, 2)
+  amount          Decimal?             @db.Decimal(12, 2)
+  note            String?
+  source          PayrollInputSource   @default(MANUAL)
+  status          PayrollInputStatus   @default(DRAFT)
+  submittedById   String?
+  submittedAt     DateTime?
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+  payrollPeriod   PayrollPeriod        @relation(fields: [payrollPeriodId], references: [id], onDelete: Cascade)
+  employee        Employee             @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  inputType       PayrollInputType     @relation(fields: [inputTypeId], references: [id])
+  submittedBy     User?                @relation("PayrollInputSubmittedBy", fields: [submittedById], references: [id])
+  @@index([payrollPeriodId, employeeId])
+  @@index([payrollPeriodId, inputTypeId])
+  @@index([payrollPeriodId, status])
+  @@index([employeeId])
+  @@unique([payrollPeriodId, employeeId, inputTypeId])
 }

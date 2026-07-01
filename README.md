@@ -10,6 +10,14 @@ Secure, role-based HR employee registration and management system for Leapfrog S
 - Sensitive fields: basicSalary, salaryEffectiveDate, paymentMethod, bankName/BankAccountNumber, mpesaAccount, taxId, pensionId, costCenter
 - Permissions: dataQuality.view/manage, changeRequest.view/create/approve/reject/cancel, salaryRuleApproval.view/request/approve/reject, phaseControl.view/update
 
+**Phase 4A adds:**
+- Payroll Period Setup and Monthly Input Collection
+- Builds the first part of monthly salary preparation — creating payroll periods, selecting employees, collecting monthly payroll inputs, and tracking department submission status
+- Key features: Payroll Period CRUD, Employee Selection, Input Type Setup, Monthly Input Collection, Department Submission Tracking, CSV Import
+- Permissions: payrollPeriod.*, employeeSelection.*, inputType.*, monthlyInput.*, submissionTracking.*, payrollImport.* — SUPER_ADMIN/HR_ADMIN full access, HR_OFFICER limited view/create, FINANCE_DIRECTOR view/open/close/review/export, FINANCE_PAYROLL create/update/submit/review/import/export, SALES_HEAD view/create/submit for shop/field scope, ASM view/create/submit for assigned area scope, SHOP_MANAGER view/create/submit for own shop only, EMPLOYEE no access, AUDITOR view-only
+
+**Phase 4A does NOT calculate payroll, tax, pension, payslips, or payment exports.**
+
 **Phase 3 added:**
 - Salary structure dashboard with pay component definitions
 - Role-based pay rules with effective-date management
@@ -129,18 +137,19 @@ Open `http://localhost:3000`.
 ## Tests
 
 ```powershell
-npm test                # Run all tests (42 baseline + 41 Phase 2A + 68 Phase 2B + 62 Phase 3 + 68 Phase 3.5)
+npm test                # Run all tests (42 Phase 1 + 41 Phase 2A + 27 Phase 2B + 38 Phase 3 + 78 Phase 3.5 + 35 Phase 4A = 261)
 npm run test:phase1     # Run baseline tests only (42)
 npm run test:phase2a    # Run Phase 2A tests only (41)
-npm run test:phase2b    # Run Phase 2B tests only (68)
-npm run test:phase3     # Run Phase 3 tests only (62)
-npm run test:phase3_5   # Run Phase 3.5 tests only (68)
+npm run test:phase2b    # Run Phase 2B tests only (27)
+npm run test:phase3     # Run Phase 3 tests only (38)
+npm run test:phase3_5   # Run Phase 3.5 tests only (78)
+npm run test:phase4a    # Run Phase 4A tests only (35)
 npm run typecheck
 npm run lint
 npm run build
 ```
 
-All pass clean — 281 total tests covering authentication, RBAC, employee registration, salary visibility, assignments, audit logging, organization data, document upload/visibility/download/deactivation, required document rules, onboarding completion, import normalization/column mapping/validation/confirm, payroll readiness, pay component CRUD, pay rule CRUD, rule activation/deactivation, preview calculations, data quality scanning/resolution, change request workflow (create/approve/reject/cancel), salary rule approval workflow (request/approve/reject), phase control checklist, and regression.
+All pass clean — 261 tests covering authentication, RBAC, employee registration, salary visibility, assignments, audit logging, organization data, document upload/visibility/download/deactivation, required document rules, onboarding completion, import normalization/column mapping/validation/confirm, payroll readiness, pay component CRUD, pay rule CRUD, rule activation/deactivation, preview calculations, data quality scanning/resolution, change request workflow (create/approve/reject/cancel), salary rule approval workflow (request/approve/reject), phase control checklist, payroll period management, employee selection, input type setup, monthly input collection, department submission tracking, CSV import, and regression.
 
 ## Key Design Decisions
 

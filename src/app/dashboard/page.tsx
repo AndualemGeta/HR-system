@@ -71,6 +71,13 @@ export default function DashboardPage() {
       ],
     },
     {
+      title: 'Payroll Preparation',
+      links: [
+        { label: 'Payroll Periods', href: '/payroll-periods', permission: 'payrollPeriod.view' },
+        { label: 'Payroll Input Types', href: '/payroll-input-types', permission: 'payrollInputType.view' },
+      ],
+    },
+    {
       title: 'Reports & Audit',
       links: [
         { label: 'Reports', href: '/reports', permission: 'reports.view' },

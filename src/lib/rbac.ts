@@ -54,6 +54,20 @@ export type PermissionKey =
   | 'salaryRuleApproval.reject'
   | 'phaseControl.view'
   | 'phaseControl.update'
+  | 'payrollPeriod.view'
+  | 'payrollPeriod.create'
+  | 'payrollPeriod.update'
+  | 'payrollPeriod.open'
+  | 'payrollPeriod.close'
+  | 'payrollPeriod.cancel'
+  | 'payrollInputType.view'
+  | 'payrollInputType.manage'
+  | 'payrollInput.view'
+  | 'payrollInput.create'
+  | 'payrollInput.submit'
+  | 'payrollInput.review'
+  | 'payrollInput.import'
+  | 'payrollInput.export'
 
 export async function getUserPermissions(userId: string): Promise<PermissionKey[]> {
   const roles = await prisma.userRole.findMany({
@@ -149,6 +163,20 @@ const ALL_PERMISSIONS_MAP: Record<string, boolean> = {
   'salaryRuleApproval.reject': true,
   'phaseControl.view': true,
   'phaseControl.update': true,
+  'payrollPeriod.view': true,
+  'payrollPeriod.create': true,
+  'payrollPeriod.update': true,
+  'payrollPeriod.open': true,
+  'payrollPeriod.close': true,
+  'payrollPeriod.cancel': true,
+  'payrollInputType.view': true,
+  'payrollInputType.manage': true,
+  'payrollInput.view': true,
+  'payrollInput.create': true,
+  'payrollInput.submit': true,
+  'payrollInput.review': true,
+  'payrollInput.import': true,
+  'payrollInput.export': true,
 }
 
 export const ALL_PERMISSIONS = Object.keys(ALL_PERMISSIONS_MAP)

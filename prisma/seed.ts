@@ -24,6 +24,9 @@ const ALL_PERMISSIONS = [
   'changeRequest.view', 'changeRequest.create', 'changeRequest.approve', 'changeRequest.reject', 'changeRequest.cancel',
   'salaryRuleApproval.view', 'salaryRuleApproval.request', 'salaryRuleApproval.approve', 'salaryRuleApproval.reject',
   'phaseControl.view', 'phaseControl.update',
+  'payrollPeriod.view', 'payrollPeriod.create', 'payrollPeriod.update', 'payrollPeriod.open', 'payrollPeriod.close', 'payrollPeriod.cancel',
+  'payrollInputType.view', 'payrollInputType.manage',
+  'payrollInput.view', 'payrollInput.create', 'payrollInput.submit', 'payrollInput.review', 'payrollInput.import', 'payrollInput.export',
 ] as const
 
 const ROLE_PERMISSIONS: Record<string, string[]> = {
@@ -46,6 +49,9 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
     'changeRequest.view', 'changeRequest.create', 'changeRequest.approve', 'changeRequest.reject', 'changeRequest.cancel',
     'salaryRuleApproval.view', 'salaryRuleApproval.request',
     'phaseControl.view', 'phaseControl.update',
+    'payrollPeriod.view', 'payrollPeriod.create', 'payrollPeriod.update', 'payrollPeriod.open', 'payrollPeriod.close', 'payrollPeriod.cancel',
+    'payrollInputType.view', 'payrollInputType.manage',
+    'payrollInput.view', 'payrollInput.create', 'payrollInput.submit', 'payrollInput.review', 'payrollInput.import', 'payrollInput.export',
   ],
   HR_OFFICER: [
     'employee.view', 'employee.create', 'employee.update',
@@ -60,6 +66,9 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
     'changeRequest.view', 'changeRequest.create',
     'salaryRuleApproval.view', 'salaryRuleApproval.request',
     'phaseControl.view',
+    'payrollPeriod.view',
+    'payrollInput.view', 'payrollInput.create', 'payrollInput.submit', 'payrollInput.import',
+    'payrollInputType.view',
   ],
   FINANCE_DIRECTOR: [
     'employee.view', 'salary.view', 'salary.update',
@@ -73,6 +82,9 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
     'changeRequest.view', 'changeRequest.approve', 'changeRequest.reject',
     'salaryRuleApproval.view', 'salaryRuleApproval.approve', 'salaryRuleApproval.reject',
     'phaseControl.view', 'phaseControl.update',
+    'payrollPeriod.view', 'payrollPeriod.open', 'payrollPeriod.close',
+    'payrollInput.view', 'payrollInput.review', 'payrollInput.export',
+    'payrollInputType.view',
   ],
   FINANCE_PAYROLL: [
     'employee.view', 'salary.view', 'reports.view',
@@ -82,6 +94,9 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
     'dataQuality.view',
     'changeRequest.view', 'changeRequest.create', 'changeRequest.approve', 'changeRequest.reject',
     'phaseControl.view',
+    'payrollPeriod.view', 'payrollPeriod.create', 'payrollPeriod.update',
+    'payrollInput.view', 'payrollInput.create', 'payrollInput.submit', 'payrollInput.review', 'payrollInput.import', 'payrollInput.export',
+    'payrollInputType.view',
   ],
   TREASURY_MANAGER: [
     'employee.view', 'salary.view',
@@ -98,16 +113,22 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
     'document.view',
     'dataQuality.view',
     'phaseControl.view',
+    'payrollPeriod.view',
+    'payrollInput.view', 'payrollInput.create', 'payrollInput.submit',
   ],
   ASM: [
     'employee.view', 'reports.view',
     'document.view',
+    'payrollPeriod.view',
+    'payrollInput.view', 'payrollInput.create', 'payrollInput.submit',
   ],
   SHOP_MANAGER: [
     'employee.view',
     'document.view',
     'employee.payrollReadiness.view',
     'employee.payrollReadiness.export',
+    'payrollPeriod.view',
+    'payrollInput.view', 'payrollInput.create', 'payrollInput.submit',
   ],
   EMPLOYEE: [],
   AUDITOR: [
@@ -116,6 +137,9 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
     'changeRequest.view',
     'salaryRuleApproval.view',
     'phaseControl.view',
+    'payrollPeriod.view',
+    'payrollInput.view',
+    'payrollInputType.view',
   ],
 }
 
@@ -140,6 +164,10 @@ async function main() {
   await prisma.auditLog.deleteMany()
   await prisma.importRow.deleteMany()
   await prisma.importSession.deleteMany()
+  await prisma.payrollInput.deleteMany()
+  await prisma.payrollPeriodEmployee.deleteMany()
+  await prisma.payrollPeriod.deleteMany()
+  await prisma.payrollInputType.deleteMany()
   await prisma.employeePayrollProfile.deleteMany()
   await prisma.notification.deleteMany()
   await prisma.onboardingChecklistItem.deleteMany()
@@ -653,6 +681,24 @@ async function main() {
     })
     console.log(`  Created ${rules.length} pay rules`)
   }
+
+  // Create default payroll input types
+  const defaultInputTypes = [
+    { code: 'TRANSPORT_ALLOWANCE_INPUT', name: 'Transport Allowance', category: 'TRANSPORT' as const, valueType: 'AMOUNT' as const, defaultAmount: 0 },
+    { code: 'KPI_ACHIEVEMENT_PERCENT', name: 'KPI Achievement %', category: 'KPI' as const, valueType: 'PERCENTAGE' as const },
+    { code: 'SALES_COMMISSION_INPUT', name: 'Sales Commission', category: 'COMMISSION' as const, valueType: 'AMOUNT' as const, defaultAmount: 0 },
+    { code: 'OVERTIME_HOURS', name: 'Overtime Hours', category: 'OVERTIME' as const, valueType: 'NUMBER' as const, defaultAmount: 0 },
+    { code: 'MANUAL_ALLOWANCE', name: 'Manual Allowance', category: 'ALLOWANCE' as const, valueType: 'AMOUNT' as const, defaultAmount: 0, requiresApproval: true },
+    { code: 'MANUAL_DEDUCTION', name: 'Manual Deduction', category: 'DEDUCTION' as const, valueType: 'AMOUNT' as const, defaultAmount: 0, requiresApproval: true },
+    { code: 'ABSENCE_DAYS', name: 'Absence Days', category: 'ADJUSTMENT' as const, valueType: 'NUMBER' as const, defaultAmount: 0 },
+    { code: 'OTHER_ADJUSTMENT', name: 'Other Adjustment', category: 'ADJUSTMENT' as const, valueType: 'AMOUNT' as const, defaultAmount: 0, requiresApproval: true },
+  ]
+  for (const it of defaultInputTypes) {
+    await prisma.payrollInputType.create({
+      data: { ...it, description: `${it.name} input type`, createdById: userMap['admin@leapfrog.com'] },
+    })
+  }
+  console.log(`  Created ${defaultInputTypes.length} default payroll input types`)
 
   console.log('\nSeed complete!')
   console.log('Demo users (password: Test123!):')

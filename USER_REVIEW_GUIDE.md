@@ -1,8 +1,8 @@
-# Leapfrog HRMS — Phase 3 User Review Guide
+# Leapfrog HRMS — Phase 4A User Review Guide
 
 ## Review Scope
 
-This review covers Phase 3: Salary Structure, Pay Components, Pay Rules, and Rule Preview. Baseline v1.0, Phase 2A, and Phase 2B are also verified for regression.
+This review covers Phase 4A: Payroll Period Setup and Monthly Input Collection. Phase 3 (Salary Structure, Pay Components, Pay Rules), Phase 3.5, Phase 2B, Phase 2A, and Baseline v1.0 are also verified for regression.
 
 ## Baseline Tests (Quick Check)
 
@@ -280,6 +280,78 @@ This review covers Phase 3: Salary Structure, Pay Components, Pay Rules, and Rul
 - Verify payroll readiness dashboard still works
 - Verify employee list and profile pages still work
 
+---
+
+## Phase 4A: Payroll Period Setup & Monthly Input Collection
+
+### 1. Login and Navigate
+- Login as HR Admin (`hr.admin@leapfrog.com` / `Test123!`)
+- Navigate to the Payroll Period page
+- Verify you see the Payroll Period management UI
+
+### 2. Create a Payroll Period
+- Click "+ New Payroll Period"
+- Enter Period Name (e.g., "July 2026"), select date range
+- Submit — verify the period appears in the list with DRAFT status
+- Verify only one OPEN_FOR_INPUT period is allowed (try opening a second one)
+
+### 3. Open for Input
+- Click "Open for Input" on the draft period
+- Verify status changes to OPEN_FOR_INPUT
+- Verify dates cannot be edited after opening
+
+### 4. Employee Selection
+- Open the payroll period → "Select Employees"
+- Verify eligible employees are shown (ACTIVE, ON_PROBATION, ONBOARDING)
+- Verify payroll readiness status is displayed for each employee
+- Add employees to the period
+- Remove an employee while period is still draft
+
+### 5. Input Type Management
+- Navigate to Input Types
+- Verify 8 default input types are seeded
+- Create a new input type
+- Update an existing input type
+- Deactivate an input type — verify it cannot receive new inputs
+
+### 6. Monthly Input Collection
+- Navigate to Monthly Input within a payroll period
+- Login as a user with create access (e.g., FINANCE_PAYROLL)
+- Create an input record, save as draft
+- Edit and submit the draft input
+- Verify submitted input can be accepted
+- Verify submitted input can be rejected with a reason stored
+- Login as EMPLOYEE — verify they cannot create inputs
+
+### 7. Department Submission Tracking
+- Navigate to the submission tracking view
+- Verify departments are listed with their submission status
+- Verify you can see which departments have submitted and which are pending
+
+### 8. CSV Import
+- Navigate to CSV import for monthly inputs
+- Upload a CSV with employee IDs, input type codes, and values
+- Preview — verify validation catches missing employeeId, missing inputTypeCode, duplicates
+- Confirm import — verify valid rows are created, invalid rows are skipped
+- Test different import modes: CREATE_ONLY, UPDATE_DRAFT_ONLY, SKIP_EXISTING
+
+### 9. Permissions Verification
+- Login as SUPER_ADMIN — verify full access
+- Login as HR_ADMIN — verify full Phase 4A access
+- Login as HR_OFFICER — verify limited view/create access
+- Login as FINANCE_DIRECTOR — verify view/open/close/review/export
+- Login as FINANCE_PAYROLL — verify create/update/submit/review/import/export
+- Login as SALES_HEAD — verify view/create/submit for shop/field scope
+- Login as ASM — verify view/create/submit for assigned area scope
+- Login as SHOP_MANAGER — verify view/create/submit for own shop scope
+- Login as EMPLOYEE — verify no Phase 4A access
+- Login as AUDITOR — verify view-only access
+
+### 10. Close and Cancel
+- Close input collection on an OPEN_FOR_INPUT period
+- Cancel a DRAFT period
+- Verify closed/canceled periods are reflected in the UI
+
 ## Known Limitations (Phase 3)
 
 - Phase 3 is salary-structure setup only — no monthly payroll, payslips, tax, pension, or payment export
@@ -294,11 +366,13 @@ This review covers Phase 3: Salary Structure, Pay Components, Pay Rules, and Rul
 ## Test Commands
 
 ```powershell
-npm test              # Run all 223 tests (42 baseline + 41 Phase 2A + 68 Phase 2B + 72 Phase 3)
+npm test              # Run all tests (42 Phase 1 + 41 Phase 2A + 27 Phase 2B + 38 Phase 3 + 78 Phase 3.5 + 35 Phase 4A = 261)
 npm run test:phase1   # Run baseline tests only (42)
 npm run test:phase2a  # Run Phase 2A tests only (41)
-npm run test:phase2b  # Run Phase 2B tests only (68)
-npm run test:phase3   # Run Phase 3 tests only (72)
+npm run test:phase2b  # Run Phase 2B tests only (27)
+npm run test:phase3   # Run Phase 3 tests only (38)
+npm run test:phase3_5 # Run Phase 3.5 tests only (78)
+npm run test:phase4a  # Run Phase 4A tests only (35)
 npm run typecheck
 npm run lint
 npm run build
