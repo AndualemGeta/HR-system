@@ -26,7 +26,7 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
   SUPER_ADMIN: [...ALL_PERMISSIONS],
   HR_ADMIN: [
     'employee.view', 'employee.create', 'employee.update',
-    'salary.view',
+    'salary.view', 'salary.update',
     'status.view', 'status.update',
     'assignment.view', 'assignment.update',
     'onboarding.view', 'onboarding.update', 'onboarding.complete',

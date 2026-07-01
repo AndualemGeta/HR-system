@@ -30,7 +30,7 @@ export default function EditEmployeePage() {
     currentRole: '', currentLevel: '',
     currentDepartmentId: '', currentDivisionId: '', currentRegionId: '',
     currentAreaId: '', currentShopId: '', currentClusterId: '',
-    directManagerId: '', accountingReportingManagerId: '', basicSalary: '',
+    directManagerId: '', accountingReportingManagerId: '', basicSalary: '', salaryEffectiveDate: '',
   })
 
   useEffect(() => {
@@ -78,6 +78,7 @@ export default function EditEmployeePage() {
         directManagerId: employee.directManagerId || '',
         accountingReportingManagerId: employee.accountingReportingManagerId || '',
         basicSalary: employee.basicSalary != null && employee.basicSalary !== 'REDACTED' ? String(employee.basicSalary) : '',
+        salaryEffectiveDate: employee.salaryEffectiveDate ? employee.salaryEffectiveDate.split('T')[0] : '',
       })
     }).catch(() => router.push('/login'))
     .finally(() => setLoading(false))
@@ -93,6 +94,7 @@ export default function EditEmployeePage() {
 
     const payload: Record<string, unknown> = { ...form }
     if (!payload.basicSalary) delete payload.basicSalary
+    if (!payload.salaryEffectiveDate) delete payload.salaryEffectiveDate
     else {
       const parsed = parseFloat(payload.basicSalary as string)
       if (isNaN(parsed)) { setError('Invalid salary value'); setSaving(false); return }
@@ -254,6 +256,7 @@ export default function EditEmployeePage() {
           <legend style={{ fontWeight: 600 }}>Compensation</legend>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
             <Field label="Basic Salary" value={form.basicSalary} onChange={v => set('basicSalary', v)} type="number" />
+            <Field label="Salary Effective Date" value={form.salaryEffectiveDate} onChange={v => set('salaryEffectiveDate', v)} type="date" />
           </div>
         </fieldset>
 
