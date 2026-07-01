@@ -57,6 +57,7 @@ export async function POST(req: NextRequest) {
     if (isNaN(end.getTime())) return badRequest('Invalid periodEnd date')
     if (isNaN(pay.getTime())) return badRequest('Invalid payDate date')
     if (end < start) return badRequest('periodEnd cannot be before periodStart')
+    if (pay < end) return badRequest('payDate cannot be before periodEnd. If this is intentional, acknowledge the warning.')
 
     const period = await prisma.payrollPeriod.create({
       data: {

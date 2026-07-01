@@ -2,7 +2,7 @@ import { NextRequest } from 'next/server'
 import { z } from 'zod'
 import { prisma } from '@/lib/prisma'
 import { getSession } from '@/lib/session'
-import { userHasPermission } from '@/lib/rbac'
+import { userHasPermission, buildEmployeeScopeWhere } from '@/lib/rbac'
 import { success, badRequest, unauthorized, forbidden, notFound, internalError } from '@/lib/api'
 import { createAuditLog } from '@/lib/audit'
 
@@ -51,6 +51,16 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     })
     const employeeMap = new Map(allEmployees.map(e => [e.id, e]))
 
+    const scopeWhere = await buildEmployeeScopeWhere(session.userId)
+    let scopeEmployeeSet: Set<string> | null = null
+    if (Object.keys(scopeWhere).length > 0) {
+      const scopeEmployees = await prisma.employee.findMany({
+        where: scopeWhere,
+        select: { id: true },
+      })
+      scopeEmployeeSet = new Set(scopeEmployees.map(e => e.id))
+    }
+
     const existingRecords = await prisma.payrollInput.findMany({
       where: { payrollPeriodId: id },
       select: { employeeId: true, inputTypeId: true, status: true },
@@ -72,6 +82,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       const emp = employeeMap.get(row.employeeId)
       if (!emp) {
         errors.push(`Employee '${row.employeeId}' is not selected in this period or does not exist`)
+      }
+      if (emp && scopeEmployeeSet && !scopeEmployeeSet.has(emp.id)) {
+        errors.push('Employee is outside your payroll input scope.')
       }
 
       const inputType = inputTypeMap.get(row.inputTypeCode)

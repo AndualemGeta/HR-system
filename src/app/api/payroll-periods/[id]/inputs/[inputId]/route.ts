@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { prisma } from '@/lib/prisma'
 import { getSession } from '@/lib/session'
 import { userHasPermission } from '@/lib/rbac'
+import { assertPayrollInputInUserScope } from '@/lib/payroll-scope'
 import { success, badRequest, unauthorized, forbidden, notFound, internalError } from '@/lib/api'
 import { createAuditLog } from '@/lib/audit'
 
@@ -26,6 +27,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     const input = await prisma.payrollInput.findUnique({ where: { id: inputId, payrollPeriodId: id } })
     if (!input) return notFound('Input record not found')
     if (input.status !== 'DRAFT' && input.status !== 'RETURNED') return badRequest('Only DRAFT or RETURNED inputs can be edited')
+
+    const scopeCheck = await assertPayrollInputInUserScope(session.userId, inputId)
+    if (!scopeCheck.allowed) return forbidden(scopeCheck.error)
 
     const body = await req.json().catch(() => ({}))
     const parsed = updateSchema.safeParse(body)

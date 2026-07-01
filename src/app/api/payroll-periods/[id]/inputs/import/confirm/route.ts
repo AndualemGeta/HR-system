@@ -2,7 +2,7 @@ import { NextRequest } from 'next/server'
 import { z } from 'zod'
 import { prisma } from '@/lib/prisma'
 import { getSession } from '@/lib/session'
-import { userHasPermission } from '@/lib/rbac'
+import { userHasPermission, buildEmployeeScopeWhere } from '@/lib/rbac'
 import { success, badRequest, unauthorized, forbidden, notFound, internalError } from '@/lib/api'
 import { createAuditLog } from '@/lib/audit'
 
@@ -44,6 +44,16 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     })
     const selectedSet = new Set(allSelected.map(s => s.employeeId))
 
+    const scopeWhere = await buildEmployeeScopeWhere(session.userId)
+    let scopeEmployeeSet: Set<string> | null = null
+    if (Object.keys(scopeWhere).length > 0) {
+      const scopeEmployees = await prisma.employee.findMany({
+        where: scopeWhere,
+        select: { id: true },
+      })
+      scopeEmployeeSet = new Set(scopeEmployees.map(e => e.id))
+    }
+
     let imported = 0
     let skipped = 0
     let errors = 0
@@ -54,6 +64,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
       if (!selectedSet.has(row.employeeId)) {
         rowError = 'Employee not selected in this period'
+      }
+      if (!rowError && scopeEmployeeSet && !scopeEmployeeSet.has(row.employeeId)) {
+        rowError = 'Employee is outside your payroll input scope.'
       }
 
       const inputType = inputTypeMap.get(row.inputTypeCode)

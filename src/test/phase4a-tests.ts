@@ -25,10 +25,11 @@ async function main() {
   const financePayrollUser = await prisma.user.findUnique({ where: { email: 'finance.payroll@leapfrog.com' } })
   const salesHeadUser = await prisma.user.findUnique({ where: { email: 'sales.head@leapfrog.com' } })
   const shopManagerUser = await prisma.user.findUnique({ where: { email: 'shop.manager@leapfrog.com' } })
+  const asmUser = await prisma.user.findUnique({ where: { email: 'asm@leapfrog.com' } })
   const empUser = await prisma.user.findUnique({ where: { email: 'employee@leapfrog.com' } })
   const auditorUser = await prisma.user.findUnique({ where: { email: 'auditor@leapfrog.com' } })
 
-  const ctx = { adminUser, hrAdminUser, hrOfficerUser, financeDirUser, financePayrollUser, salesHeadUser, shopManagerUser, empUser, auditorUser }
+  const ctx = { adminUser, hrAdminUser, hrOfficerUser, financeDirUser, financePayrollUser, salesHeadUser, shopManagerUser, asmUser, empUser, auditorUser }
 
   // ─── Payroll Period ────────────────────────────────────────────────────
   console.log('[Payroll Period]')
@@ -376,6 +377,30 @@ async function main() {
   if (empUser) {
     const canCreate = await userHasPermission(empUser.id, 'payrollInput.create')
     assert('Employee cannot create input', async () => !canCreate)
+  }
+
+  // ─── Scope Enforcement ─────────────────────────────────────────────────
+  console.log('[Scope Enforcement]')
+
+  if (shopManagerUser) {
+    const shopMgrEmployee = await prisma.employee.findUnique({ where: { id: shopManagerUser.employeeId! } })
+    if (shopMgrEmployee?.currentShopId) {
+      const otherShopEmp = await prisma.employee.findFirst({
+        where: { currentShopId: { not: null }, NOT: { currentShopId: shopMgrEmployee.currentShopId } },
+      })
+      if (otherShopEmp) {
+        const scopeCheck = await import('../lib/payroll-scope').then(m => m.assertEmployeeInUserScope(shopManagerUser.id, otherShopEmp.id))
+        assert('Shop Manager scope blocks employee in different shop', async () => !scopeCheck.allowed)
+      }
+    }
+  }
+
+  if (asmUser && hrAdminUser) {
+    const hrAdminEmployee = await prisma.employee.findUnique({ where: { id: hrAdminUser.employeeId! } })
+    if (hrAdminEmployee) {
+      const scopeCheck = await import('../lib/payroll-scope').then(m => m.assertEmployeeInUserScope(asmUser.id, hrAdminEmployee.id))
+      assert('ASM scope blocks HEAD_OFFICE employee', async () => !scopeCheck.allowed)
+    }
   }
 
   // ─── Import ────────────────────────────────────────────────────────────

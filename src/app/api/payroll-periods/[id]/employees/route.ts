@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getSession } from '@/lib/session'
 import { userHasPermission, buildEmployeeScopeWhere } from '@/lib/rbac'
+import { assertEmployeesInUserScope } from '@/lib/payroll-scope'
 import { success, badRequest, unauthorized, forbidden, notFound, internalError } from '@/lib/api'
 import { createAuditLog } from '@/lib/audit'
 
@@ -19,13 +20,12 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     const isSelected = searchParams.get('isSelected')
     const scopeWhere = await buildEmployeeScopeWhere(session.userId)
 
-    const where: Record<string, unknown> = {
-      payrollPeriodId: id,
-      ...(isSelected !== null ? { isSelected: isSelected === 'true' } : {}),
-    }
-
     const records = await prisma.payrollPeriodEmployee.findMany({
-      where,
+      where: {
+        payrollPeriodId: id,
+        ...(isSelected !== null ? { isSelected: isSelected === 'true' } : {}),
+        ...(Object.keys(scopeWhere).length > 0 ? { employee: scopeWhere } : {}),
+      },
       include: {
         employee: {
           select: {
@@ -50,29 +50,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       orderBy: { addedAt: 'desc' },
     })
 
-    const filtered = scopeWhere && Object.keys(scopeWhere).length > 0
-      ? records.filter(r => {
-          const emp = r.employee
-          if (!emp) return false
-          if (scopeWhere.OR && Array.isArray(scopeWhere.OR)) {
-            return (scopeWhere.OR as Record<string, unknown>[]).some(cond => {
-              for (const [key, val] of Object.entries(cond)) {
-                if (key === 'id') return emp.id === val
-                if (key === 'currentAreaId') return emp.currentAreaId === val
-                if (key === 'currentRegionId') return emp.currentRegionId === val
-                if (key === 'currentShopId') return emp.currentShopId === val
-                if (key === 'directManagerId') return false
-              }
-              return false
-            })
-          }
-          if (scopeWhere.id) return emp.id === scopeWhere.id
-          if (scopeWhere.employeeCategory) return emp.employeeCategory === scopeWhere.employeeCategory
-          return true
-        })
-      : records
-
-    return success(filtered)
+    return success(records)
   } catch (err) { console.error(err); return internalError() }
 }
 
@@ -90,6 +68,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const body = await req.json().catch(() => ({}))
     const { employeeIds } = body
     if (!employeeIds || !Array.isArray(employeeIds) || employeeIds.length === 0) return badRequest('employeeIds is required and must be a non-empty array')
+
+    const scopeCheck = await assertEmployeesInUserScope(session.userId, employeeIds)
+    if (!scopeCheck.allowed) return forbidden(scopeCheck.error)
 
     const existing = await prisma.payrollPeriodEmployee.findMany({
       where: { payrollPeriodId: id, employeeId: { in: employeeIds } },
@@ -141,6 +122,9 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
     const body = await req.json().catch(() => ({}))
     const { employeeIds } = body
     if (!employeeIds || !Array.isArray(employeeIds) || employeeIds.length === 0) return badRequest('employeeIds is required and must be a non-empty array')
+
+    const scopeCheck = await assertEmployeesInUserScope(session.userId, employeeIds)
+    if (!scopeCheck.allowed) return forbidden(scopeCheck.error)
 
     await prisma.payrollPeriodEmployee.updateMany({
       where: { payrollPeriodId: id, employeeId: { in: employeeIds } },

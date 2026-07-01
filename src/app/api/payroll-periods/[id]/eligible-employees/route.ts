@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma'
 import { getSession } from '@/lib/session'
 import { userHasPermission, buildEmployeeScopeWhere } from '@/lib/rbac'
 import { success, unauthorized, forbidden, notFound, internalError } from '@/lib/api'
+import { getPayrollReadiness } from '@/lib/payroll-readiness'
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -75,11 +76,20 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     })
     const selectedSet = new Set(selectedIds.map(s => s.employeeId))
 
+    const readinessResults = await Promise.allSettled(
+      employees.map(emp => getPayrollReadiness(emp.id))
+    )
+    const readinessMap = new Map<string, unknown>()
+    for (let i = 0; i < employees.length; i++) {
+      const r = readinessResults[i]
+      if (r.status === 'fulfilled' && r.value) readinessMap.set(employees[i].id, r.value)
+    }
+
     const result = employees.map(emp => ({
       ...emp,
       basicSalary: emp.basicSalary?.toString() ?? null,
       isSelected: selectedSet.has(emp.id),
-      payrollReadiness: null,
+      payrollReadiness: readinessMap.get(emp.id) || null,
     }))
 
     return success(result)

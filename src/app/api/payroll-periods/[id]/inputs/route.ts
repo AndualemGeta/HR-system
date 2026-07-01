@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { prisma } from '@/lib/prisma'
 import { getSession } from '@/lib/session'
 import { userHasPermission, buildEmployeeScopeWhere } from '@/lib/rbac'
+import { assertEmployeeInUserScope } from '@/lib/payroll-scope'
 import { success, badRequest, unauthorized, forbidden, notFound, conflict, internalError } from '@/lib/api'
 import { createAuditLog } from '@/lib/audit'
 
@@ -85,6 +86,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const inputType = await prisma.payrollInputType.findUnique({ where: { id: inputTypeId } })
     if (!inputType) return badRequest('Input type not found')
     if (!inputType.isActive) return badRequest('Input type is not active')
+
+    const scopeCheck = await assertEmployeeInUserScope(session.userId, employeeId)
+    if (!scopeCheck.allowed) return forbidden(scopeCheck.error)
 
     const existing = await prisma.payrollInput.findUnique({
       where: { payrollPeriodId_employeeId_inputTypeId: { payrollPeriodId: id, employeeId, inputTypeId } },

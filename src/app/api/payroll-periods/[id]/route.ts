@@ -105,6 +105,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     } else if (!updateData.periodStart && updateData.periodEnd) {
       if (updateData.periodEnd < period.periodStart) return badRequest('periodEnd cannot be before periodStart')
     }
+    const newPayDate = payDate ? new Date(payDate) : period.payDate
+    const newEnd = periodEnd ? new Date(periodEnd) : period.periodEnd
+    if (newPayDate < newEnd) return badRequest('payDate cannot be before periodEnd. If this is intentional, acknowledge the warning.')
 
     const updated = await prisma.payrollPeriod.update({
       where: { id },
