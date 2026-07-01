@@ -93,13 +93,19 @@ export default function EditEmployeePage() {
     setSaving(true)
 
     const payload: Record<string, unknown> = { ...form }
-    if (!payload.basicSalary) delete payload.basicSalary
-    if (!payload.salaryEffectiveDate) delete payload.salaryEffectiveDate
-    else {
+    const sensitivePayload: Record<string, unknown> = {}
+
+    if (payload.basicSalary) {
       const parsed = parseFloat(payload.basicSalary as string)
       if (isNaN(parsed)) { setError('Invalid salary value'); setSaving(false); return }
-      payload.basicSalary = parsed
+      sensitivePayload.basicSalary = parsed
     }
+    if (payload.salaryEffectiveDate) {
+      sensitivePayload.salaryEffectiveDate = payload.salaryEffectiveDate
+    }
+    delete payload.basicSalary
+    delete payload.salaryEffectiveDate
+
     if (!payload.dateOfBirth) delete payload.dateOfBirth
     if (!payload.hireDate) delete payload.hireDate
     if (!payload.notes) delete payload.notes
@@ -113,7 +119,25 @@ export default function EditEmployeePage() {
         body: JSON.stringify(payload),
       })
       const json = await res.json()
-      if (!res.ok) { setError(json.error || json.message || 'Failed to update'); return }
+      if (!res.ok) { setError(json.error || json.message || 'Failed to update'); setSaving(false); return }
+
+      if (Object.keys(sensitivePayload).length > 0) {
+        const empId = params.id as string
+        for (const [field, value] of Object.entries(sensitivePayload)) {
+          const crRes = await fetch('/api/change-requests', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ employeeId: empId, requestedField: field, oldValue: json.data?.[field]?.toString() || '', newValue: String(value), reason: 'Updated during employee edit' }),
+          })
+          if (!crRes.ok) {
+            const crJson = await crRes.json()
+            setError(`Change request for ${field} failed: ${crJson.error || 'Error'}`)
+            setSaving(false)
+            return
+          }
+        }
+      }
+
       router.push(`/employees/${params.id}`)
     } catch { setError('Network error') }
     finally { setSaving(false) }

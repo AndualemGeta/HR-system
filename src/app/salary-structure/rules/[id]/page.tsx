@@ -118,22 +118,29 @@ export default function RuleDetailPage() {
     setEditing(false)
   }
 
-  const handleActivate = async () => {
+  const [reason, setReason] = useState('')
+  const [showReasonPrompt, setShowReasonPrompt] = useState<'activate' | 'deactivate' | null>(null)
+
+  const handleRequestActivation = async () => {
     setError('')
-    const res = await fetch(`/api/salary-structure/rules/${id}/activate`, { method: 'POST' })
+    if (!reason) { setError('Reason is required to request activation'); return }
+    const res = await fetch(`/api/salary-structure/rules/${id}/request-activation`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reason }) })
     const json = await res.json()
-    if (!res.ok) { setError(json.error || 'Activation failed'); return }
-    setRule(json.data)
-    setForm(f => ({ ...f, status: json.data.status }))
+    if (!res.ok) { setError(json.error || 'Request failed'); return }
+    setReason('')
+    setShowReasonPrompt(null)
+    alert('Activation request submitted for approval')
   }
 
-  const handleDeactivate = async () => {
+  const handleRequestDeactivation = async () => {
     setError('')
-    const res = await fetch(`/api/salary-structure/rules/${id}/deactivate`, { method: 'POST' })
+    if (!reason) { setError('Reason is required to request deactivation'); return }
+    const res = await fetch(`/api/salary-structure/rules/${id}/request-deactivation`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reason }) })
     const json = await res.json()
-    if (!res.ok) { setError(json.error || 'Deactivation failed'); return }
-    setRule(json.data)
-    setForm(f => ({ ...f, status: json.data.status }))
+    if (!res.ok) { setError(json.error || 'Request failed'); return }
+    setReason('')
+    setShowReasonPrompt(null)
+    alert('Deactivation request submitted for approval')
   }
 
   if (loading) return <div style={{ padding: '2rem', textAlign: 'center' }}>Loading...</div>
@@ -148,11 +155,11 @@ export default function RuleDetailPage() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
         <h1 style={{ margin: 0 }}>{rule.name}</h1>
         <div style={{ display: 'flex', gap: '0.5rem' }}>
-          {rule.status === 'DRAFT' && has('salaryStructure.activateRule') && (
-            <button onClick={handleActivate} style={{ background: '#059669', color: '#fff', padding: '0.35rem 1rem', border: 'none', borderRadius: 4, cursor: 'pointer' }}>Activate</button>
+          {rule.status === 'DRAFT' && has('salaryRuleApproval.request') && (
+            <button onClick={() => { setReason(''); setShowReasonPrompt('activate') }} style={{ background: '#059669', color: '#fff', padding: '0.35rem 1rem', border: 'none', borderRadius: 4, cursor: 'pointer' }}>Request Activation</button>
           )}
-          {rule.status === 'ACTIVE' && has('salaryStructure.deactivateRule') && (
-            <button onClick={handleDeactivate} style={{ background: '#dc2626', color: '#fff', padding: '0.35rem 1rem', border: 'none', borderRadius: 4, cursor: 'pointer' }}>Deactivate</button>
+          {rule.status === 'ACTIVE' && has('salaryRuleApproval.request') && (
+            <button onClick={() => { setReason(''); setShowReasonPrompt('deactivate') }} style={{ background: '#dc2626', color: '#fff', padding: '0.35rem 1rem', border: 'none', borderRadius: 4, cursor: 'pointer' }}>Request Deactivation</button>
           )}
           {has('salaryStructure.manageRules') && !editing && (
             <button onClick={() => setEditing(true)} style={{ background: '#2563eb', color: '#fff', padding: '0.35rem 1rem', border: 'none', borderRadius: 4, cursor: 'pointer' }}>Edit</button>
@@ -161,6 +168,17 @@ export default function RuleDetailPage() {
       </div>
 
       {error && <p style={{ color: 'red', marginBottom: '0.5rem' }}>{error}</p>}
+
+      {showReasonPrompt && (
+        <div style={{ background: '#f9fafb', padding: '1rem', borderRadius: 6, marginBottom: '1rem', border: '1px solid #d1d5db' }}>
+          <p style={{ margin: '0 0 0.5rem', fontSize: '0.9rem', fontWeight: 500 }}>{showReasonPrompt === 'activate' ? 'Request Activation' : 'Request Deactivation'}</p>
+          <textarea value={reason} onChange={e => setReason(e.target.value)} placeholder="Reason for request..." style={{ width: '100%', padding: '0.4rem', border: '1px solid #ccc', borderRadius: 4, boxSizing: 'border-box', minHeight: 60, fontSize: '0.9rem' }} />
+          <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem' }}>
+            <button onClick={showReasonPrompt === 'activate' ? handleRequestActivation : handleRequestDeactivation} disabled={!reason} style={{ background: reason ? '#2563eb' : '#999', color: '#fff', padding: '0.35rem 1rem', border: 'none', borderRadius: 4, cursor: reason ? 'pointer' : 'not-allowed', fontSize: '0.9rem' }}>Submit</button>
+            <button onClick={() => setShowReasonPrompt(null)} style={{ padding: '0.35rem 1rem', background: 'none', border: '1px solid #ccc', borderRadius: 4, cursor: 'pointer', fontSize: '0.9rem' }}>Cancel</button>
+          </div>
+        </div>
+      )}
 
       {editing ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>

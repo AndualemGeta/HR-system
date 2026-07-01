@@ -1,8 +1,16 @@
-# Leapfrog HR Management System — Phase 3
+# Leapfrog HR Management System — Phase 3.5
 
 Secure, role-based HR employee registration and management system for Leapfrog Software Technology Africa PLC.
 
-**Phase 3 adds:**
+**Phase 3.5 adds:**
+- Data quality dashboard with scan/severity grading and issue resolution
+- Sensitive payroll field change request workflow (maker-checker approval)
+- Salary rule activation/deactivation approval workflow (FINANCE_DIRECTOR)
+- HR review checklist / Phase Control page for go-live tracking
+- Sensitive fields: basicSalary, salaryEffectiveDate, paymentMethod, bankName/BankAccountNumber, mpesaAccount, taxId, pensionId, costCenter
+- Permissions: dataQuality.view/manage, changeRequest.view/create/approve/reject/cancel, salaryRuleApproval.view/request/approve/reject, phaseControl.view/update
+
+**Phase 3 added:**
 - Salary structure dashboard with pay component definitions
 - Role-based pay rules with effective-date management
 - Rule preview calculator (FIXED_AMOUNT, PERCENTAGE, THRESHOLD, TIERED, MANUAL_INPUT)
@@ -52,6 +60,12 @@ Secure, role-based HR employee registration and management system for Leapfrog S
 - **Rule Matching Engine:** Scope-based matching (role, category, department, region, area, shop, employment type) with effective date range and priority
 - **Audit Logging:** PAY_COMPONENT_CREATE/UPDATE/DEACTIVATE, PAY_RULE_CREATE/UPDATE/ACTIVATE/DEACTIVATE, PAY_RULE_PREVIEW
 - **Seed Data:** 8 pay components, 4 pay rules (DSA Transport, KPI Allowance, Manual Adjustment, DSA Commission)
+- **Data Quality Dashboard:** Scan all employees for 20+ issue types (BLOCKER/WARNING/INFO), resolve or ignore with reason
+- **Change Request Workflow:** Requester creates change → Approver reviews/approves/rejects → Auto-applies field on approval
+- **Salary Rule Approval Workflow:** Request activation/deactivation → FINANCE_DIRECTOR approves/rejects → Auto-activates/deactivates rule
+- **Phase Control Checklist:** 16-item go-live checklist across all phases, trackable by status/comment/owner
+- **Rule Activation via Approval:** Direct activate/deactivate replaced with approval workflow (Super Admin retains emergency override)
+- **Employee Edit Routing:** basicSalary and salaryEffectiveDate changes auto-create change requests during employee edit
 
 ## What's NOT Implemented (Planned for Later Phases)
 
@@ -70,6 +84,8 @@ Secure, role-based HR employee registration and management system for Leapfrog S
 | Transfers & promotions | PLANNED |
 | Employee self-service | PLANNED |
 | External integrations | PLANNED |
+
+Phase 3.5 is data-protection and approval workflow setup only — does not calculate payroll, tax, pension, or generate payslips/exports.
 
 Schema models for additional future features exist in the database but have no APIs, pages, or tests in this build.
 
@@ -113,17 +129,18 @@ Open `http://localhost:3000`.
 ## Tests
 
 ```powershell
-npm test              # Run all 223 tests (42 baseline + 41 Phase 2A + 68 Phase 2B + 72 Phase 3)
-npm run test:phase1   # Run baseline tests only (42)
-npm run test:phase2a  # Run Phase 2A tests only (41)
-npm run test:phase2b  # Run Phase 2B tests only (68)
-npm run test:phase3   # Run Phase 3 tests only (72)
+npm test                # Run all tests (42 baseline + 41 Phase 2A + 68 Phase 2B + 62 Phase 3 + 68 Phase 3.5)
+npm run test:phase1     # Run baseline tests only (42)
+npm run test:phase2a    # Run Phase 2A tests only (41)
+npm run test:phase2b    # Run Phase 2B tests only (68)
+npm run test:phase3     # Run Phase 3 tests only (62)
+npm run test:phase3_5   # Run Phase 3.5 tests only (68)
 npm run typecheck
 npm run lint
 npm run build
 ```
 
-All pass clean — 223 total tests covering authentication, RBAC, employee registration, salary visibility, assignments, audit logging, organization data, document upload/visibility/download/deactivation, required document rules, onboarding completion, import normalization/column mapping/validation/confirm, payroll readiness, pay component CRUD, pay rule CRUD, rule activation/deactivation, preview calculations, and regression.
+All pass clean — 281 total tests covering authentication, RBAC, employee registration, salary visibility, assignments, audit logging, organization data, document upload/visibility/download/deactivation, required document rules, onboarding completion, import normalization/column mapping/validation/confirm, payroll readiness, pay component CRUD, pay rule CRUD, rule activation/deactivation, preview calculations, data quality scanning/resolution, change request workflow (create/approve/reject/cancel), salary rule approval workflow (request/approve/reject), phase control checklist, and regression.
 
 ## Key Design Decisions
 
@@ -137,21 +154,32 @@ All pass clean — 223 total tests covering authentication, RBAC, employee regis
 - Import matching priority: employeeId → email → phone → name+role → name+phone
 - Import returns NO_MATCH/SINGLE_MATCH/AMBIGUOUS_MATCH; ambiguous rows blocked
 - Payroll readiness: 8 independent checks (salary, payment info, method, tax, pension, assignment, manager, category)
-- Phase 3 is salary-structure setup only — no monthly payroll, payslips, tax, pension, or payment export
+- Phase 3/3.5 is salary-structure setup & data protection only — no monthly payroll, payslips, tax, pension, or payment export
 - Phase 3 rule preview is preview-only — does not create payroll records
 - Phase 3 PayComponent.taxTreatment defaults to UNKNOWN — finalized in later phase
 - Phase 3 rule activation blocks duplicates for same component+scope+effectiveDate
 - Phase 3 tier config values must be ordered correctly; no negative amounts
 - Phase 3 DSA Transport: THRESHOLD rule pays 1,500 birr flat when sales >= 40%, 0 below
 - Phase 3 DSA KPI: TIERED rule with flat amounts (2000 >=60%, 1000 >=40%, 0 below)
+- Phase 3.5 rules become ACTIVE only through approval workflow (create/patch reject ACTIVE)
+- Phase 3.5 sensitive payroll fields require change request approval before update
+- Phase 3.5 requester cannot approve own change request or salary rule approval
+- Phase 3.5 FINANCE_DIRECTOR approves salary rule activation; HR_ADMIN approves HR master-data change requests
+- Phase 3.5 data quality scan detects 20+ issue types across all employees
+- Phase 3.5 change request auto-applies the field value on approval
+- Phase 3.5 rule activation validates scope and duplicate rules before submitting for approval
+- Phase 3.5 phase control checklist tracks go-live readiness across all phases
 
 ## Known Limitations
 
 - File upload uses local filesystem (`uploads/employee-documents/`)
-- Phase 3 is salary-structure setup only — no monthly payroll, payslips, tax, pension, or payment export
+- Phase 3/3.5 is salary-structure setup & data protection only — no monthly payroll, payslips, tax, pension, or payment export
 - Phase 3 rule preview is informational — does not create actual payroll records
 - Payroll readiness is informational only — no enforcement or auto-correction
 - No email notifications for any system event
 - Pay component tax treatment defaults to UNKNOWN — Ethiopian tax rules not hardcoded
-- Commission rules are structural only — no final commission calculation in Phase 3
+- Commission rules are structural only — no final commission calculation in Phase 3/3.5
 - Import does not auto-assign employees to shops (assignment done separately)
+- Data quality scan is manual trigger — no scheduled scans
+- Change request does not generate notifications to approvers
+- Rule approval still allows emergency direct activate via existing /activate endpoint (Super Admin only)

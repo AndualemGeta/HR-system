@@ -376,6 +376,17 @@ enum AuditAction {
   PAY_RULE_ACTIVATE
   PAY_RULE_DEACTIVATE
   PAY_RULE_PREVIEW
+  DATA_QUALITY_SCAN
+  DATA_QUALITY_IGNORE
+  CHANGE_REQUEST_CREATE
+  CHANGE_REQUEST_APPROVE
+  CHANGE_REQUEST_APPLY
+  CHANGE_REQUEST_REJECT
+  CHANGE_REQUEST_CANCEL
+  SALARY_RULE_APPROVAL_REQUEST
+  SALARY_RULE_APPROVAL_APPROVE
+  SALARY_RULE_APPROVAL_REJECT
+  PHASE_CONTROL_UPDATE
   OTHER
 }
 
@@ -1228,26 +1239,68 @@ model DataQualityIssue {
   assignedToId String?
   resolvedById String?
   resolvedAt   DateTime?
+  ignoredById  String?
+  ignoredAt    DateTime?
+  ignoreReason String?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
   @@index([severity, status])
 }
 
 model EmployeeProfileChangeRequest {
-  id             String   @id @default(uuid())
+  id             String    @id @default(uuid())
   employeeId     String
   requestedField String
   oldValue       String?
   newValue       String
   reason         String?
+  status         String    @default("SUBMITTED")
+  requestedById  String?
+  reviewedById   String?
+  approvedById   String?
+  rejectedById   String?
+  reviewComment  String?
+  approvedAt     DateTime?
+  rejectedAt     DateTime?
+  appliedAt      DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  employee       Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  @@index([employeeId, status])
+}
+
+model SalaryRuleApprovalRequest {
+  id             String   @id @default(uuid())
+  ruleId         String
+  actionType     String
   status         String   @default("SUBMITTED")
   requestedById  String?
   reviewedById   String?
   approvedById   String?
+  rejectedById   String?
+  requestReason  String?
+  reviewComment  String?
+  validationJson String?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
-  employee       Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
-  @@index([employeeId, status])
+  approvedAt     DateTime?
+  rejectedAt     DateTime?
+  appliedAt      DateTime?
+  rule           PayRule  @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+  @@index([ruleId, status])
+}
+
+model PhaseControlChecklist {
+  id          String   @id @default(uuid())
+  section     String
+  item        String
+  status      String   @default("NOT_STARTED")
+  owner       String?
+  comment     String?
+  updatedById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  @@unique([section, item])
 }
 
 model SystemSetting {
@@ -1343,6 +1396,7 @@ model PayRule {
   component         PayComponent    @relation("PayRuleComponent", fields: [componentId], references: [id])
   createdBy         User?           @relation("PayRuleCreatedBy", fields: [createdById], references: [id])
   updatedBy         User?           @relation("PayRuleUpdatedBy", fields: [updatedById], references: [id])
+  approvalRequests SalaryRuleApprovalRequest[]
   @@index([componentId, status])
   @@index([role, employeeCategory, status])
   @@index([effectiveFrom, effectiveTo])

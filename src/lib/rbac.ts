@@ -40,6 +40,20 @@ export type PermissionKey =
   | 'salaryStructure.activateRule'
   | 'salaryStructure.deactivateRule'
   | 'salaryStructure.auditView'
+  | 'dataQuality.view'
+  | 'dataQuality.manage'
+  | 'dataQuality.export'
+  | 'changeRequest.view'
+  | 'changeRequest.create'
+  | 'changeRequest.approve'
+  | 'changeRequest.reject'
+  | 'changeRequest.cancel'
+  | 'salaryRuleApproval.view'
+  | 'salaryRuleApproval.request'
+  | 'salaryRuleApproval.approve'
+  | 'salaryRuleApproval.reject'
+  | 'phaseControl.view'
+  | 'phaseControl.update'
 
 export async function getUserPermissions(userId: string): Promise<PermissionKey[]> {
   const roles = await prisma.userRole.findMany({
@@ -121,6 +135,20 @@ const ALL_PERMISSIONS_MAP: Record<string, boolean> = {
   'salaryStructure.activateRule': true,
   'salaryStructure.deactivateRule': true,
   'salaryStructure.auditView': true,
+  'dataQuality.view': true,
+  'dataQuality.manage': true,
+  'dataQuality.export': true,
+  'changeRequest.view': true,
+  'changeRequest.create': true,
+  'changeRequest.approve': true,
+  'changeRequest.reject': true,
+  'changeRequest.cancel': true,
+  'salaryRuleApproval.view': true,
+  'salaryRuleApproval.request': true,
+  'salaryRuleApproval.approve': true,
+  'salaryRuleApproval.reject': true,
+  'phaseControl.view': true,
+  'phaseControl.update': true,
 }
 
 export const ALL_PERMISSIONS = Object.keys(ALL_PERMISSIONS_MAP)

@@ -59,6 +59,15 @@ export default function DashboardPage() {
       links: [
         { label: 'Salary Records', href: '/salary', permission: 'salary.view' },
         { label: 'Salary Structure', href: '/salary-structure', permission: 'salaryStructure.view' },
+        { label: 'Rule Approvals', href: '/salary-structure/rule-approvals', permission: 'salaryRuleApproval.view' },
+      ],
+    },
+    {
+      title: 'Data & Approvals',
+      links: [
+        { label: 'Data Quality', href: '/data-quality', permission: 'dataQuality.view' },
+        { label: 'Change Requests', href: '/change-requests', permission: 'changeRequest.view' },
+        { label: 'Phase Control', href: '/phase-control', permission: 'phaseControl.view' },
       ],
     },
     {

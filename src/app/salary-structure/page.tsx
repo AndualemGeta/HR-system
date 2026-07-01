@@ -60,6 +60,9 @@ export default function SalaryStructureDashboard() {
         {has('salaryStructure.preview') && (
           <a href="/salary-structure/preview" style={{ display: 'block', padding: '0.6rem 0.75rem', background: '#f3f4f6', borderRadius: 6, textDecoration: 'none', color: '#2563eb', fontWeight: 500, fontSize: '0.9rem' }}>Rule Preview Tool</a>
         )}
+        {has('salaryRuleApproval.view') && (
+          <a href="/salary-structure/rule-approvals" style={{ display: 'block', padding: '0.6rem 0.75rem', background: '#f3f4f6', borderRadius: 6, textDecoration: 'none', color: '#2563eb', fontWeight: 500, fontSize: '0.9rem' }}>Rule Approvals</a>
+        )}
       </div>
 
       <div style={{ marginTop: '1rem' }}>

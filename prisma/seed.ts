@@ -20,6 +20,10 @@ const ALL_PERMISSIONS = [
   'salaryStructure.view', 'salaryStructure.manageComponents', 'salaryStructure.manageRules',
   'salaryStructure.preview', 'salaryStructure.activateRule', 'salaryStructure.deactivateRule',
   'salaryStructure.auditView',
+  'dataQuality.view', 'dataQuality.manage', 'dataQuality.export',
+  'changeRequest.view', 'changeRequest.create', 'changeRequest.approve', 'changeRequest.reject', 'changeRequest.cancel',
+  'salaryRuleApproval.view', 'salaryRuleApproval.request', 'salaryRuleApproval.approve', 'salaryRuleApproval.reject',
+  'phaseControl.view', 'phaseControl.update',
 ] as const
 
 const ROLE_PERMISSIONS: Record<string, string[]> = {
@@ -38,6 +42,10 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
     'salaryStructure.view', 'salaryStructure.manageComponents', 'salaryStructure.manageRules',
     'salaryStructure.preview', 'salaryStructure.activateRule', 'salaryStructure.deactivateRule',
     'salaryStructure.auditView',
+    'dataQuality.view', 'dataQuality.manage', 'dataQuality.export',
+    'changeRequest.view', 'changeRequest.create', 'changeRequest.approve', 'changeRequest.reject', 'changeRequest.cancel',
+    'salaryRuleApproval.view', 'salaryRuleApproval.request',
+    'phaseControl.view', 'phaseControl.update',
   ],
   HR_OFFICER: [
     'employee.view', 'employee.create', 'employee.update',
@@ -48,6 +56,10 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
     'employee.import', 'employee.importPreview', 'employee.importConfirm',
     'employee.importHistory', 'employee.payrollReadiness.view', 'employee.payrollReadiness.export',
     'salaryStructure.view',
+    'dataQuality.view', 'dataQuality.manage',
+    'changeRequest.view', 'changeRequest.create',
+    'salaryRuleApproval.view', 'salaryRuleApproval.request',
+    'phaseControl.view',
   ],
   FINANCE_DIRECTOR: [
     'employee.view', 'salary.view', 'salary.update',
@@ -57,12 +69,19 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
     'salaryStructure.view', 'salaryStructure.manageComponents', 'salaryStructure.manageRules',
     'salaryStructure.preview', 'salaryStructure.activateRule', 'salaryStructure.deactivateRule',
     'salaryStructure.auditView',
+    'dataQuality.view', 'dataQuality.export',
+    'changeRequest.view', 'changeRequest.approve', 'changeRequest.reject',
+    'salaryRuleApproval.view', 'salaryRuleApproval.approve', 'salaryRuleApproval.reject',
+    'phaseControl.view', 'phaseControl.update',
   ],
   FINANCE_PAYROLL: [
     'employee.view', 'salary.view', 'reports.view',
     'document.view', 'document.download',
     'employee.payrollReadiness.view', 'employee.payrollReadiness.export',
     'salaryStructure.view', 'salaryStructure.preview',
+    'dataQuality.view',
+    'changeRequest.view', 'changeRequest.create', 'changeRequest.approve', 'changeRequest.reject',
+    'phaseControl.view',
   ],
   TREASURY_MANAGER: [
     'employee.view', 'salary.view',
@@ -77,6 +96,8 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
   SALES_HEAD: [
     'employee.view', 'reports.view', 'organization.view',
     'document.view',
+    'dataQuality.view',
+    'phaseControl.view',
   ],
   ASM: [
     'employee.view', 'reports.view',
@@ -91,6 +112,10 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
   EMPLOYEE: [],
   AUDITOR: [
     'audit.view', 'reports.view',
+    'dataQuality.view',
+    'changeRequest.view',
+    'salaryRuleApproval.view',
+    'phaseControl.view',
   ],
 }
 

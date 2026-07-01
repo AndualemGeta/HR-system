@@ -17,6 +17,9 @@ export default function RulesPage() {
   const [perms, setPerms] = useState<string[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [actionRuleId, setActionRuleId] = useState<string | null>(null)
+  const [actionType, setActionType] = useState<'activate' | 'deactivate' | null>(null)
+  const [actionReason, setActionReason] = useState('')
 
   const fetchData = () => {
     Promise.all([
@@ -29,17 +32,16 @@ export default function RulesPage() {
 
   const has = (p: string) => perms.includes(p)
 
-  const handleActivate = async (id: string) => {
+  const handleRequestAction = async () => {
+    if (!actionRuleId || !actionType || !actionReason) return
     setError('')
-    const res = await fetch(`/api/salary-structure/rules/${id}/activate`, { method: 'POST' })
+    const endpoint = actionType === 'activate' ? 'request-activation' : 'request-deactivation'
+    const res = await fetch(`/api/salary-structure/rules/${actionRuleId}/${endpoint}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reason: actionReason }) })
     const json = await res.json()
-    if (!res.ok) { setError(json.error || 'Activation failed'); return }
-    fetchData()
-  }
-
-  const handleDeactivate = async (id: string) => {
-    setError('')
-    await fetch(`/api/salary-structure/rules/${id}/deactivate`, { method: 'POST' })
+    if (!res.ok) { setError(json.error || 'Request failed'); return }
+    setActionRuleId(null)
+    setActionType(null)
+    setActionReason('')
     fetchData()
   }
 
@@ -86,11 +88,11 @@ export default function RulesPage() {
               </td>
               <td style={{ padding: '0.5rem', fontSize: '0.85rem' }}>{new Date(r.effectiveFrom).toLocaleDateString()}</td>
               <td style={{ padding: '0.5rem', fontSize: '0.85rem', display: 'flex', gap: '0.35rem' }}>
-                {r.status === 'DRAFT' && has('salaryStructure.activateRule') && (
-                  <button onClick={() => handleActivate(r.id)} style={{ background: '#059669', color: '#fff', border: 'none', borderRadius: 4, padding: '0.2rem 0.5rem', cursor: 'pointer', fontSize: '0.8rem' }}>Activate</button>
+                {r.status === 'DRAFT' && has('salaryRuleApproval.request') && (
+                  <button onClick={() => { setActionRuleId(r.id); setActionType('activate'); setActionReason('') }} style={{ background: '#059669', color: '#fff', border: 'none', borderRadius: 4, padding: '0.2rem 0.5rem', cursor: 'pointer', fontSize: '0.8rem' }}>Request Activation</button>
                 )}
-                {r.status === 'ACTIVE' && has('salaryStructure.deactivateRule') && (
-                  <button onClick={() => handleDeactivate(r.id)} style={{ background: '#dc2626', color: '#fff', border: 'none', borderRadius: 4, padding: '0.2rem 0.5rem', cursor: 'pointer', fontSize: '0.8rem' }}>Deactivate</button>
+                {r.status === 'ACTIVE' && has('salaryRuleApproval.request') && (
+                  <button onClick={() => { setActionRuleId(r.id); setActionType('deactivate'); setActionReason('') }} style={{ background: '#dc2626', color: '#fff', border: 'none', borderRadius: 4, padding: '0.2rem 0.5rem', cursor: 'pointer', fontSize: '0.8rem' }}>Request Deactivation</button>
                 )}
                 {has('salaryStructure.manageRules') && (
                   <a href={`/salary-structure/rules/${r.id}`} style={{ color: '#2563eb', fontSize: '0.8rem', textDecoration: 'underline' }}>Edit</a>
@@ -103,6 +105,17 @@ export default function RulesPage() {
           )}
         </tbody>
       </table>
+
+      {actionRuleId && actionType && (
+        <div style={{ marginTop: '1rem', background: '#f9fafb', padding: '1rem', borderRadius: 6, border: '1px solid #d1d5db' }}>
+          <p style={{ margin: '0 0 0.5rem', fontSize: '0.9rem', fontWeight: 500 }}>Reason for {actionType === 'activate' ? 'activation' : 'deactivation'}</p>
+          <textarea value={actionReason} onChange={e => setActionReason(e.target.value)} placeholder="Enter reason..." style={{ width: '100%', padding: '0.4rem', border: '1px solid #ccc', borderRadius: 4, boxSizing: 'border-box', minHeight: 60, fontSize: '0.9rem' }} />
+          <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem' }}>
+            <button onClick={handleRequestAction} disabled={!actionReason} style={{ background: actionReason ? '#2563eb' : '#999', color: '#fff', padding: '0.35rem 1rem', border: 'none', borderRadius: 4, cursor: actionReason ? 'pointer' : 'not-allowed', fontSize: '0.9rem' }}>Submit</button>
+            <button onClick={() => { setActionRuleId(null); setActionType(null); setActionReason('') }} style={{ padding: '0.35rem 1rem', background: 'none', border: '1px solid #ccc', borderRadius: 4, cursor: 'pointer', fontSize: '0.9rem' }}>Cancel</button>
+          </div>
+        </div>
+      )}
 
       <div style={{ marginTop: '1rem' }}>
         <a href="/salary-structure" style={{ color: '#2563eb', fontSize: '0.9rem' }}>&larr; Back to Salary Structure</a>
