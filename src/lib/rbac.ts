@@ -77,8 +77,16 @@ export type PermissionKey =
   | 'payrollInputWaiver.deactivate'
   | 'payrollPeriod.review'
   | 'payrollPeriod.markReadyForCalculation'
-  | 'payrollPreparationSummary.view'
+  |   'payrollPreparationSummary.view'
   | 'payrollPreparationSummary.export'
+  | 'shop.view'
+  | 'shop.create'
+  | 'shop.update'
+  | 'shop.deactivate'
+  | 'shop.reactivate'
+  | 'shop.assignManager'
+  | 'shop.updateCriteria'
+  | 'shop.viewCriteriaHistory'
 
 export async function getUserPermissions(userId: string): Promise<PermissionKey[]> {
   const roles = await prisma.userRole.findMany({
@@ -199,6 +207,14 @@ const ALL_PERMISSIONS_MAP: Record<string, boolean> = {
   'payrollPeriod.markReadyForCalculation': true,
   'payrollPreparationSummary.view': true,
   'payrollPreparationSummary.export': true,
+  'shop.view': true,
+  'shop.create': true,
+  'shop.update': true,
+  'shop.deactivate': true,
+  'shop.reactivate': true,
+  'shop.assignManager': true,
+  'shop.updateCriteria': true,
+  'shop.viewCriteriaHistory': true,
 }
 
 export const ALL_PERMISSIONS = Object.keys(ALL_PERMISSIONS_MAP)

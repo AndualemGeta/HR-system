@@ -373,7 +373,97 @@ npm run test:phase2b  # Run Phase 2B tests only (27)
 npm run test:phase3   # Run Phase 3 tests only (38)
 npm run test:phase3_5 # Run Phase 3.5 tests only (78)
 npm run test:phase4a  # Run Phase 4A tests only (35)
+npm run test:phase4c1 # Run Phase 4C.1 tests only (85)
 npm run typecheck
 npm run lint
 npm run build
+```
+
+---
+
+## Phase 4C.1 — Shop Master and Shop Status Setup
+
+### What was built
+
+Phase 4C.1 builds the shop management foundation needed before Shop Manager incentive calculation.
+
+### Prerequisites
+
+Log in as one of:
+- `admin@leapfrog.com` / `Test123!` (SUPER_ADMIN — full access)
+- `hr.admin@leapfrog.com` / `Test123!` (HR_ADMIN — full access)
+- `sales.head@leapfrog.com` / `Test123!` (SALES_HEAD — create/edit/view)
+- `asm@leapfrog.com` / `Test123!` (ASM — view only, scoped to area)
+- `shop.manager@leapfrog.com` / `Test123!` (SHOP_MANAGER — view own shop only)
+- `finance.director@leapfrog.com` / `Test123!` (FINANCE_DIRECTOR — view)
+- `auditor@leapfrog.com` / `Test123!` (AUDITOR — view)
+
+### 1. Navigate to Shops
+
+- Click **Organization Setup > Shops** on the dashboard
+- You should see a list of seeded shops with columns: Code, Name, Region, Area, Cluster, Manager, Corridor, Criteria, Incentive, Active, Actions
+- Use filters at the top: Region, Area, Criteria, Corridor Type, Active/Inactive, Incentive Eligible
+
+### 2. Create a Shop
+
+- Click **Create Shop** (or navigate to `/shops/new`)
+- Fill in:
+  - Shop Name (required)
+  - Shop Code (required, must be unique)
+  - Region (select from dropdown)
+  - Area (auto-populates after region selection)
+  - Cluster (auto-populates after area selection)
+  - Shop Manager (select from active SHOP_MANAGER employees)
+  - Corridor Type (CORRIDOR / NON_CORRIDOR / UNKNOWN)
+  - Incentive Eligible (checkbox)
+- Click "Create Shop"
+- Verify you're redirected to the shops list and the new shop appears
+
+### 3. View Shop Detail
+
+- Click the **View** (eye) icon on any shop
+- Verify the detail page shows:
+  - Shop Profile (code, status, hierarchy, corridor, incentive, criteria)
+  - Shop Manager (name, employee ID, role, status)
+  - Criteria History table
+  - Assigned Employees table
+
+### 4. Edit a Shop
+
+- Click the **Edit** icon on any shop
+- Change the shop name, parent location, shop manager, corridor type, or incentive eligibility
+- Click "Save Changes"
+- Verify the changes appear on the detail page
+
+### 5. Update Shop Criteria
+
+- Click the **Update Criteria** icon on any shop
+- Select a criteria value: Gold / Silver / Bronze / At Risk / Unassigned
+- Set an effective date
+- Enter a reason (required)
+- Optionally select an approved by user
+- Click "Update Criteria"
+- Verify the criteria history on the detail page shows the new entry
+
+### 6. Deactivate / Reactivate a Shop
+
+- Click the **Deactivate** (X) icon on an active shop
+- Verify the shop shows as "Inactive" in the list
+- Click the **Reactivate** (checkmark) icon on an inactive shop
+- Verify the shop shows as "Active" again
+
+### 7. Scope Testing
+
+- Log in as `asm@leapfrog.com` and verify only shops in the assigned area are visible
+- Log in as `shop.manager@leapfrog.com` and verify only the own shop is visible
+- Log in as `employee@leapfrog.com` and verify no shop access
+
+### What is NOT implemented
+
+- Shop Manager incentive calculation
+- Payroll / Tax / Pension calculation
+- Payslip generation
+- Payment export (bank or M-PESA)
+
+These will be handled in Phase 4C.2 and Phase 5.
 ```

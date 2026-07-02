@@ -32,6 +32,8 @@ const ALL_PERMISSIONS = [
   'payrollInputWaiver.view', 'payrollInputWaiver.create', 'payrollInputWaiver.deactivate',
   'payrollPeriod.review', 'payrollPeriod.markReadyForCalculation',
   'payrollPreparationSummary.view', 'payrollPreparationSummary.export',
+  'shop.view', 'shop.create', 'shop.update', 'shop.deactivate', 'shop.reactivate',
+  'shop.assignManager', 'shop.updateCriteria', 'shop.viewCriteriaHistory',
 ] as const
 
 const ROLE_PERMISSIONS: Record<string, string[]> = {
@@ -62,6 +64,8 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
     'payrollInputWaiver.view', 'payrollInputWaiver.create', 'payrollInputWaiver.deactivate',
     'payrollPeriod.review', 'payrollPeriod.markReadyForCalculation',
     'payrollPreparationSummary.view', 'payrollPreparationSummary.export',
+    'shop.view', 'shop.create', 'shop.update', 'shop.deactivate', 'shop.reactivate',
+    'shop.assignManager', 'shop.updateCriteria', 'shop.viewCriteriaHistory',
   ],
   HR_OFFICER: [
     'employee.view', 'employee.create', 'employee.update',
@@ -104,6 +108,7 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
     'payrollInputWaiver.view', 'payrollInputWaiver.create', 'payrollInputWaiver.deactivate',
     'payrollPeriod.review', 'payrollPeriod.markReadyForCalculation',
     'payrollPreparationSummary.view', 'payrollPreparationSummary.export',
+    'shop.view', 'shop.viewCriteriaHistory',
   ],
   FINANCE_PAYROLL: [
     'employee.view', 'salary.view', 'reports.view',
@@ -121,6 +126,7 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
     'payrollInputWaiver.view', 'payrollInputWaiver.create',
     'payrollPeriod.review',
     'payrollPreparationSummary.view', 'payrollPreparationSummary.export',
+    'shop.view', 'shop.viewCriteriaHistory',
   ],
   TREASURY_MANAGER: [
     'employee.view', 'salary.view',
@@ -140,6 +146,8 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
     'payrollPeriod.view',
     'payrollInput.view', 'payrollInput.create', 'payrollInput.submit',
     'payrollPreparationSummary.view',
+    'shop.view', 'shop.create', 'shop.update',
+    'shop.assignManager', 'shop.updateCriteria', 'shop.viewCriteriaHistory',
   ],
   ASM: [
     'employee.view', 'reports.view',
@@ -147,6 +155,7 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
     'payrollPeriod.view',
     'payrollInput.view', 'payrollInput.create', 'payrollInput.submit',
     'payrollPreparationSummary.view',
+    'shop.view', 'shop.viewCriteriaHistory',
   ],
   SHOP_MANAGER: [
     'employee.view',
@@ -156,6 +165,7 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
     'payrollPeriod.view',
     'payrollInput.view', 'payrollInput.create', 'payrollInput.submit',
     'payrollPreparationSummary.view',
+    'shop.view', 'shop.viewCriteriaHistory',
   ],
   EMPLOYEE: [],
   AUDITOR: [
@@ -170,6 +180,7 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
     'payrollInputRequirement.view',
     'payrollInputWaiver.view',
     'payrollPreparationSummary.view', 'payrollPreparationSummary.export',
+    'shop.view', 'shop.viewCriteriaHistory',
   ],
 }
 

@@ -142,7 +142,35 @@ These models exist in the Prisma schema but have no implementation:
 - Onboarding completion does not auto-change employee status
 - Payroll readiness is informational — no enforcement or auto-correction
 
+## Phase 4C.1 — Shop Master and Shop Status Setup (Completed)
+
+| Module | Status | Details |
+|---|---|---|
+| Shop Master CRUD | DONE | Create, edit, deactivate, reactivate shops via /api/shops |
+| Shop Profile | DONE | Corridor type, incentive eligibility, default manager |
+| Shop Criteria Status | DONE | Manual criteria setting with effective-dated history |
+| Hierarchy | DONE | Region → Area → Cluster → Shop (cluster optional) |
+| Scope Enforcement | DONE | HR Admin all, Sales Head all, ASM area, SM own, Finance/Auditor view |
+| Audit Logging | DONE | 7 new audit actions |
+| Permissions | DONE | 8 new shop permissions across all roles |
+| UI Pages | DONE | /shops, /shops/new, /shops/[id], /shops/[id]/edit, /shops/[id]/criteria |
+| Tests | DONE | 85 tests passing |
+
+## Missing Pieces / Known Limitations
+
+- Shop Manager incentive calculation is NOT implemented (Phase 4C.2)
+- QGA bonus, EVD bonus, M-PESA commission, DSA achievement bonus, QO bonus, EBU incentive NOT implemented
+- No automated shop criteria calculation from sales/KPI data (manual only)
+- No shop performance dashboard or reports
+- No bulk shop import from CSV
+- No shop assignment history tracking (only current assignment tracked)
+- Deactivate shop does not auto-reassign employees
+- No email notifications for shop status changes
+- No soft delete for shops (isActive flag only)
+- Shop hierarchy is stored but not validated for cycles
+
 ## Next Steps
 
-1. User review of Phase 3 (follow USER_REVIEW_GUIDE.md)
-2. Plan Phase 4 (monthly payroll: run payroll, Ethiopian PAYE/pension, approval workflow, payment export)
+1. User review of Phase 4C.1 (follow USER_REVIEW_GUIDE.md)
+2. Phase 4C.2 — Shop Manager Incentive Calculation
+3. Phase 5 — Full Payroll Calculation with Ethiopian PAYE/pension

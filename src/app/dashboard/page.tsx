@@ -79,6 +79,13 @@ export default function DashboardPage() {
       ],
     },
     {
+      title: 'Organization Setup',
+      links: [
+        { label: 'Shops', href: '/shops', permission: 'shop.view' },
+        { label: 'Create Shop', href: '/shops/new', permission: 'shop.create' },
+      ],
+    },
+    {
       title: 'Reports & Audit',
       links: [
         { label: 'Reports', href: '/reports', permission: 'reports.view' },

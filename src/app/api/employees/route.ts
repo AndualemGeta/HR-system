@@ -67,6 +67,7 @@ export const GET = withAuth(async (req: NextRequest) => {
   const status = searchParams.get('status') || ''
   const departmentId = searchParams.get('departmentId') || ''
   const category = searchParams.get('category') || ''
+  const role = searchParams.get('role') || ''
 
   // Build the base where clause and then merge scope
   const parsedSession = await (await import('@/lib/session')).getSession()
@@ -85,6 +86,7 @@ export const GET = withAuth(async (req: NextRequest) => {
   if (status) where.employmentStatus = status
   if (departmentId) where.currentDepartmentId = departmentId
   if (category) where.employeeCategory = category
+  if (role) where.currentRole = role
 
   const [total, employees] = await Promise.all([
     prisma.employee.count({ where }),

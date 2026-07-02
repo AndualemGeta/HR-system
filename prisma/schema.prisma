@@ -345,6 +345,20 @@ enum PayrollInputStatus {
   REJECTED
 }
 
+enum CorridorType {
+  CORRIDOR
+  NON_CORRIDOR
+  UNKNOWN
+}
+
+enum ShopCriteria {
+  GOLD
+  SILVER
+  BRONZE
+  AT_RISK
+  UNASSIGNED
+}
+
 enum AuditAction {
   LOGIN
   LOGOUT
@@ -461,6 +475,13 @@ enum AuditAction {
   PAYROLL_PERIOD_REVIEW_START
   PAYROLL_PERIOD_READY_FOR_CALCULATION
   PAYROLL_PREPARATION_SUMMARY_EXPORT
+  SHOP_CREATE
+  SHOP_UPDATE
+  SHOP_DEACTIVATE
+  SHOP_REACTIVATE
+  SHOP_MANAGER_ASSIGN
+  SHOP_CRITERIA_UPDATE
+  SHOP_PROFILE_UPDATE
   OTHER
 }
 
@@ -495,6 +516,10 @@ model User {
   inputRequirementsCreated PayrollInputRequirement[] @relation("InputRequirementCreatedBy")
   inputRequirementsUpdated PayrollInputRequirement[] @relation("InputRequirementUpdatedBy")
   inputWaiversCreated     PayrollInputWaiver[] @relation("InputWaiverCreatedBy")
+  shopProfilesCreated     ShopProfile[]  @relation("ShopProfileCreator")
+  shopProfilesUpdated     ShopProfile[]  @relation("ShopProfileUpdater")
+  shopCriteriaUpdated     ShopCriteriaStatusHistory[] @relation("ShopCriteriaUpdater")
+  shopCriteriaApproved    ShopCriteriaStatusHistory[] @relation("ShopCriteriaApprover")
 }
 
 model Role {
@@ -571,8 +596,44 @@ model Location {
   parent    Location?    @relation("LocationTree", fields: [parentId], references: [id])
   children  Location[]   @relation("LocationTree")
   manager   Employee?    @relation("LocationManager", fields: [managerId], references: [id])
+  shopProfile ShopProfile?
+  criteriaHistory ShopCriteriaStatusHistory[]
   @@index([type])
   @@index([parentId])
+}
+
+model ShopProfile {
+  id                  String    @id @default(uuid())
+  shopLocationId      String    @unique(map: "shop_profile_location_unique")
+  corridorType        CorridorType @default(UNKNOWN)
+  defaultShopManagerId String?
+  isIncentiveEligible Boolean   @default(false)
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+  createdById         String?
+  updatedById         String?
+  shopLocation        Location  @relation(fields: [shopLocationId], references: [id])
+  defaultShopManager  Employee? @relation("ShopDefaultManager", fields: [defaultShopManagerId], references: [id])
+  createdBy           User?     @relation("ShopProfileCreator", fields: [createdById], references: [id])
+  updatedBy           User?     @relation("ShopProfileUpdater", fields: [updatedById], references: [id])
+}
+
+model ShopCriteriaStatusHistory {
+  id            String       @id @default(uuid())
+  shopLocationId String
+  criteria      ShopCriteria @default(UNASSIGNED)
+  effectiveFrom DateTime
+  effectiveTo   DateTime?
+  reason        String?
+  updatedById   String?
+  approvedById  String?
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+  shopLocation  Location     @relation(fields: [shopLocationId], references: [id])
+  updatedBy     User?        @relation("ShopCriteriaUpdater", fields: [updatedById], references: [id])
+  approvedBy    User?        @relation("ShopCriteriaApprover", fields: [approvedById], references: [id])
+  @@index([shopLocationId, effectiveFrom])
+  @@index([shopLocationId, effectiveTo])
 }
 
 model Employee {
@@ -639,6 +700,7 @@ model Employee {
   payrollPeriodEmployees      PayrollPeriodEmployee[]
   payrollInputs               PayrollInput[]
   payrollInputWaivers         PayrollInputWaiver[]
+  shopDefaultManagerProfiles  ShopProfile[]  @relation("ShopDefaultManager")
   @@index([employmentStatus])
   @@index([currentRole])
   @@index([currentDepartmentId])

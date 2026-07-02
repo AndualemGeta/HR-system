@@ -1,4 +1,4 @@
-# Leapfrog HR Management System — Phase 3.5
+# Leapfrog HR Management System — Phase 4C.1
 
 Secure, role-based HR employee registration and management system for Leapfrog Software Technology Africa PLC.
 
@@ -9,6 +9,20 @@ Secure, role-based HR employee registration and management system for Leapfrog S
 - HR review checklist / Phase Control page for go-live tracking
 - Sensitive fields: basicSalary, salaryEffectiveDate, paymentMethod, bankName/BankAccountNumber, mpesaAccount, taxId, pensionId, costCenter
 - Permissions: dataQuality.view/manage, changeRequest.view/create/approve/reject/cancel, salaryRuleApproval.view/request/approve/reject, phaseControl.view/update
+
+**Phase 4C.1 adds — Shop Master and Shop Status Setup:**
+- Shop Master Management — create, edit, deactivate, reactivate shops using the existing Location model
+- Shop Profile — corridor type (CORRIDOR/NON_CORRIDOR/UNKNOWN), incentive eligibility, default shop manager
+- Shop Criteria Status — manual criteria setting (GOLD/SILVER/BRONZE/AT_RISK/UNASSIGNED) with effective-dated history
+- Hierarchy: Region → Area → Cluster → Shop (cluster optional)
+- Scope enforcement: HR Admin all shops, Sales Head all shops, ASM assigned area only, Shop Manager own shop only, Finance/Auditor view all, Employee no access
+- Audit logging: SHOP_CREATE, SHOP_UPDATE, SHOP_DEACTIVATE, SHOP_REACTIVATE, SHOP_MANAGER_ASSIGN, SHOP_CRITERIA_UPDATE, SHOP_PROFILE_UPDATE
+- Permissions: shop.view, shop.create, shop.update, shop.deactivate, shop.reactivate, shop.assignManager, shop.updateCriteria, shop.viewCriteriaHistory
+- UI pages: /shops (list with filters), /shops/new (create), /shops/[id] (detail), /shops/[id]/edit (edit), /shops/[id]/criteria (update criteria)
+- New models: ShopProfile (corridorType, defaultShopManagerId, isIncentiveEligible), ShopCriteriaStatusHistory (criteria, effectiveFrom/To, reason)
+- 85 tests
+
+**Phase 4C.1 does NOT calculate Shop Manager incentives, payroll, tax, pension, payslips, or payment exports.**
 
 **Phase 4A adds:**
 - Payroll Period Setup and Monthly Input Collection
