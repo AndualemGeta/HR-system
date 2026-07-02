@@ -82,10 +82,9 @@ export default function EditShopPage() {
     e.preventDefault()
     setSaving(true)
     setError('')
-    const body: Record<string, unknown> = { name, corridorType, isIncentiveEligible, isActive, shopManagerId: shopManagerId || null }
+    const body: Record<string, unknown> = { name, regionId, corridorType, isIncentiveEligible, isActive, shopManagerId: shopManagerId || null }
+    if (areaId) body.areaId = areaId
     if (clusterId) body.clusterId = clusterId
-    else if (areaId) body.areaId = areaId
-    else if (regionId) body.regionId = regionId
 
     const res = await fetch(`/api/shops/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
     const json = await res.json()

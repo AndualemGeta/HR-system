@@ -156,7 +156,7 @@ These models exist in the Prisma schema but have no implementation:
 | UI Pages | DONE | /shops, /shops/new, /shops/[id], /shops/[id]/edit, /shops/[id]/criteria |
 | Tests | DONE | 85 tests passing |
 
-## Missing Pieces / Known Limitations
+## Known Limitations
 
 - Shop Manager incentive calculation is NOT implemented (Phase 4C.2)
 - QGA bonus, EVD bonus, M-PESA commission, DSA achievement bonus, QO bonus, EBU incentive NOT implemented
@@ -167,7 +167,8 @@ These models exist in the Prisma schema but have no implementation:
 - Deactivate shop does not auto-reassign employees
 - No email notifications for shop status changes
 - No soft delete for shops (isActive flag only)
-- Shop hierarchy is stored but not validated for cycles
+- No cycle detection in hierarchy (must rely on data integrity)
+- Phase 2a and Phase 2b test suites fail pre-existing with `TypeError: fetch failed ECONNREFUSED` — unrelated to shop or payroll phases
 
 ## Next Steps
 

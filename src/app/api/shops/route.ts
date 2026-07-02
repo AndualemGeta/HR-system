@@ -63,21 +63,33 @@ export async function POST(req: NextRequest) {
 
     const { name, code, regionId, areaId, clusterId, shopManagerId, corridorType, isIncentiveEligible } = parsed.data
 
-    if (!regionId && !areaId) return badRequest('Either regionId or areaId is required')
-    if (regionId && areaId) return badRequest('Provide either regionId or areaId, not both')
-    if (clusterId && !areaId) return badRequest('clusterId requires areaId')
+    if (!regionId) return badRequest('regionId is required')
+
+    const region = await prisma.location.findUnique({ where: { id: regionId } })
+    if (!region) return badRequest('Region not found')
+    if (region.type !== 'REGION') return badRequest('regionId must be a REGION type location')
+
+    if (areaId) {
+      const area = await prisma.location.findUnique({ where: { id: areaId } })
+      if (!area) return badRequest('Area not found')
+      if (area.type !== 'AREA') return badRequest('areaId must be an AREA type location')
+      if (area.parentId !== regionId) return badRequest('Area does not belong to the selected region')
+    }
+
+    if (clusterId) {
+      if (!areaId) return badRequest('clusterId requires areaId')
+      const cluster = await prisma.location.findUnique({ where: { id: clusterId } })
+      if (!cluster) return badRequest('Cluster not found')
+      if (cluster.type !== 'CLUSTER') return badRequest('clusterId must be a CLUSTER type location')
+      if (cluster.parentId !== areaId) return badRequest('Cluster does not belong to the selected area')
+    }
 
     const existing = await prisma.location.findUnique({ where: { code } })
     if (existing) return conflict('Shop code already exists')
 
-    let parentId = regionId || areaId
+    let parentId = regionId
+    if (areaId) parentId = areaId
     if (clusterId) parentId = clusterId
-
-    if (parentId) {
-      const parent = await prisma.location.findUnique({ where: { id: parentId } })
-      if (!parent) return badRequest('Parent location not found')
-      if (!['REGION', 'AREA', 'CLUSTER'].includes(parent.type)) return badRequest('Parent must be REGION, AREA, or CLUSTER')
-    }
 
     if (shopManagerId) {
       const manager = await prisma.employee.findUnique({ where: { id: shopManagerId } })

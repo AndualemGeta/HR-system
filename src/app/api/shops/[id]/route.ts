@@ -91,22 +91,33 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     const oldValues: Record<string, unknown> = {}
     const newValues: Record<string, unknown> = {}
     const updateData: Record<string, unknown> = {}
-    let parentId: string | null | undefined
 
-    if (regionId !== undefined) {
-      parentId = regionId
-    } else if (areaId !== undefined) {
-      parentId = areaId
-    } else if (clusterId !== undefined) {
-      parentId = clusterId
-    }
+    const hierarchyFields = [regionId, areaId, clusterId].some(v => v !== undefined)
+    if (hierarchyFields) {
+      if (!regionId) return badRequest('regionId is required when changing hierarchy')
 
-    if (parentId !== undefined) {
-      if (parentId) {
-        const parent = await prisma.location.findUnique({ where: { id: parentId } })
-        if (!parent) return badRequest('Parent location not found')
-        if (!['REGION', 'AREA', 'CLUSTER'].includes(parent.type)) return badRequest('Parent must be REGION, AREA, or CLUSTER')
+      const region = await prisma.location.findUnique({ where: { id: regionId } })
+      if (!region || region.type !== 'REGION') return badRequest('regionId must be a valid REGION')
+
+      if (areaId) {
+        const area = await prisma.location.findUnique({ where: { id: areaId } })
+        if (!area) return badRequest('Area not found')
+        if (area.type !== 'AREA') return badRequest('areaId must be an AREA type location')
+        if (area.parentId !== regionId) return badRequest('Area does not belong to the selected region')
       }
+
+      if (clusterId) {
+        if (!areaId) return badRequest('clusterId requires areaId')
+        const cluster = await prisma.location.findUnique({ where: { id: clusterId } })
+        if (!cluster) return badRequest('Cluster not found')
+        if (cluster.type !== 'CLUSTER') return badRequest('clusterId must be a CLUSTER type location')
+        if (cluster.parentId !== areaId) return badRequest('Cluster does not belong to the selected area')
+      }
+
+      let parentId: string | null = regionId
+      if (areaId) parentId = areaId
+      if (clusterId) parentId = clusterId
+
       oldValues.parentId = shop.parentId
       newValues.parentId = parentId
       updateData.parentId = parentId
@@ -145,6 +156,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     }
 
     if (shopManagerId !== undefined) {
+      if (!(await userHasPermission(session.userId, 'shop.assignManager'))) return forbidden()
       const oldManagerId = shop.shopProfile?.defaultShopManagerId
       oldValues.shopManagerId = oldManagerId
       newValues.shopManagerId = shopManagerId

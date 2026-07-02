@@ -48,10 +48,9 @@ export default function NewShopPage() {
     e.preventDefault()
     setSaving(true)
     setError('')
-    const body: Record<string, unknown> = { name, code, corridorType, isIncentiveEligible }
+    const body: Record<string, unknown> = { name, code, regionId, corridorType, isIncentiveEligible }
+    if (areaId) body.areaId = areaId
     if (clusterId) body.clusterId = clusterId
-    else if (areaId) body.areaId = areaId
-    else if (regionId) body.regionId = regionId
     if (shopManagerId) body.shopManagerId = shopManagerId
 
     const res = await fetch('/api/shops', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })

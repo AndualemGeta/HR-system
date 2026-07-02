@@ -3,8 +3,6 @@
 import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 
-interface UserOption { id: string; name: string }
-
 export default function UpdateCriteriaPage() {
   const params = useParams()
   const router = useRouter()
@@ -14,19 +12,13 @@ export default function UpdateCriteriaPage() {
   const [criteria, setCriteria] = useState('UNASSIGNED')
   const [effectiveFrom, setEffectiveFrom] = useState(new Date().toISOString().split('T')[0])
   const [reason, setReason] = useState('')
-  const [approvedById, setApprovedById] = useState('')
-  const [users, setUsers] = useState<UserOption[]>([])
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    Promise.all([
-      fetch(`/api/shops/${id}`).then(r => r.json()),
-      fetch('/api/users?active=true').then(r => r.json()),
-    ]).then(([shopRes, usersRes]) => {
+    fetch(`/api/shops/${id}`).then(r => r.json()).then(shopRes => {
       setShopName(shopRes.data?.name || 'Shop')
-      setUsers(usersRes.data || [])
       setLoading(false)
     }).catch(() => setLoading(false))
   }, [id])
@@ -38,7 +30,6 @@ export default function UpdateCriteriaPage() {
     setError('')
 
     const body: Record<string, unknown> = { criteria, effectiveFrom, reason }
-    if (approvedById) body.approvedById = approvedById
 
     const res = await fetch(`/api/shops/${id}/criteria-status`, {
       method: 'POST',
@@ -75,13 +66,6 @@ export default function UpdateCriteriaPage() {
         <div>
           <label className="block text-sm font-medium">Reason *</label>
           <textarea value={reason} onChange={e => setReason(e.target.value)} required className="w-full border rounded p-2" rows={3} placeholder="Why is this criteria changing?" />
-        </div>
-        <div>
-          <label className="block text-sm font-medium">Approved By</label>
-          <select value={approvedById} onChange={e => setApprovedById(e.target.value)} className="w-full border rounded p-2">
-            <option value="">Select approver...</option>
-            {users.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
-          </select>
         </div>
         <div className="flex gap-2 pt-2">
           <button type="submit" disabled={saving} className="bg-purple-600 text-white px-4 py-2 rounded">{saving ? 'Updating...' : 'Update Criteria'}</button>

@@ -11,7 +11,6 @@ const criteriaSchema = z.object({
   criteria: z.enum(['GOLD', 'SILVER', 'BRONZE', 'AT_RISK', 'UNASSIGNED']),
   effectiveFrom: z.string().min(1, 'effectiveFrom is required'),
   reason: z.string().min(1, 'reason is required'),
-  approvedById: z.string().optional(),
 })
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -55,7 +54,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const parsed = criteriaSchema.safeParse(body)
     if (!parsed.success) return badRequest('Invalid input', parsed.error.flatten())
 
-    const { criteria, effectiveFrom, reason, approvedById } = parsed.data
+    const { criteria, effectiveFrom, reason } = parsed.data
     const effectiveDate = new Date(effectiveFrom)
     if (isNaN(effectiveDate.getTime())) return badRequest('Invalid effectiveFrom date')
 
@@ -80,7 +79,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         effectiveFrom: effectiveDate,
         reason,
         updatedById: session.userId,
-        approvedById: approvedById || null,
+        approvedById: null,
       },
     })
 

@@ -58,8 +58,20 @@ Phase 4C.2 will handle Shop Manager Incentive calculation after approval.
 - [x] All previous phase tests unaffected
 
 ## Quality Gates
-- [ ] prisma generate
-- [ ] npm test
-- [ ] typecheck
-- [ ] lint
-- [ ] build
+- [x] prisma generate
+- [x] npm test (Phase 4C.1: 85 passing)
+- [x] typecheck (0 errors)
+- [x] lint (0 new errors, 5 pre-existing warnings)
+- [x] build (65 static pages, 0 errors)
+
+## Stabilization Fixes Applied
+- [x] POST /api/shops hierarchy: regionId required, areaId optional (must belong to region), clusterId optional (requires areaId, must belong to area); deepest-parent logic
+- [x] PATCH /api/shops/:id hierarchy: same validation rules, only changes hierarchy when at least one field present
+- [x] GET /api/locations: requires `organization.view` or `shop.view`; EMPLOYEE gets forbidden; SHOP type applies scope
+- [x] PATCH /api/shops/:id with `shopManagerId` also requires `shop.assignManager` permission
+- [x] POST /api/shops/:id/criteria-status: `approvedById` removed from user input; uses `session.userId` as `updatedById`; `approvedById` set to null
+- [x] POST deactivate already-inactive: returns `badRequest('Shop is already inactive')`
+- [x] POST reactivate already-active: returns `badRequest('Shop is already active')`
+- [x] UI pages: send full hierarchy path (regionId + areaId + clusterId)
+- [x] Tests: 85 tests covering hierarchy validation, location access control, manager assignment enforcement, criteria update validation, deactivate/reactivate error semantics, permissions, scope, regression
+- [x] Pre-existing build error resolved: removed server-only `requirePagePermission` imports from 2 client components
