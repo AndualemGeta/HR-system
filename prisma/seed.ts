@@ -241,6 +241,8 @@ async function main() {
   await prisma.payrollRule.deleteMany()
   await prisma.payRule.deleteMany()
   await prisma.payComponent.deleteMany()
+  await prisma.shopCriteriaStatusHistory.deleteMany()
+  await prisma.shopProfile.deleteMany()
   await prisma.employee.deleteMany()
   await prisma.location.deleteMany()
   await prisma.department.deleteMany()
@@ -321,25 +323,31 @@ async function main() {
   const deptMap = Object.fromEntries(deptRecords.map(d => [d.code, d.id]))
   console.log(`  Created ${deptRecords.length} departments`)
 
-  // Create locations - regions, areas, shops
+  // Create locations - regions, areas, shops (no clusters)
   const regionRecords = await Promise.all([
-    prisma.location.create({ data: { name: 'Addis Ababa', code: 'ADDIS', type: 'REGION' as LocationType } }),
+    prisma.location.create({ data: { name: 'Addis Ababa - East Addis 1 (EA1)', code: 'EA1', type: 'REGION' as LocationType } }),
+    prisma.location.create({ data: { name: 'Addis Ababa - East Addis 2 (EA2)', code: 'EA2', type: 'REGION' as LocationType } }),
+    prisma.location.create({ data: { name: 'Regional - Region', code: 'REGIONAL', type: 'REGION' as LocationType } }),
   ])
   const regionMap = Object.fromEntries(regionRecords.map(r => [r.code, r.id]))
 
   const areaRecords = await Promise.all([
-    prisma.location.create({ data: { name: 'Megenagna Area', code: 'MEGENAGNA', type: 'AREA' as LocationType, parentId: regionMap['ADDIS'] } }),
-    prisma.location.create({ data: { name: 'Shiromeda Area', code: 'SHIROMEDA', type: 'AREA' as LocationType, parentId: regionMap['ADDIS'] } }),
+    prisma.location.create({ data: { name: 'Thunder Zone', code: 'THUNDER', type: 'AREA' as LocationType, parentId: regionMap['EA1'] } }),
+    prisma.location.create({ data: { name: 'Lion Zone', code: 'LION', type: 'AREA' as LocationType, parentId: regionMap['EA1'] } }),
+    prisma.location.create({ data: { name: 'Warrior Zone', code: 'WARRIOR', type: 'AREA' as LocationType, parentId: regionMap['EA1'] } }),
+    prisma.location.create({ data: { name: 'Alpha Zone', code: 'ALPHA', type: 'AREA' as LocationType, parentId: regionMap['EA2'] } }),
+    prisma.location.create({ data: { name: 'Iron Force Zone', code: 'IRON_FORCE', type: 'AREA' as LocationType, parentId: regionMap['EA2'] } }),
+    prisma.location.create({ data: { name: 'Victory Zone', code: 'VICTORY', type: 'AREA' as LocationType, parentId: regionMap['EA2'] } }),
   ])
   const areaMap = Object.fromEntries(areaRecords.map(a => [a.code, a.id]))
 
   const shopRecords = await Promise.all([
-    prisma.location.create({ data: { name: 'Megenagna Shop', code: 'SHOP_MEG', type: 'SHOP' as LocationType, parentId: areaMap['MEGENAGNA'] } }),
-    prisma.location.create({ data: { name: 'Shiromeda Shop', code: 'SHOP_SHI', type: 'SHOP' as LocationType, parentId: areaMap['SHIROMEDA'] } }),
-    prisma.location.create({ data: { name: 'Wossen Shop', code: 'SHOP_WOS', type: 'SHOP' as LocationType, parentId: areaMap['MEGENAGNA'] } }),
-    prisma.location.create({ data: { name: 'Bole Arabsa Shop', code: 'SHOP_BOL', type: 'SHOP' as LocationType, parentId: areaMap['MEGENAGNA'] } }),
-    prisma.location.create({ data: { name: 'Meri Ayat Shop', code: 'SHOP_MER', type: 'SHOP' as LocationType, parentId: areaMap['SHIROMEDA'] } }),
-    prisma.location.create({ data: { name: 'Ayat Tafo Shop', code: 'SHOP_AYT', type: 'SHOP' as LocationType, parentId: areaMap['SHIROMEDA'] } }),
+    prisma.location.create({ data: { name: 'Thunder Zone Shop', code: 'SHOP_THU', type: 'SHOP' as LocationType, parentId: areaMap['THUNDER'] } }),
+    prisma.location.create({ data: { name: 'Lion Zone Shop', code: 'SHOP_LIO', type: 'SHOP' as LocationType, parentId: areaMap['LION'] } }),
+    prisma.location.create({ data: { name: 'Warrior Zone Shop', code: 'SHOP_WAR', type: 'SHOP' as LocationType, parentId: areaMap['WARRIOR'] } }),
+    prisma.location.create({ data: { name: 'Alpha Zone Shop', code: 'SHOP_ALP', type: 'SHOP' as LocationType, parentId: areaMap['ALPHA'] } }),
+    prisma.location.create({ data: { name: 'Iron Force Zone Shop', code: 'SHOP_IRO', type: 'SHOP' as LocationType, parentId: areaMap['IRON_FORCE'] } }),
+    prisma.location.create({ data: { name: 'Victory Zone Shop', code: 'SHOP_VIC', type: 'SHOP' as LocationType, parentId: areaMap['VICTORY'] } }),
   ])
   const shopMap = Object.fromEntries(shopRecords.map(s => [s.code, s.id]))
   console.log(`  Created ${regionRecords.length + areaRecords.length + shopRecords.length} locations`)
@@ -495,8 +503,8 @@ async function main() {
     phoneNumber: '+251911100008', gender: 'FEMALE', hireDate: new Date('2023-04-01'),
     employmentType: 'FULL_TIME' as EmploymentType, employmentStatus: 'ACTIVE' as EmploymentStatus,
     employeeCategory: 'SHOP_FIELD' as EmployeeCategory,
-    currentDepartmentId: deptMap['SALES'], currentRegionId: regionMap['ADDIS'],
-    currentAreaId: areaMap['MEGENAGNA'],
+    currentDepartmentId: deptMap['SALES'], currentRegionId: regionMap['EA1'],
+    currentAreaId: areaMap['THUNDER'],
     currentRole: 'ASM' as EmployeeRole, currentLevel: 'MANAGER' as EmployeeLevel,
     directManagerId: salesHead.id, basicSalary: 70000, userEmail: 'asm@leapfrog.com',
   })
@@ -506,8 +514,8 @@ async function main() {
     phoneNumber: '+251911100009', gender: 'MALE', hireDate: new Date('2023-05-01'),
     employmentType: 'FULL_TIME' as EmploymentType, employmentStatus: 'ACTIVE' as EmploymentStatus,
     employeeCategory: 'SHOP_FIELD' as EmployeeCategory,
-    currentRegionId: regionMap['ADDIS'], currentAreaId: areaMap['MEGENAGNA'],
-    currentShopId: shopMap['SHOP_MEG'],
+    currentRegionId: regionMap['EA1'], currentAreaId: areaMap['THUNDER'],
+    currentShopId: shopMap['SHOP_THU'],
     currentRole: 'SHOP_MANAGER' as EmployeeRole, currentLevel: 'MANAGER' as EmployeeLevel,
     directManagerId: asmEmployee.id, basicSalary: 35000, userEmail: 'shop.manager@leapfrog.com',
   })
@@ -517,8 +525,8 @@ async function main() {
     phoneNumber: '+251911100010', gender: 'FEMALE', hireDate: new Date('2023-05-15'),
     employmentType: 'FULL_TIME' as EmploymentType, employmentStatus: 'ACTIVE' as EmploymentStatus,
     employeeCategory: 'SHOP_FIELD' as EmployeeCategory,
-    currentRegionId: regionMap['ADDIS'], currentAreaId: areaMap['SHIROMEDA'],
-    currentShopId: shopMap['SHOP_SHI'],
+    currentRegionId: regionMap['EA1'], currentAreaId: areaMap['LION'],
+    currentShopId: shopMap['SHOP_LIO'],
     currentRole: 'SHOP_MANAGER' as EmployeeRole, currentLevel: 'MANAGER' as EmployeeLevel,
     directManagerId: asmEmployee.id, basicSalary: 35000,
     userEmail: 'shop.manager2@leapfrog.com',
@@ -529,8 +537,8 @@ async function main() {
     phoneNumber: '+251911100011', gender: 'MALE', hireDate: new Date('2023-06-01'),
     employmentType: 'FULL_TIME' as EmploymentType, employmentStatus: 'ACTIVE' as EmploymentStatus,
     employeeCategory: 'SHOP_FIELD' as EmployeeCategory,
-    currentRegionId: regionMap['ADDIS'], currentAreaId: areaMap['MEGENAGNA'],
-    currentShopId: shopMap['SHOP_MEG'],
+    currentRegionId: regionMap['EA1'], currentAreaId: areaMap['THUNDER'],
+    currentShopId: shopMap['SHOP_THU'],
     currentRole: 'DSP' as EmployeeRole, currentLevel: 'JUNIOR' as EmployeeLevel,
     directManagerId: shopManagerMegenagna.id, basicSalary: 12000,
     userEmail: 'dsp@leapfrog.com',
@@ -541,8 +549,8 @@ async function main() {
     phoneNumber: '+251911100012', gender: 'FEMALE', hireDate: new Date('2023-06-15'),
     employmentType: 'COMMISSION_BASED' as EmploymentType, employmentStatus: 'ACTIVE' as EmploymentStatus,
     employeeCategory: 'SHOP_FIELD' as EmployeeCategory,
-    currentRegionId: regionMap['ADDIS'], currentAreaId: areaMap['SHIROMEDA'],
-    currentShopId: shopMap['SHOP_SHI'],
+    currentRegionId: regionMap['EA1'], currentAreaId: areaMap['LION'],
+    currentShopId: shopMap['SHOP_LIO'],
     currentRole: 'DSA' as EmployeeRole, currentLevel: 'JUNIOR' as EmployeeLevel,
     directManagerId: shopManagerShiromeda.id, basicSalary: 8000,
     userEmail: 'dsa@leapfrog.com',
@@ -553,8 +561,8 @@ async function main() {
     phoneNumber: '+251911100013', gender: 'FEMALE', hireDate: new Date('2023-07-01'),
     employmentType: 'FULL_TIME' as EmploymentType, employmentStatus: 'ACTIVE' as EmploymentStatus,
     employeeCategory: 'SHOP_FIELD' as EmployeeCategory,
-    currentRegionId: regionMap['ADDIS'], currentAreaId: areaMap['MEGENAGNA'],
-    currentShopId: shopMap['SHOP_MEG'],
+    currentRegionId: regionMap['EA1'], currentAreaId: areaMap['THUNDER'],
+    currentShopId: shopMap['SHOP_THU'],
     currentRole: 'SHOP_ACCOUNTANT' as EmployeeRole, currentLevel: 'MID' as EmployeeLevel,
     directManagerId: shopManagerMegenagna.id,
     accountingReportingManagerId: treasuryManager.id,

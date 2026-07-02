@@ -14,14 +14,12 @@ export default function EditShopPage() {
   const [name, setName] = useState('')
   const [regionId, setRegionId] = useState('')
   const [areaId, setAreaId] = useState('')
-  const [clusterId, setClusterId] = useState('')
   const [shopManagerId, setShopManagerId] = useState('')
   const [corridorType, setCorridorType] = useState('UNKNOWN')
   const [isIncentiveEligible, setIsIncentiveEligible] = useState(false)
   const [isActive, setIsActive] = useState(true)
   const [regions, setRegions] = useState<LocationOption[]>([])
   const [areas, setAreas] = useState<LocationOption[]>([])
-  const [clusters, setClusters] = useState<LocationOption[]>([])
   const [shopManagers, setShopManagers] = useState<EmployeeOption[]>([])
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -34,7 +32,7 @@ export default function EditShopPage() {
       fetch(`/api/shops/${id}`).then(r => r.json()),
     ]).then(([regionsRes, managersRes, shopRes]) => {
       setRegions(regionsRes.data || [])
-      setShopManagers(managersRes.data || [])
+      setShopManagers(managersRes.data?.items || [])
       const shop = shopRes.data
       if (shop) {
         setName(shop.name)
@@ -44,22 +42,15 @@ export default function EditShopPage() {
         setShopManagerId(shop.shopProfile?.defaultShopManager?.id || '')
 
         const p = shop.parent
-        if (p?.type === 'CLUSTER') {
-          setClusterId(p.id)
-          fetch(`/api/locations?type=AREA&parentId=${p.parentId}`).then(r => r.json()).then(d => setAreas(d.data || []))
-          fetch(`/api/locations?type=CLUSTER&parentId=${p.parentId}`).then(r => r.json()).then(d => setClusters(d.data || []))
-          setAreaId(p.parentId || '')
-          if (p.parent?.parentId) {
-            setRegionId(p.parent.parentId)
-          }
-        } else if (p?.type === 'AREA') {
+        if (p?.type === 'AREA') {
           setAreaId(p.id)
-          fetch(`/api/locations?type=AREA&parentId=${p.parentId}`).then(r => r.json()).then(d => setAreas(d.data || []))
-          fetch(`/api/locations?type=CLUSTER&parentId=${p.id}`).then(r => r.json()).then(d => setClusters(d.data || []))
-          if (p.parentId) setRegionId(p.parentId)
+          if (p.parentId) {
+            setRegionId(p.parentId)
+            fetch(`/api/locations?type=AREA&parentId=${p.parentId}`).then(r => r.json()).then(d => setAreas(d.data || [])).catch(() => {})
+          }
         } else if (p?.type === 'REGION') {
           setRegionId(p.id)
-          fetch(`/api/locations?type=AREA&parentId=${p.id}`).then(r => r.json()).then(d => setAreas(d.data || []))
+          fetch(`/api/locations?type=AREA&parentId=${p.id}`).then(r => r.json()).then(d => setAreas(d.data || [])).catch(() => {})
         }
       }
       setLoading(false)
@@ -68,15 +59,13 @@ export default function EditShopPage() {
 
   useEffect(() => {
     if (regionId) {
-      fetch(`/api/locations?type=AREA&parentId=${regionId}`).then(r => r.json()).then(d => setAreas(d.data || []))
+      setAreaId('')
+      fetch(`/api/locations?type=AREA&parentId=${regionId}`).then(r => r.json()).then(d => {
+        if (d.data) setAreas(d.data)
+        else if (d.error) setError(d.error)
+      }).catch(() => setError('Failed to load areas'))
     }
   }, [regionId])
-
-  useEffect(() => {
-    if (areaId) {
-      fetch(`/api/locations?type=CLUSTER&parentId=${areaId}`).then(r => r.json()).then(d => setClusters(d.data || []))
-    }
-  }, [areaId])
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -84,7 +73,6 @@ export default function EditShopPage() {
     setError('')
     const body: Record<string, unknown> = { name, regionId, corridorType, isIncentiveEligible, isActive, shopManagerId: shopManagerId || null }
     if (areaId) body.areaId = areaId
-    if (clusterId) body.clusterId = clusterId
 
     const res = await fetch(`/api/shops/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
     const json = await res.json()
@@ -105,23 +93,16 @@ export default function EditShopPage() {
         </div>
         <div>
           <label className="block text-sm font-medium">Region</label>
-          <select value={regionId} onChange={e => { setRegionId(e.target.value); setAreaId(''); setClusterId('') }} className="w-full border rounded p-2">
+          <select value={regionId} onChange={e => { setRegionId(e.target.value); setAreaId('') }} className="w-full border rounded p-2">
             <option value="">Select region...</option>
             {regions.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
           </select>
         </div>
         <div>
           <label className="block text-sm font-medium">Area</label>
-          <select value={areaId} onChange={e => { setAreaId(e.target.value); setClusterId('') }} className="w-full border rounded p-2">
+          <select value={areaId} onChange={e => setAreaId(e.target.value)} className="w-full border rounded p-2">
             <option value="">Select area...</option>
             {areas.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
-          </select>
-        </div>
-        <div>
-          <label className="block text-sm font-medium">Cluster</label>
-          <select value={clusterId} onChange={e => setClusterId(e.target.value)} className="w-full border rounded p-2">
-            <option value="">Select cluster...</option>
-            {clusters.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
           </select>
         </div>
         <div>

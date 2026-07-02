@@ -12,37 +12,29 @@ export default function NewShopPage() {
   const [code, setCode] = useState('')
   const [regionId, setRegionId] = useState('')
   const [areaId, setAreaId] = useState('')
-  const [clusterId, setClusterId] = useState('')
   const [shopManagerId, setShopManagerId] = useState('')
   const [corridorType, setCorridorType] = useState('UNKNOWN')
   const [isIncentiveEligible, setIsIncentiveEligible] = useState(false)
   const [regions, setRegions] = useState<LocationOption[]>([])
   const [areas, setAreas] = useState<LocationOption[]>([])
-  const [clusters, setClusters] = useState<LocationOption[]>([])
   const [shopManagers, setShopManagers] = useState<EmployeeOption[]>([])
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
   useEffect(() => {
-    fetch('/api/locations?type=REGION').then(r => r.json()).then(d => setRegions(d.data || []))
-    fetch('/api/employees?role=SHOP_MANAGER&status=ACTIVE').then(r => r.json()).then(d => setShopManagers(d.data || []))
+    fetch('/api/locations?type=REGION').then(r => r.json()).then(d => setRegions(d.data || [])).catch(() => {})
+    fetch('/api/employees?role=SHOP_MANAGER&status=ACTIVE').then(r => r.json()).then(d => setShopManagers(d.data?.items || [])).catch(() => {})
   }, [])
 
   useEffect(() => {
     if (regionId) {
       setAreaId('')
-      setClusterId('')
-      fetch(`/api/locations?type=AREA&parentId=${regionId}`).then(r => r.json()).then(d => setAreas(d.data || []))
-      setClusters([])
+      fetch(`/api/locations?type=AREA&parentId=${regionId}`).then(r => r.json()).then(d => {
+        if (d.data) setAreas(d.data)
+        else if (d.error) setError(d.error)
+      }).catch(() => setError('Failed to load areas'))
     }
   }, [regionId])
-
-  useEffect(() => {
-    if (areaId) {
-      setClusterId('')
-      fetch(`/api/locations?type=CLUSTER&parentId=${areaId}`).then(r => r.json()).then(d => setClusters(d.data || []))
-    }
-  }, [areaId])
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -50,7 +42,6 @@ export default function NewShopPage() {
     setError('')
     const body: Record<string, unknown> = { name, code, regionId, corridorType, isIncentiveEligible }
     if (areaId) body.areaId = areaId
-    if (clusterId) body.clusterId = clusterId
     if (shopManagerId) body.shopManagerId = shopManagerId
 
     const res = await fetch('/api/shops', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
@@ -84,13 +75,6 @@ export default function NewShopPage() {
           <select value={areaId} onChange={e => setAreaId(e.target.value)} className="w-full border rounded p-2" disabled={!regionId}>
             <option value="">Select area...</option>
             {areas.map(a => <option key={a.id} value={a.id}>{a.name} ({a.code})</option>)}
-          </select>
-        </div>
-        <div>
-          <label className="block text-sm font-medium">Cluster</label>
-          <select value={clusterId} onChange={e => setClusterId(e.target.value)} className="w-full border rounded p-2" disabled={!areaId}>
-            <option value="">Select cluster...</option>
-            {clusters.map(c => <option key={c.id} value={c.id}>{c.name} ({c.code})</option>)}
           </select>
         </div>
         <div>
