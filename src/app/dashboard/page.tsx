@@ -86,6 +86,13 @@ export default function DashboardPage() {
       ],
     },
     {
+      title: 'Shop Manager Incentives',
+      links: [
+        { label: 'Incentive Periods', href: '/shop-manager-incentives', permission: 'shopManagerIncentive.view' },
+        { label: 'New Period', href: '/shop-manager-incentives/new', permission: 'shopManagerIncentive.createPeriod' },
+      ],
+    },
+    {
       title: 'Reports & Audit',
       links: [
         { label: 'Reports', href: '/reports', permission: 'reports.view' },

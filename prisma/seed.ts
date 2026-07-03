@@ -34,6 +34,11 @@ const ALL_PERMISSIONS = [
   'payrollPreparationSummary.view', 'payrollPreparationSummary.export',
   'shop.view', 'shop.create', 'shop.update', 'shop.deactivate', 'shop.reactivate',
   'shop.assignManager', 'shop.updateCriteria', 'shop.viewCriteriaHistory',
+  'shopManagerIncentive.view', 'shopManagerIncentive.createPeriod', 'shopManagerIncentive.updatePeriod',
+  'shopManagerIncentive.input', 'shopManagerIncentive.import',
+  'shopManagerIncentive.calculate', 'shopManagerIncentive.review',
+  'shopManagerIncentive.approve', 'shopManagerIncentive.lock',
+  'shopManagerIncentive.export', 'shopManagerIncentive.sendToPayroll',
 ] as const
 
 const ROLE_PERMISSIONS: Record<string, string[]> = {
@@ -66,6 +71,11 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
     'payrollPreparationSummary.view', 'payrollPreparationSummary.export',
     'shop.view', 'shop.create', 'shop.update', 'shop.deactivate', 'shop.reactivate',
     'shop.assignManager', 'shop.updateCriteria', 'shop.viewCriteriaHistory',
+    'shopManagerIncentive.view', 'shopManagerIncentive.createPeriod', 'shopManagerIncentive.updatePeriod',
+    'shopManagerIncentive.input', 'shopManagerIncentive.import',
+    'shopManagerIncentive.calculate', 'shopManagerIncentive.review',
+    'shopManagerIncentive.approve', 'shopManagerIncentive.lock',
+    'shopManagerIncentive.export', 'shopManagerIncentive.sendToPayroll',
   ],
   HR_OFFICER: [
     'employee.view', 'employee.create', 'employee.update',
@@ -109,6 +119,9 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
     'payrollPeriod.review', 'payrollPeriod.markReadyForCalculation',
     'payrollPreparationSummary.view', 'payrollPreparationSummary.export',
     'shop.view', 'shop.viewCriteriaHistory',
+    'shopManagerIncentive.view', 'shopManagerIncentive.review',
+    'shopManagerIncentive.approve', 'shopManagerIncentive.lock',
+    'shopManagerIncentive.export', 'shopManagerIncentive.sendToPayroll',
   ],
   FINANCE_PAYROLL: [
     'employee.view', 'salary.view', 'reports.view',
@@ -127,6 +140,8 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
     'payrollPeriod.review',
     'payrollPreparationSummary.view', 'payrollPreparationSummary.export',
     'shop.view', 'shop.viewCriteriaHistory',
+    'shopManagerIncentive.view', 'shopManagerIncentive.review',
+    'shopManagerIncentive.export', 'shopManagerIncentive.sendToPayroll',
   ],
   TREASURY_MANAGER: [
     'employee.view', 'salary.view',
@@ -148,6 +163,10 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
     'payrollPreparationSummary.view',
     'shop.view', 'shop.create', 'shop.update',
     'shop.assignManager', 'shop.updateCriteria', 'shop.viewCriteriaHistory',
+    'shopManagerIncentive.view', 'shopManagerIncentive.createPeriod', 'shopManagerIncentive.updatePeriod',
+    'shopManagerIncentive.input', 'shopManagerIncentive.import',
+    'shopManagerIncentive.calculate', 'shopManagerIncentive.review',
+    'shopManagerIncentive.approve', 'shopManagerIncentive.export', 'shopManagerIncentive.sendToPayroll',
   ],
   ASM: [
     'employee.view', 'reports.view',
@@ -156,6 +175,7 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
     'payrollInput.view', 'payrollInput.create', 'payrollInput.submit',
     'payrollPreparationSummary.view',
     'shop.view', 'shop.viewCriteriaHistory',
+    'shopManagerIncentive.view', 'shopManagerIncentive.input', 'shopManagerIncentive.review',
   ],
   SHOP_MANAGER: [
     'employee.view',
@@ -166,6 +186,7 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
     'payrollInput.view', 'payrollInput.create', 'payrollInput.submit',
     'payrollPreparationSummary.view',
     'shop.view', 'shop.viewCriteriaHistory',
+    'shopManagerIncentive.view',
   ],
   EMPLOYEE: [],
   AUDITOR: [
@@ -181,6 +202,7 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
     'payrollInputWaiver.view',
     'payrollPreparationSummary.view', 'payrollPreparationSummary.export',
     'shop.view', 'shop.viewCriteriaHistory',
+    'shopManagerIncentive.view', 'shopManagerIncentive.export',
   ],
 }
 
@@ -205,6 +227,11 @@ async function main() {
   await prisma.auditLog.deleteMany()
   await prisma.importRow.deleteMany()
   await prisma.importSession.deleteMany()
+  await prisma.shopManagerIncentiveComponent.deleteMany()
+  await prisma.shopManagerIncentiveIssue.deleteMany()
+  await prisma.shopManagerIncentiveCalculation.deleteMany()
+  await prisma.shopManagerPerformanceInput.deleteMany()
+  await prisma.shopManagerIncentivePeriod.deleteMany()
   await prisma.payrollInputWaiver.deleteMany()
   await prisma.payrollInputRequirement.deleteMany()
   await prisma.payrollInput.deleteMany()
@@ -750,6 +777,27 @@ async function main() {
     })
   }
   console.log(`  Created ${defaultInputTypes.length} default payroll input types`)
+
+  // Seed Shop Manager Incentive payroll input types
+  const adminUserId = userMap['admin@leapfrog.com']
+  const incentiveInputTypes = [
+    { code: 'SHOP_MANAGER_QGA_BONUS', name: 'Shop Manager QGA Bonus', category: 'ALLOWANCE' as const, valueType: 'AMOUNT' as const },
+    { code: 'SHOP_MANAGER_QGA_SIM_COMMISSION', name: 'Shop Manager QGA SIM Commission', category: 'COMMISSION' as const, valueType: 'AMOUNT' as const },
+    { code: 'SHOP_MANAGER_EVD_BONUS', name: 'Shop Manager EVD Bonus', category: 'ALLOWANCE' as const, valueType: 'AMOUNT' as const },
+    { code: 'SHOP_MANAGER_BA_SITE_BONUS', name: 'Shop Manager BA/Site Bonus', category: 'ALLOWANCE' as const, valueType: 'AMOUNT' as const },
+    { code: 'SHOP_MANAGER_MPESA_COMMISSION', name: 'Shop Manager M-PESA Commission', category: 'COMMISSION' as const, valueType: 'AMOUNT' as const },
+    { code: 'SHOP_MANAGER_DSA_ACHIEVEMENT_BONUS', name: 'Shop Manager DSA Achievement Bonus', category: 'ALLOWANCE' as const, valueType: 'AMOUNT' as const },
+    { code: 'SHOP_MANAGER_QO_BONUS', name: 'Shop Manager QO Bonus', category: 'ALLOWANCE' as const, valueType: 'AMOUNT' as const },
+    { code: 'SHOP_MANAGER_EBU_ACTIVATION_BONUS', name: 'Shop Manager EBU Activation Bonus', category: 'ALLOWANCE' as const, valueType: 'AMOUNT' as const },
+    { code: 'SHOP_MANAGER_EBU_REVENUE_SHARE', name: 'Shop Manager EBU Revenue Share', category: 'COMMISSION' as const, valueType: 'AMOUNT' as const },
+    { code: 'SHOP_MANAGER_TOTAL_INCENTIVE', name: 'Shop Manager Total Incentive', category: 'ALLOWANCE' as const, valueType: 'AMOUNT' as const },
+  ]
+  for (const it of incentiveInputTypes) {
+    await prisma.payrollInputType.create({
+      data: { ...it, description: `${it.name} - from incentive calculation`, isActive: true, createdById: adminUserId },
+    }).catch(() => {})
+  }
+  console.log(`  Created ${incentiveInputTypes.length} shop manager incentive input types`)
 
   // Seed default PayrollInputRequirements
   const transportType = await prisma.payrollInputType.findUnique({ where: { code: 'TRANSPORT_ALLOWANCE_INPUT' } })

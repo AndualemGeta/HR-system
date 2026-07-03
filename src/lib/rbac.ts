@@ -87,6 +87,17 @@ export type PermissionKey =
   | 'shop.assignManager'
   | 'shop.updateCriteria'
   | 'shop.viewCriteriaHistory'
+  | 'shopManagerIncentive.view'
+  | 'shopManagerIncentive.createPeriod'
+  | 'shopManagerIncentive.updatePeriod'
+  | 'shopManagerIncentive.input'
+  | 'shopManagerIncentive.import'
+  | 'shopManagerIncentive.calculate'
+  | 'shopManagerIncentive.review'
+  | 'shopManagerIncentive.approve'
+  | 'shopManagerIncentive.lock'
+  | 'shopManagerIncentive.export'
+  | 'shopManagerIncentive.sendToPayroll'
 
 export async function getUserPermissions(userId: string): Promise<PermissionKey[]> {
   const roles = await prisma.userRole.findMany({
@@ -215,6 +226,17 @@ const ALL_PERMISSIONS_MAP: Record<string, boolean> = {
   'shop.assignManager': true,
   'shop.updateCriteria': true,
   'shop.viewCriteriaHistory': true,
+  'shopManagerIncentive.view': true,
+  'shopManagerIncentive.createPeriod': true,
+  'shopManagerIncentive.updatePeriod': true,
+  'shopManagerIncentive.input': true,
+  'shopManagerIncentive.import': true,
+  'shopManagerIncentive.calculate': true,
+  'shopManagerIncentive.review': true,
+  'shopManagerIncentive.approve': true,
+  'shopManagerIncentive.lock': true,
+  'shopManagerIncentive.export': true,
+  'shopManagerIncentive.sendToPayroll': true,
 }
 
 export const ALL_PERMISSIONS = Object.keys(ALL_PERMISSIONS_MAP)
