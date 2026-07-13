@@ -12,19 +12,17 @@ interface PeriodDetail {
 }
 
 interface Dashboard {
-  totalShops: number; goldCount: number; silverCount: number; bronzeCount: number; atRiskCount: number
+  totalShops: number; readyShops: number; incompleteShops: number; atRiskShops: number
+  calculatedShops: number; staleCalculations: number
+  salesInputsComplete: number; distributionInputsComplete: number; ebuInputsComplete: number
   totalIncentive: number; averageIncentive: number; highestIncentive: number
-  componentTotals: {
-    qgaBonus: number; qgaSimCommission: number; evdBonus: number
-    mpesaCommission: number; baSiteBonus: number; dsaAchievementBonus: number
-    qoBonus: number; ebuActivationBonus: number; ebuRevenueShare: number
-  }
+  hasCalculations: boolean; payrollHandoffReady: boolean; periodStatus: string
+  componentTotals: Record<string, number>
 }
 
 const statusColors: Record<string, string> = {
   DRAFT: '#6b7280', OPEN: '#3b82f6', CALCULATED: '#22c55e', CANCELLED: '#ef4444',
 }
-
 const statusLabels: Record<string, string> = {
   DRAFT: 'Draft', OPEN: 'Open', CALCULATED: 'Calculated', CANCELLED: 'Cancelled',
 }
@@ -73,6 +71,7 @@ export default function IncentivePeriodDetailPage() {
   if (!period) return <div className="p-6"><p>Period not found</p></div>
 
   const s = period.status
+  const d = dashboard
 
   return (
     <div className="p-6 max-w-6xl mx-auto">
@@ -89,95 +88,75 @@ export default function IncentivePeriodDetailPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-        <div className="border rounded p-4 text-center">
-          <p className="text-2xl font-bold">{dashboard?.totalShops ?? '-'}</p>
-          <p className="text-sm text-gray-500">Total Shops</p>
+      {d && d.staleCalculations > 0 && (
+        <div className="bg-yellow-50 border border-yellow-200 rounded p-3 mb-4 text-sm text-yellow-800">
+          <strong>Recalculation Required:</strong> {d.staleCalculations} shop(s) have inputs changed after last calculation. Please recalculate.
         </div>
-        <div className="border rounded p-4 text-center">
-          <p className="text-2xl font-bold text-yellow-600">{dashboard?.goldCount ?? '-'}</p>
-          <p className="text-sm text-gray-500">Gold</p>
-        </div>
-        <div className="border rounded p-4 text-center">
-          <p className="text-2xl font-bold text-gray-400">{dashboard?.silverCount ?? '-'}</p>
-          <p className="text-sm text-gray-500">Silver</p>
-        </div>
-        <div className="border rounded p-4 text-center">
-          <p className="text-2xl font-bold text-orange-600">{dashboard?.bronzeCount ?? '-'}</p>
-          <p className="text-sm text-gray-500">Bronze</p>
-        </div>
-        <div className="border rounded p-4 text-center">
-          <p className="text-2xl font-bold text-red-600">{dashboard?.atRiskCount ?? '-'}</p>
-          <p className="text-sm text-gray-500">At-risk</p>
-        </div>
-        <div className="border rounded p-4 text-center">
-          <p className="text-2xl font-bold">{dashboard?.totalIncentive?.toLocaleString() ?? '-'}</p>
-          <p className="text-sm text-gray-500">Total Incentive</p>
-        </div>
-        <div className="border rounded p-4 text-center">
-          <p className="text-2xl font-bold">{dashboard?.averageIncentive?.toLocaleString() ?? '-'}</p>
-          <p className="text-sm text-gray-500">Average</p>
-        </div>
-        <div className="border rounded p-4 text-center">
-          <p className="text-2xl font-bold">{dashboard?.highestIncentive?.toLocaleString() ?? '-'}</p>
-          <p className="text-sm text-gray-500">Highest</p>
+      )}
+
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
+        <div className="border rounded p-4 text-center"><p className="text-2xl font-bold">{d?.totalShops ?? '-'}</p><p className="text-xs text-gray-500">Total Shops</p></div>
+        <div className="border rounded p-4 text-center"><p className="text-2xl font-bold text-green-600">{d?.readyShops ?? '-'}</p><p className="text-xs text-gray-500">Ready</p></div>
+        <div className="border rounded p-4 text-center"><p className="text-2xl font-bold text-orange-600">{d?.incompleteShops ?? '-'}</p><p className="text-xs text-gray-500">Incomplete</p></div>
+        <div className="border rounded p-4 text-center"><p className="text-2xl font-bold text-red-600">{d?.atRiskShops ?? '-'}</p><p className="text-xs text-gray-500">At-risk</p></div>
+        <div className="border rounded p-4 text-center"><p className="text-2xl font-bold">{d?.calculatedShops ?? '-'}</p><p className="text-xs text-gray-500">Calculated</p></div>
+        <div className="border rounded p-4 text-center"><p className="text-2xl font-bold text-yellow-600">{d?.staleCalculations ?? 0}</p><p className="text-xs text-gray-500">Stale</p></div>
+        <div className="border rounded p-4 text-center"><p className="text-2xl font-bold">{d?.totalIncentive?.toLocaleString() ?? '-'}</p><p className="text-xs text-gray-500">Total Incentive</p></div>
+        <div className="border rounded p-4 text-center"><p className="text-2xl font-bold">{d?.averageIncentive?.toLocaleString() ?? '-'}</p><p className="text-xs text-gray-500">Average</p></div>
+        <div className="border rounded p-4 text-center"><p className="text-2xl font-bold">{d?.highestIncentive?.toLocaleString() ?? '-'}</p><p className="text-xs text-gray-500">Highest</p></div>
+        <div className={`border rounded p-4 text-center ${d?.payrollHandoffReady ? 'bg-green-50' : ''}`}>
+          <p className="text-2xl font-bold">{d?.payrollHandoffReady ? 'Yes' : 'No'}</p>
+          <p className="text-xs text-gray-500">Payroll Ready</p>
         </div>
       </div>
+
+      {d && (d.salesInputsComplete > 0 || d.distributionInputsComplete > 0 || d.ebuInputsComplete > 0) && (
+        <div className="grid grid-cols-3 gap-4 mb-6">
+          <div className="border rounded p-3 text-center"><p className="font-bold text-blue-600">{d.salesInputsComplete}/{d.totalShops - d.atRiskShops}</p><p className="text-xs text-gray-500">Sales Inputs Complete</p></div>
+          <div className="border rounded p-3 text-center"><p className="font-bold text-green-600">{d.distributionInputsComplete}/{d.totalShops - d.atRiskShops}</p><p className="text-xs text-gray-500">Distribution Inputs Complete</p></div>
+          <div className="border rounded p-3 text-center"><p className="font-bold text-yellow-600">{d.ebuInputsComplete}/{d.totalShops - d.atRiskShops}</p><p className="text-xs text-gray-500">EBU Inputs Complete</p></div>
+        </div>
+      )}
 
       <div className="flex gap-2 mb-6 flex-wrap">
         {s === 'DRAFT' && (
           <>
-            <button onClick={() => handleAction('open', 'open')} disabled={actionLoading} className="bg-blue-600 text-white px-4 py-2 rounded text-sm disabled:opacity-50">
-              Open
-            </button>
-            <button onClick={() => handleAction('cancel', 'cancel')} disabled={actionLoading} className="bg-red-600 text-white px-4 py-2 rounded text-sm disabled:opacity-50">
-              Cancel
-            </button>
+            <button onClick={() => handleAction('open', 'open')} disabled={actionLoading} className="bg-blue-600 text-white px-4 py-2 rounded text-sm disabled:opacity-50">Open</button>
+            <button onClick={() => handleAction('cancel', 'cancel')} disabled={actionLoading} className="bg-red-600 text-white px-4 py-2 rounded text-sm disabled:opacity-50">Cancel</button>
           </>
         )}
-        {s === 'OPEN' && (
-          <button onClick={() => handleAction('calculate', 'calculate')} disabled={actionLoading} className="bg-yellow-600 text-white px-4 py-2 rounded text-sm disabled:opacity-50">
-            Calculate
-          </button>
+        {(s === 'OPEN' || s === 'OPEN_FOR_INPUT') && (
+          <button onClick={() => handleAction('calculate', 'calculate')} disabled={actionLoading} className="bg-yellow-600 text-white px-4 py-2 rounded text-sm disabled:opacity-50">Calculate</button>
         )}
         {s === 'CALCULATED' && (
           <>
-            <button onClick={() => handleAction('send to payroll inputs', 'send-to-payroll-inputs')} disabled={actionLoading} className="bg-indigo-600 text-white px-4 py-2 rounded text-sm disabled:opacity-50">
-              Send to Payroll Inputs
+            <button onClick={() => handleAction('send to payroll inputs', 'send-to-payroll-inputs')} disabled={actionLoading} className={`px-4 py-2 rounded text-sm disabled:opacity-50 ${d?.payrollHandoffReady ? 'bg-indigo-600 text-white' : 'bg-gray-400 text-white'}`} title={!d?.payrollHandoffReady ? 'Resolve incomplete or stale shops first' : ''}>
+              Send to Payroll
             </button>
-            <button onClick={() => window.open(`/api/shop-manager-incentives/periods/${id}/export`, '_blank')} className="bg-green-600 text-white px-4 py-2 rounded text-sm">
-              Export
-            </button>
+            <button onClick={() => window.open(`/api/shop-manager-incentives/periods/${id}/export`, '_blank')} className="bg-green-600 text-white px-4 py-2 rounded text-sm">Export CSV</button>
           </>
         )}
       </div>
 
       <div className="flex gap-3 mb-6 flex-wrap">
-        {s !== 'DRAFT' && s !== 'CANCELLED' && (
-          <button onClick={() => router.push(`/shop-manager-incentives/${id}/inputs`)} className="px-4 py-2 border rounded text-sm hover:bg-gray-50">
-            Inputs
-          </button>
+        {s !== 'CANCELLED' && (
+          <button onClick={() => router.push(`/shop-manager-incentives/${id}/inputs`)} className="px-4 py-2 border rounded text-sm hover:bg-gray-50">Inputs</button>
         )}
-        {s === 'CALCULATED' && (
-          <button onClick={() => router.push(`/shop-manager-incentives/${id}/calculations`)} className="px-4 py-2 border rounded text-sm hover:bg-gray-50">
-            Calculations
-          </button>
+        {(s === 'CALCULATED' || s === 'OPEN') && (
+          <button onClick={() => router.push(`/shop-manager-incentives/${id}/calculations`)} className="px-4 py-2 border rounded text-sm hover:bg-gray-50">Calculations</button>
         )}
+        <button onClick={() => router.push('/shop-manager-incentives/input-configuration')} className="px-4 py-2 border rounded text-sm hover:bg-gray-50">Input Configuration</button>
       </div>
 
-      {dashboard && dashboard.totalIncentive > 0 && (
+      {d && d.totalIncentive > 0 && (
         <div className="border rounded p-4 mb-6">
-          <h2 className="font-semibold mb-2">Component Totals</h2>
+          <h2 className="font-semibold mb-2">Component Totals (Audit Only)</h2>
           <div className="grid grid-cols-3 md:grid-cols-5 gap-2 text-sm">
-            <div className="bg-gray-50 rounded p-2"><span className="text-gray-500">QGA Bonus:</span> {dashboard.componentTotals.qgaBonus.toLocaleString()}</div>
-            <div className="bg-gray-50 rounded p-2"><span className="text-gray-500">QGA SIM:</span> {dashboard.componentTotals.qgaSimCommission.toLocaleString()}</div>
-            <div className="bg-gray-50 rounded p-2"><span className="text-gray-500">EVD:</span> {dashboard.componentTotals.evdBonus.toLocaleString()}</div>
-            <div className="bg-gray-50 rounded p-2"><span className="text-gray-500">M-PESA:</span> {dashboard.componentTotals.mpesaCommission.toLocaleString()}</div>
-            <div className="bg-gray-50 rounded p-2"><span className="text-gray-500">BA/Site:</span> {dashboard.componentTotals.baSiteBonus.toLocaleString()}</div>
-            <div className="bg-gray-50 rounded p-2"><span className="text-gray-500">DSA:</span> {dashboard.componentTotals.dsaAchievementBonus.toLocaleString()}</div>
-            <div className="bg-gray-50 rounded p-2"><span className="text-gray-500">QO:</span> {dashboard.componentTotals.qoBonus.toLocaleString()}</div>
-            <div className="bg-gray-50 rounded p-2"><span className="text-gray-500">EBU Act:</span> {dashboard.componentTotals.ebuActivationBonus.toLocaleString()}</div>
-            <div className="bg-gray-50 rounded p-2"><span className="text-gray-500">EBU Rev:</span> {dashboard.componentTotals.ebuRevenueShare.toLocaleString()}</div>
+            {Object.entries(d.componentTotals || {}).map(([key, val]) => (
+              <div key={key} className="bg-gray-50 rounded p-2">
+                <span className="text-gray-500">{key.replace(/([A-Z])/g, ' $1').trim()}:</span> {Number(val).toLocaleString()}
+              </div>
+            ))}
           </div>
         </div>
       )}
@@ -188,9 +167,9 @@ export default function IncentivePeriodDetailPage() {
           <p><span className="text-gray-500">Status:</span> {statusLabels[s] || s}</p>
           <p><span className="text-gray-500">Month/Year:</span> {period.month}/{period.year}</p>
           <p><span className="text-gray-500">Payroll Period:</span> {period.payrollPeriod?.periodName || '-'}</p>
+          <p><span className="text-gray-500">Payroll Status:</span> {period.payrollPeriod?.status || '-'}</p>
           <p><span className="text-gray-500">Created By:</span> {period.createdBy?.name || '-'}</p>
           <p><span className="text-gray-500">Inputs:</span> {period._count.inputs}</p>
-          <p><span className="text-gray-500">Calculations:</span> {period._count.calculations}</p>
         </div>
       </div>
     </div>

@@ -501,6 +501,14 @@ enum AuditAction {
   SHOP_MANAGER_INCENTIVE_CALCULATE
   SHOP_MANAGER_INCENTIVE_EXPORT
   SHOP_MANAGER_INCENTIVE_SEND_TO_PAYROLL
+  SHOP_MANAGER_INCENTIVE_INPUT_CONFIG_UPDATE
+  SHOP_MANAGER_INCENTIVE_INPUT_CONFIG_ACTIVATE
+  SHOP_MANAGER_INCENTIVE_INPUT_CONFIG_DEACTIVATE
+  SHOP_MANAGER_INCENTIVE_READINESS_VALIDATE
+  SHOP_MANAGER_INCENTIVE_RECALCULATION_REQUIRED
+  SHOP_MANAGER_INCENTIVE_PAYROLL_TOTAL_CREATE
+  SHOP_MANAGER_INCENTIVE_PAYROLL_TOTAL_UPDATE
+  SHOP_MANAGER_INCENTIVE_PAYROLL_HANDOFF_BLOCKED
   OTHER
 }
 
@@ -1904,14 +1912,21 @@ model ShopManagerIncentiveCalculation {
 }
 
 model ShopManagerIncentiveInputConfig {
-  id               String  @id @default(uuid())
-  inputCode        String  @unique
-  inputLabel       String
-  ownerDepartment  String
-  ownerRole        String
-  inputType        String
-  allowedValues    String?
-  usedInComponent  String?
-  displayOrder     Int     @default(0)
-  isActive         Boolean @default(true)
+  id                     String  @id @default(uuid())
+  inputCode              String  @unique
+  inputLabel             String
+  ownerDepartment        String
+  ownerRole              String
+  inputType              String
+  allowedValues          String?
+  usedInComponent        String?
+  displayOrder           Int     @default(0)
+  isActive               Boolean @default(true)
+  isRequired             Boolean @default(false)
+  blocksCalculation      Boolean @default(false)
+  blocksPayrollHandoff   Boolean @default(false)
+  minValue               Decimal? @db.Decimal(12, 2)
+  maxValue               Decimal? @db.Decimal(12, 2)
+  helpText               String?
+  requiredWhenJson       String?
 }

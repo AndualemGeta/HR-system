@@ -20,6 +20,138 @@ interface PerformanceInput {
   shopLocation: ShopLocation; shopManager: ShopManager | null
 }
 
+interface ReadinessItem {
+  readinessStatus: string
+  missingFields: string[]
+  missingSalesFields: string[]
+  missingDistributionFields: string[]
+  missingEbuFields: string[]
+}
+
+interface InputConfig {
+  id: string
+  inputCode: string
+  inputLabel: string
+  isRequired: boolean
+  requiredWhenJson: string | null
+  helpText: string | null
+}
+
+const readinessColors: Record<string, string> = {
+  READY: '#16a34a',
+  INCOMPLETE: '#dc2626',
+  AT_RISK_ZERO: '#6b7280',
+  CALCULATED: '#2563eb',
+  STALE_CALCULATION: '#f59e0b',
+}
+
+const readinessLabels: Record<string, string> = {
+  READY: 'Ready',
+  INCOMPLETE: 'Incomplete',
+  AT_RISK_ZERO: 'At-Risk',
+  CALCULATED: 'Calculated',
+  STALE_CALCULATION: 'Stale',
+}
+
+const FIELD_LABELS: Record<string, string> = {
+  shopCriteria: 'Shop Criteria',
+  shopManagerId: 'Shop Manager',
+  qgaAbove90: 'QGA >90%?',
+  qgaQuantity: 'QGA Quantity',
+  mmQoAbove90: 'MM QO >90%?',
+  dsaAirtimeAchievementPercent: 'DSA Airtime %',
+  corridorStatus: 'Corridor',
+  evdAbove100AndReconciled: 'EVD >100%',
+  mpesaTargetAndReconciled: 'M-PESA Tgt',
+  mpesaFloatSold: 'M-PESA Float',
+  baSite: 'BA/Site',
+  ebuTargetAchieved: 'EBU Tgt',
+  ebuRevenueMade: 'EBU Rev',
+  ebuAverageTopupAbove500: 'EBU TopUp >500?',
+  ebuFirstMonthLfRevenue: 'EBU 1st Mo LF',
+  responsibleRemarks: 'Remarks',
+}
+
+const SALES_FIELDS = ['qgaAbove90', 'qgaQuantity', 'mmQoAbove90', 'dsaAirtimeAchievementPercent']
+const DISTRIBUTION_FIELDS = ['corridorStatus', 'evdAbove100AndReconciled', 'mpesaTargetAndReconciled', 'mpesaFloatSold', 'baSite']
+const EBU_FIELDS = ['ebuTargetAchieved', 'ebuRevenueMade', 'ebuAverageTopupAbove500', 'ebuFirstMonthLfRevenue']
+const PERFORMANCE_FIELDS = [...SALES_FIELDS, ...DISTRIBUTION_FIELDS, ...EBU_FIELDS]
+
+const fieldToCode: Record<string, string> = {
+  shopCriteria: 'SHOP_CRITERIA',
+  qgaAbove90: 'QGA_ABOVE_90',
+  qgaQuantity: 'QGA_QUANTITY',
+  mmQoAbove90: 'MM_QO_ABOVE_90',
+  dsaAirtimeAchievementPercent: 'DSA_AIRTIME_PERCENT',
+  corridorStatus: 'CORRIDOR_STATUS',
+  evdAbove100AndReconciled: 'EVD_ABOVE_100',
+  mpesaTargetAndReconciled: 'MPESA_TARGET',
+  mpesaFloatSold: 'MPESA_FLOAT_SOLD',
+  baSite: 'BA_SITE',
+  ebuTargetAchieved: 'EBU_TARGET_ACHIEVED',
+  ebuRevenueMade: 'EBU_REVENUE_MADE',
+  ebuAverageTopupAbove500: 'EBU_AVG_TOPUP_ABOVE_500',
+  ebuFirstMonthLfRevenue: 'EBU_FIRST_MONTH_LF_REVENUE',
+  responsibleRemarks: 'RESPONSIBLE_REMARKS',
+}
+
+function isSalesField(field: string) { return SALES_FIELDS.includes(field) }
+function isDistributionField(field: string) { return DISTRIBUTION_FIELDS.includes(field) }
+function isEbuField(field: string) { return EBU_FIELDS.includes(field) }
+
+function isFieldDisabled(
+  field: string, atRisk: boolean,
+  hasAll: boolean, hasSales: boolean, hasDist: boolean, hasEbu: boolean,
+): boolean {
+  if (field === 'shopCriteria' || field === 'shopManagerId' || field === 'responsibleRemarks') return false
+  if (atRisk) return true
+  if (hasAll) return false
+  if (isSalesField(field)) return !hasSales
+  if (isDistributionField(field)) return !hasDist
+  if (isEbuField(field)) return !hasEbu
+  return false
+}
+
+function getConfig(field: string, configs: Map<string, InputConfig>): InputConfig | undefined {
+  const code = fieldToCode[field]
+  return code ? configs.get(code) : undefined
+}
+
+function isCondRequired(
+  field: string, data: Record<string, string>, configs: Map<string, InputConfig>,
+): boolean {
+  const config = getConfig(field, configs)
+  if (!config?.requiredWhenJson) return false
+  try {
+    const cond = JSON.parse(config.requiredWhenJson)
+    for (const [key, val] of Object.entries(cond)) {
+      if (data[key] !== val) return false
+    }
+    const v = data[field]
+    return v === '' || v === undefined || v === null
+  } catch { return false }
+}
+
+function getHelpText(field: string, configs: Map<string, InputConfig>): string | null {
+  return getConfig(field, configs)?.helpText ?? null
+}
+
+function isRegRequired(field: string, configs: Map<string, InputConfig>): boolean {
+  return getConfig(field, configs)?.isRequired === true
+}
+
+function RequiredStar({ field, configs }: { field: string; configs: Map<string, InputConfig> }) {
+  if (isRegRequired(field, configs)) return <span className="text-red-500" title="Required">*</span>
+  return null
+}
+
+function CondIndicator({ field, data, configs }: { field: string; data: Record<string, string>; configs: Map<string, InputConfig> }) {
+  if (isCondRequired(field, data, configs)) {
+    return <span className="text-orange-500 ml-0.5" title="Conditionally required — fill dependent field first">&#9679;</span>
+  }
+  return null
+}
+
 export default function InputsPage() {
   const params = useParams()
   const router = useRouter()
@@ -34,45 +166,86 @@ export default function InputsPage() {
   const [showAddForm, setShowAddForm] = useState(false)
   const [addFormData, setAddFormData] = useState<Record<string, string>>({})
   const [addFormError, setAddFormError] = useState('')
+  const [readinessMap, setReadinessMap] = useState<Map<string, ReadinessItem>>(new Map())
+  const [inputConfigs, setInputConfigs] = useState<Map<string, InputConfig>>(new Map())
+  const [permAll, setPermAll] = useState(false)
+  const [permSales, setPermSales] = useState(false)
+  const [permDist, setPermDist] = useState(false)
+  const [permEbu, setPermEbu] = useState(false)
 
   useEffect(() => { fetchData() }, [id])
 
   async function fetchData() {
     setLoading(true); setError(null)
     try {
-      const [inputRes, shopRes] = await Promise.all([
+      const [inputRes, shopRes, authRes, readinessRes, configRes] = await Promise.all([
         fetch(`/api/shop-manager-incentives/periods/${id}/inputs`),
         fetch('/api/shops?pageSize=500'),
+        fetch('/api/auth/me'),
+        fetch(`/api/shop-manager-incentives/periods/${id}/readiness`).catch(() => null),
+        fetch('/api/shop-manager-incentives/input-config').catch(() => null),
       ])
       const inputJson = await inputRes.json()
       const shopJson = await shopRes.json()
+      const authJson = await authRes.json()
       if (!inputRes.ok) { setError(inputJson.error || 'Failed to load inputs') }
       else setInputs(inputJson.data || [])
       if (shopRes.ok) setShops(shopJson.data || [])
+      const perms: string[] = authJson.data?.permissions || []
+      setPermAll(perms.includes('shopManagerIncentive.inputAll'))
+      setPermSales(perms.includes('shopManagerIncentive.inputSales'))
+      setPermDist(perms.includes('shopManagerIncentive.inputDistribution'))
+      setPermEbu(perms.includes('shopManagerIncentive.inputEbu'))
+      if (readinessRes && readinessRes.ok) {
+        const rj = await readinessRes.json()
+        const m = new Map<string, ReadinessItem>()
+        if (rj.data?.inputs) {
+          for (const item of rj.data.inputs) {
+            m.set(item.inputId, {
+              readinessStatus: item.readinessStatus,
+              missingFields: item.missingFields || [],
+              missingSalesFields: item.missingSalesFields || [],
+              missingDistributionFields: item.missingDistributionFields || [],
+              missingEbuFields: item.missingEbuFields || [],
+            })
+          }
+        }
+        setReadinessMap(m)
+      }
+      if (configRes && configRes.ok) {
+        const cj = await configRes.json()
+        const m = new Map<string, InputConfig>()
+        if (Array.isArray(cj.data)) {
+          for (const c of cj.data) {
+            if (c.isActive !== false) m.set(c.inputCode, { id: c.id, inputCode: c.inputCode, inputLabel: c.inputLabel, isRequired: c.isRequired, requiredWhenJson: c.requiredWhenJson, helpText: c.helpText })
+          }
+        }
+        setInputConfigs(m)
+      }
     } catch { setError('Network error') }
     finally { setLoading(false) }
   }
 
   function startEdit(inp: PerformanceInput) {
     setEditingId(inp.id)
-    const data: Record<string, string> = {}
-    data.shopCriteria = inp.shopCriteria ?? ''
-    data.shopManagerId = inp.shopManager?.id ?? ''
-    data.corridorStatus = inp.corridorStatus === null ? '' : inp.corridorStatus ? 'true' : 'false'
-    data.qgaAbove90 = inp.qgaAbove90 === null ? '' : inp.qgaAbove90 ? 'true' : 'false'
-    data.qgaQuantity = inp.qgaQuantity?.toString() ?? ''
-    data.mmQoAbove90 = inp.mmQoAbove90 === null ? '' : inp.mmQoAbove90 ? 'true' : 'false'
-    data.dsaAirtimeAchievementPercent = inp.dsaAirtimeAchievementPercent?.toString() ?? ''
-    data.evdAbove100AndReconciled = inp.evdAbove100AndReconciled === null ? '' : inp.evdAbove100AndReconciled ? 'true' : 'false'
-    data.mpesaTargetAndReconciled = inp.mpesaTargetAndReconciled === null ? '' : inp.mpesaTargetAndReconciled ? 'true' : 'false'
-    data.mpesaFloatSold = inp.mpesaFloatSold?.toString() ?? ''
-    data.baSite = inp.baSite === null ? '' : inp.baSite ? 'true' : 'false'
-    data.ebuTargetAchieved = inp.ebuTargetAchieved === null ? '' : inp.ebuTargetAchieved ? 'true' : 'false'
-    data.ebuRevenueMade = inp.ebuRevenueMade === null ? '' : inp.ebuRevenueMade ? 'true' : 'false'
-    data.ebuAverageTopupAbove500 = inp.ebuAverageTopupAbove500 === null ? '' : inp.ebuAverageTopupAbove500 ? 'true' : 'false'
-    data.ebuFirstMonthLfRevenue = inp.ebuFirstMonthLfRevenue?.toString() ?? ''
-    data.responsibleRemarks = inp.responsibleRemarks ?? ''
-    setEditData(data)
+    const d: Record<string, string> = {}
+    d.shopCriteria = inp.shopCriteria ?? ''
+    d.shopManagerId = inp.shopManager?.id ?? ''
+    d.corridorStatus = inp.corridorStatus === null ? '' : inp.corridorStatus ? 'true' : 'false'
+    d.qgaAbove90 = inp.qgaAbove90 === null ? '' : inp.qgaAbove90 ? 'true' : 'false'
+    d.qgaQuantity = inp.qgaQuantity?.toString() ?? ''
+    d.mmQoAbove90 = inp.mmQoAbove90 === null ? '' : inp.mmQoAbove90 ? 'true' : 'false'
+    d.dsaAirtimeAchievementPercent = inp.dsaAirtimeAchievementPercent?.toString() ?? ''
+    d.evdAbove100AndReconciled = inp.evdAbove100AndReconciled === null ? '' : inp.evdAbove100AndReconciled ? 'true' : 'false'
+    d.mpesaTargetAndReconciled = inp.mpesaTargetAndReconciled === null ? '' : inp.mpesaTargetAndReconciled ? 'true' : 'false'
+    d.mpesaFloatSold = inp.mpesaFloatSold?.toString() ?? ''
+    d.baSite = inp.baSite === null ? '' : inp.baSite ? 'true' : 'false'
+    d.ebuTargetAchieved = inp.ebuTargetAchieved === null ? '' : inp.ebuTargetAchieved ? 'true' : 'false'
+    d.ebuRevenueMade = inp.ebuRevenueMade === null ? '' : inp.ebuRevenueMade ? 'true' : 'false'
+    d.ebuAverageTopupAbove500 = inp.ebuAverageTopupAbove500 === null ? '' : inp.ebuAverageTopupAbove500 ? 'true' : 'false'
+    d.ebuFirstMonthLfRevenue = inp.ebuFirstMonthLfRevenue?.toString() ?? ''
+    d.responsibleRemarks = inp.responsibleRemarks ?? ''
+    setEditData(d)
   }
 
   function cancelEdit() { setEditingId(null); setEditData({}) }
@@ -85,14 +258,12 @@ export default function InputsPage() {
 
   function floatVal(v: string): number | undefined {
     if (v === '' || v === undefined || v === null) return undefined
-    const n = parseFloat(v)
-    return isNaN(n) ? undefined : n
+    const n = parseFloat(v); return isNaN(n) ? undefined : n
   }
 
   function intVal(v: string): number | undefined {
     if (v === '' || v === undefined || v === null) return undefined
-    const n = parseInt(v, 10)
-    return isNaN(n) ? undefined : n
+    const n = parseInt(v, 10); return isNaN(n) ? undefined : n
   }
 
   function buildUpdateBody(data: Record<string, string>): Record<string, unknown> {
@@ -121,9 +292,7 @@ export default function InputsPage() {
     setActionLoading(true)
     try {
       const res = await fetch(`/api/shop-manager-incentives/periods/${id}/inputs/${inp.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
       })
       if (res.ok) { setEditingId(null); setEditData({}); fetchData() }
       else { const j = await res.json(); alert(j.error || 'Failed to update') }
@@ -151,9 +320,7 @@ export default function InputsPage() {
     setActionLoading(true)
     try {
       const res = await fetch(`/api/shop-manager-incentives/periods/${id}/inputs`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
       })
       if (res.ok) { setShowAddForm(false); setAddFormData({}); fetchData() }
       else { const j = await res.json(); setAddFormError(j.error || 'Failed to add input') }
@@ -166,8 +333,84 @@ export default function InputsPage() {
     return v ? 'Yes' : 'No'
   }
 
-  function isAtRisk(inp: PerformanceInput): boolean {
-    return inp.shopCriteria === 'AT_RISK'
+  function isAtRisk(inp: PerformanceInput) { return inp.shopCriteria === 'AT_RISK' }
+
+  function renderReadinessBadge(inp: PerformanceInput) {
+    const info = readinessMap.get(inp.id)
+    if (!info) return null
+    const color = readinessColors[info.readinessStatus] || '#6b7280'
+    const label = readinessLabels[info.readinessStatus] || info.readinessStatus
+    const missing = [...info.missingSalesFields, ...info.missingDistributionFields, ...info.missingEbuFields]
+    const tooltip = missing.length > 0 ? 'Missing: ' + missing.join(', ') : label
+    return (
+      <span className="inline-block text-white text-[9px] px-1.5 py-0.5 rounded ml-1" style={{ background: color }} title={tooltip}>
+        {label}
+      </span>
+    )
+  }
+
+  function InputField({ field, data, onChange, atRisk }: { field: string; data: Record<string, string>; onChange: (v: string) => void; atRisk: boolean }) {
+    const disabled = isFieldDisabled(field, atRisk, permAll, permSales, permDist, permEbu)
+    const ht = getHelpText(field, inputConfigs)
+    const condReq = isCondRequired(field, data, inputConfigs)
+    const val = data[field] || ''
+    const isBool = ['corridorStatus', 'qgaAbove90', 'mmQoAbove90', 'evdAbove100AndReconciled', 'mpesaTargetAndReconciled', 'baSite', 'ebuTargetAchieved', 'ebuRevenueMade', 'ebuAverageTopupAbove500'].includes(field)
+    const isNumber = ['qgaQuantity', 'dsaAirtimeAchievementPercent', 'mpesaFloatSold', 'ebuFirstMonthLfRevenue'].includes(field)
+    const cls = `w-14 border rounded px-1 ${disabled ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : ''} ${condReq ? 'border-orange-400' : ''}`
+
+    if (field === 'shopCriteria') {
+      return (
+        <select value={data.shopCriteria || ''} onChange={e => onChange(e.target.value)} className="border rounded w-full px-1 py-0.5 text-xs" title={ht || undefined}>
+          <option value="">Select...</option>
+          <option value="GOLD">Gold</option>
+          <option value="SILVER">Silver</option>
+          <option value="BRONZE">Bronze</option>
+          <option value="AT_RISK">At-Risk</option>
+        </select>
+      )
+    }
+    if (field === 'shopManagerId') {
+      return (
+        <input value={data.shopManagerId || ''} onChange={e => onChange(e.target.value)} className="border rounded w-full px-1 py-0.5 text-xs" placeholder="Manager ID" title={ht || undefined} />
+      )
+    }
+    if (field === 'responsibleRemarks') {
+      return (
+        <input value={data.responsibleRemarks || ''} onChange={e => onChange(e.target.value)} className="border rounded w-24 px-1 py-0.5 text-xs" title={ht || undefined} />
+      )
+    }
+    if (isBool) {
+      return (
+        <div className="relative inline-block">
+          <select value={val} onChange={e => onChange(e.target.value)} disabled={disabled} className={cls} title={ht || undefined}>
+            <option value="">-</option>
+            <option value="true">Yes</option>
+            <option value="false">No</option>
+          </select>
+          {condReq && <span className="absolute -top-1 -right-1 text-orange-500 text-[8px]">&#9679;</span>}
+        </div>
+      )
+    }
+    if (isNumber) {
+      return (
+        <div className="relative inline-block">
+          <input value={val} onChange={e => onChange(e.target.value)} disabled={disabled} className={cls} title={ht || undefined} />
+          {condReq && <span className="absolute -top-1 -right-1 text-orange-500 text-[8px]">&#9679;</span>}
+        </div>
+      )
+    }
+    return null
+  }
+
+  function renderHeaderLabel(field: string) {
+    const ht = getHelpText(field, inputConfigs)
+    const label = FIELD_LABELS[field] || field
+    const req = isRegRequired(field, inputConfigs)
+    return (
+      <span title={ht || undefined} style={{ cursor: ht ? 'help' : 'default' }}>
+        {label}{req ? <span className="text-red-500">*</span> : null}
+      </span>
+    )
   }
 
   if (loading) return <div className="p-6"><p>Loading inputs...</p></div>
@@ -222,31 +465,46 @@ export default function InputsPage() {
                 <th className="border p-1 text-left" rowSpan={2}>Shop / Cluster</th>
                 <th className="border p-1 text-left" rowSpan={2}>Shop Manager Name</th>
                 <th className="border p-1 text-left" rowSpan={2}>Shop Criteria</th>
-                <th className="border p-1 text-center bg-blue-50" colSpan={4}>Sales Head Inputs</th>
-                <th className="border p-1 text-center bg-green-50" colSpan={5}>Distribution Head Inputs</th>
-                <th className="border p-1 text-center bg-yellow-50" colSpan={4}>EBU Head Inputs</th>
+                <th className="border p-1 text-center bg-blue-50" colSpan={4}>
+                  Sales Head Inputs&nbsp;
+                  {!permAll && !permSales && <span className="text-gray-400 text-[9px]">(disabled)</span>}
+                  {permAll && <span className="text-green-600 text-[9px]">&#10003;</span>}
+                </th>
+                <th className="border p-1 text-center bg-green-50" colSpan={5}>
+                  Distribution Head Inputs&nbsp;
+                  {!permAll && !permDist && <span className="text-gray-400 text-[9px]">(disabled)</span>}
+                  {permAll && <span className="text-green-600 text-[9px]">&#10003;</span>}
+                </th>
+                <th className="border p-1 text-center bg-yellow-50" colSpan={4}>
+                  EBU Head Inputs&nbsp;
+                  {!permAll && !permEbu && <span className="text-gray-400 text-[9px]">(disabled)</span>}
+                  {permAll && <span className="text-green-600 text-[9px]">&#10003;</span>}
+                </th>
                 <th className="border p-1 text-left" rowSpan={2}>Responsible Remarks</th>
                 <th className="border p-1 text-left" rowSpan={2}>Actions</th>
               </tr>
               <tr className="bg-gray-50">
-                <th className="border p-1 text-left text-[10px]">QGA &gt;90%?</th>
-                <th className="border p-1 text-left text-[10px]">QGA Quantity</th>
-                <th className="border p-1 text-left text-[10px]">MM QO &gt;90%?</th>
-                <th className="border p-1 text-left text-[10px]">DSA Airtime %</th>
-                <th className="border p-1 text-left text-[10px]">Corridor</th>
-                <th className="border p-1 text-left text-[10px]">EVD &gt;100%</th>
-                <th className="border p-1 text-left text-[10px]">M-PESA Tgt</th>
-                <th className="border p-1 text-left text-[10px]">M-PESA Float</th>
-                <th className="border p-1 text-left text-[10px]">BA/Site</th>
-                <th className="border p-1 text-left text-[10px]">EBU Tgt</th>
-                <th className="border p-1 text-left text-[10px]">EBU Rev</th>
-                <th className="border p-1 text-left text-[10px]">EBU TopUp &gt;500?</th>
-                <th className="border p-1 text-left text-[10px]">EBU 1st Mo LF</th>
+                <th className="border p-1 text-left text-[10px]">{renderHeaderLabel('qgaAbove90')}</th>
+                <th className="border p-1 text-left text-[10px]">{renderHeaderLabel('qgaQuantity')}</th>
+                <th className="border p-1 text-left text-[10px]">{renderHeaderLabel('mmQoAbove90')}</th>
+                <th className="border p-1 text-left text-[10px]">{renderHeaderLabel('dsaAirtimeAchievementPercent')}</th>
+                <th className="border p-1 text-left text-[10px]">{renderHeaderLabel('corridorStatus')}</th>
+                <th className="border p-1 text-left text-[10px]">{renderHeaderLabel('evdAbove100AndReconciled')}</th>
+                <th className="border p-1 text-left text-[10px]">{renderHeaderLabel('mpesaTargetAndReconciled')}</th>
+                <th className="border p-1 text-left text-[10px]">{renderHeaderLabel('mpesaFloatSold')}</th>
+                <th className="border p-1 text-left text-[10px]">{renderHeaderLabel('baSite')}</th>
+                <th className="border p-1 text-left text-[10px]">{renderHeaderLabel('ebuTargetAchieved')}</th>
+                <th className="border p-1 text-left text-[10px]">{renderHeaderLabel('ebuRevenueMade')}</th>
+                <th className="border p-1 text-left text-[10px]">{renderHeaderLabel('ebuAverageTopupAbove500')}</th>
+                <th className="border p-1 text-left text-[10px]">{renderHeaderLabel('ebuFirstMonthLfRevenue')}</th>
               </tr>
             </thead>
             <tbody>
               {inputs.map((inp, idx) => {
                 const atRisk = isAtRisk(inp)
+                const info = readinessMap.get(inp.id)
+                const missingFields = info ? [...info.missingSalesFields, ...info.missingDistributionFields, ...info.missingEbuFields] : []
+
                 return (
                   <tr key={inp.id} className={`hover:bg-gray-50 ${atRisk ? 'bg-gray-100 text-gray-400' : ''}`}>
                     <td className="border p-1">{idx + 1}</td>
@@ -254,24 +512,25 @@ export default function InputsPage() {
                     <td className="border p-1">{inp.shopManager?.fullName || '-'}</td>
                     <td className="border p-1">
                       <span style={{ color: atRisk ? '#ef4444' : '#000' }} className="font-semibold">{inp.shopCriteria || '-'}</span>
+                      {renderReadinessBadge(inp)}
                       {atRisk && <div className="text-red-500 text-[10px] mt-1">At-risk: all incentive components are zero.</div>}
                     </td>
                     {editingId === inp.id ? (
                       <>
-                        <td className="border p-1"><select value={editData.qgaAbove90 || ''} onChange={e => setEditData(f => ({ ...f, qgaAbove90: e.target.value }))} className="w-14 border rounded" disabled={atRisk}><option value="">-</option><option value="true">Yes</option><option value="false">No</option></select></td>
-                        <td className="border p-1"><input value={editData.qgaQuantity || ''} onChange={e => setEditData(f => ({ ...f, qgaQuantity: e.target.value }))} className="w-14 border rounded px-1" disabled={atRisk} /></td>
-                        <td className="border p-1"><select value={editData.mmQoAbove90 || ''} onChange={e => setEditData(f => ({ ...f, mmQoAbove90: e.target.value }))} className="w-14 border rounded" disabled={atRisk}><option value="">-</option><option value="true">Yes</option><option value="false">No</option></select></td>
-                        <td className="border p-1"><input value={editData.dsaAirtimeAchievementPercent || ''} onChange={e => setEditData(f => ({ ...f, dsaAirtimeAchievementPercent: e.target.value }))} className="w-14 border rounded px-1" disabled={atRisk} /></td>
-                        <td className="border p-1"><select value={editData.corridorStatus || ''} onChange={e => setEditData(f => ({ ...f, corridorStatus: e.target.value }))} className="w-14 border rounded" disabled={atRisk}><option value="">-</option><option value="true">Yes</option><option value="false">No</option></select></td>
-                        <td className="border p-1"><select value={editData.evdAbove100AndReconciled || ''} onChange={e => setEditData(f => ({ ...f, evdAbove100AndReconciled: e.target.value }))} className="w-14 border rounded" disabled={atRisk}><option value="">-</option><option value="true">Yes</option><option value="false">No</option></select></td>
-                        <td className="border p-1"><select value={editData.mpesaTargetAndReconciled || ''} onChange={e => setEditData(f => ({ ...f, mpesaTargetAndReconciled: e.target.value }))} className="w-14 border rounded" disabled={atRisk}><option value="">-</option><option value="true">Yes</option><option value="false">No</option></select></td>
-                        <td className="border p-1"><input value={editData.mpesaFloatSold || ''} onChange={e => setEditData(f => ({ ...f, mpesaFloatSold: e.target.value }))} className="w-14 border rounded px-1" disabled={atRisk} /></td>
-                        <td className="border p-1"><select value={editData.baSite || ''} onChange={e => setEditData(f => ({ ...f, baSite: e.target.value }))} className="w-14 border rounded" disabled={atRisk}><option value="">-</option><option value="true">Yes</option><option value="false">No</option></select></td>
-                        <td className="border p-1"><select value={editData.ebuTargetAchieved || ''} onChange={e => setEditData(f => ({ ...f, ebuTargetAchieved: e.target.value }))} className="w-14 border rounded" disabled={atRisk}><option value="">-</option><option value="true">Yes</option><option value="false">No</option></select></td>
-                        <td className="border p-1"><select value={editData.ebuRevenueMade || ''} onChange={e => setEditData(f => ({ ...f, ebuRevenueMade: e.target.value }))} className="w-14 border rounded" disabled={atRisk}><option value="">-</option><option value="true">Yes</option><option value="false">No</option></select></td>
-                        <td className="border p-1"><select value={editData.ebuAverageTopupAbove500 || ''} onChange={e => setEditData(f => ({ ...f, ebuAverageTopupAbove500: e.target.value }))} className="w-14 border rounded" disabled={atRisk}><option value="">-</option><option value="true">Yes</option><option value="false">No</option></select></td>
-                        <td className="border p-1"><input value={editData.ebuFirstMonthLfRevenue || ''} onChange={e => setEditData(f => ({ ...f, ebuFirstMonthLfRevenue: e.target.value }))} className="w-14 border rounded px-1" disabled={atRisk} /></td>
-                        <td className="border p-1"><input value={editData.responsibleRemarks || ''} onChange={e => setEditData(f => ({ ...f, responsibleRemarks: e.target.value }))} className="w-24 border rounded px-1" /></td>
+                        <td className="border p-1"><InputField field="qgaAbove90" data={editData} onChange={v => setEditData(f => ({ ...f, qgaAbove90: v }))} atRisk={atRisk} /></td>
+                        <td className="border p-1"><InputField field="qgaQuantity" data={editData} onChange={v => setEditData(f => ({ ...f, qgaQuantity: v }))} atRisk={atRisk} /></td>
+                        <td className="border p-1"><InputField field="mmQoAbove90" data={editData} onChange={v => setEditData(f => ({ ...f, mmQoAbove90: v }))} atRisk={atRisk} /></td>
+                        <td className="border p-1"><InputField field="dsaAirtimeAchievementPercent" data={editData} onChange={v => setEditData(f => ({ ...f, dsaAirtimeAchievementPercent: v }))} atRisk={atRisk} /></td>
+                        <td className="border p-1"><InputField field="corridorStatus" data={editData} onChange={v => setEditData(f => ({ ...f, corridorStatus: v }))} atRisk={atRisk} /></td>
+                        <td className="border p-1"><InputField field="evdAbove100AndReconciled" data={editData} onChange={v => setEditData(f => ({ ...f, evdAbove100AndReconciled: v }))} atRisk={atRisk} /></td>
+                        <td className="border p-1"><InputField field="mpesaTargetAndReconciled" data={editData} onChange={v => setEditData(f => ({ ...f, mpesaTargetAndReconciled: v }))} atRisk={atRisk} /></td>
+                        <td className="border p-1"><InputField field="mpesaFloatSold" data={editData} onChange={v => setEditData(f => ({ ...f, mpesaFloatSold: v }))} atRisk={atRisk} /></td>
+                        <td className="border p-1"><InputField field="baSite" data={editData} onChange={v => setEditData(f => ({ ...f, baSite: v }))} atRisk={atRisk} /></td>
+                        <td className="border p-1"><InputField field="ebuTargetAchieved" data={editData} onChange={v => setEditData(f => ({ ...f, ebuTargetAchieved: v }))} atRisk={atRisk} /></td>
+                        <td className="border p-1"><InputField field="ebuRevenueMade" data={editData} onChange={v => setEditData(f => ({ ...f, ebuRevenueMade: v }))} atRisk={atRisk} /></td>
+                        <td className="border p-1"><InputField field="ebuAverageTopupAbove500" data={editData} onChange={v => setEditData(f => ({ ...f, ebuAverageTopupAbove500: v }))} atRisk={atRisk} /></td>
+                        <td className="border p-1"><InputField field="ebuFirstMonthLfRevenue" data={editData} onChange={v => setEditData(f => ({ ...f, ebuFirstMonthLfRevenue: v }))} atRisk={atRisk} /></td>
+                        <td className="border p-1"><InputField field="responsibleRemarks" data={editData} onChange={v => setEditData(f => ({ ...f, responsibleRemarks: v }))} atRisk={atRisk} /></td>
                         <td className="border p-1">
                           <div className="flex gap-1">
                             <button onClick={() => saveEdit(inp)} disabled={actionLoading} className="text-green-600 text-xs underline">Save</button>
@@ -281,23 +540,62 @@ export default function InputsPage() {
                       </>
                     ) : (
                       <>
-                        <td className="border p-1">{renderBool(inp.qgaAbove90)}</td>
-                        <td className="border p-1">{inp.qgaQuantity ?? '-'}</td>
-                        <td className="border p-1">{renderBool(inp.mmQoAbove90)}</td>
-                        <td className="border p-1">{inp.dsaAirtimeAchievementPercent ?? '-'}</td>
-                        <td className="border p-1">{renderBool(inp.corridorStatus)}</td>
-                        <td className="border p-1">{renderBool(inp.evdAbove100AndReconciled)}</td>
-                        <td className="border p-1">{renderBool(inp.mpesaTargetAndReconciled)}</td>
-                        <td className="border p-1">{inp.mpesaFloatSold ?? '-'}</td>
-                        <td className="border p-1">{renderBool(inp.baSite)}</td>
-                        <td className="border p-1">{renderBool(inp.ebuTargetAchieved)}</td>
-                        <td className="border p-1">{renderBool(inp.ebuRevenueMade)}</td>
-                        <td className="border p-1">{renderBool(inp.ebuAverageTopupAbove500)}</td>
-                        <td className="border p-1">{inp.ebuFirstMonthLfRevenue ?? '-'}</td>
+                        <td className="border p-1">
+                          {renderBool(inp.qgaAbove90)}
+                          {missingFields.includes('qgaAbove90') && <span className="text-red-400 ml-0.5" title="Required">*</span>}
+                        </td>
+                        <td className="border p-1">
+                          {inp.qgaQuantity ?? '-'}
+                          {missingFields.includes('qgaQuantity') && <span className="text-orange-500 ml-0.5" title="Required when QGA is Yes">&#9679;</span>}
+                        </td>
+                        <td className="border p-1">
+                          {renderBool(inp.mmQoAbove90)}
+                          {missingFields.includes('mmQoAbove90') && <span className="text-red-400 ml-0.5" title="Required">*</span>}
+                        </td>
+                        <td className="border p-1">
+                          {inp.dsaAirtimeAchievementPercent ?? '-'}
+                          {missingFields.includes('dsaAirtimeAchievementPercent') && <span className="text-red-400 ml-0.5" title="Required">*</span>}
+                        </td>
+                        <td className="border p-1">
+                          {renderBool(inp.corridorStatus)}
+                          {missingFields.includes('corridorStatus') && <span className="text-red-400 ml-0.5" title="Required">*</span>}
+                        </td>
+                        <td className="border p-1">
+                          {renderBool(inp.evdAbove100AndReconciled)}
+                          {missingFields.includes('evdAbove100AndReconciled') && <span className="text-red-400 ml-0.5" title="Required">*</span>}
+                        </td>
+                        <td className="border p-1">
+                          {renderBool(inp.mpesaTargetAndReconciled)}
+                          {missingFields.includes('mpesaTargetAndReconciled') && <span className="text-red-400 ml-0.5" title="Required">*</span>}
+                        </td>
+                        <td className="border p-1">
+                          {inp.mpesaFloatSold ?? '-'}
+                          {missingFields.includes('mpesaFloatSold') && <span className="text-orange-500 ml-0.5" title="Required when M-PESA Tgt is Yes">&#9679;</span>}
+                        </td>
+                        <td className="border p-1">
+                          {renderBool(inp.baSite)}
+                          {missingFields.includes('baSite') && <span className="text-red-400 ml-0.5" title="Required">*</span>}
+                        </td>
+                        <td className="border p-1">
+                          {renderBool(inp.ebuTargetAchieved)}
+                          {missingFields.includes('ebuTargetAchieved') && <span className="text-red-400 ml-0.5" title="Required">*</span>}
+                        </td>
+                        <td className="border p-1">
+                          {renderBool(inp.ebuRevenueMade)}
+                          {missingFields.includes('ebuRevenueMade') && <span className="text-red-400 ml-0.5" title="Required">*</span>}
+                        </td>
+                        <td className="border p-1">
+                          {renderBool(inp.ebuAverageTopupAbove500)}
+                          {missingFields.includes('ebuAverageTopupAbove500') && <span className="text-red-400 ml-0.5" title="Required">*</span>}
+                        </td>
+                        <td className="border p-1">
+                          {inp.ebuFirstMonthLfRevenue ?? '-'}
+                          {missingFields.includes('ebuFirstMonthLfRevenue') && <span className="text-orange-500 ml-0.5" title="Required when EBU Rev is Yes">&#9679;</span>}
+                        </td>
                         <td className="border p-1 max-w-[100px] truncate">{inp.responsibleRemarks || '-'}</td>
                         <td className="border p-1">
                           <div className="flex gap-1">
-                            {!atRisk && <button onClick={() => startEdit(inp)} disabled={actionLoading} className="text-blue-600 text-xs underline">Edit</button>}
+                            <button onClick={() => startEdit(inp)} disabled={actionLoading} className="text-blue-600 text-xs underline">Edit</button>
                             <button onClick={() => handleDelete(inp.id)} disabled={actionLoading} className="text-red-600 text-xs underline">Delete</button>
                           </div>
                         </td>

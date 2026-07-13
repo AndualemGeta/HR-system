@@ -38,6 +38,7 @@ const ALL_PERMISSIONS = [
   'shopManagerIncentive.inputSales', 'shopManagerIncentive.inputDistribution', 'shopManagerIncentive.inputEbu', 'shopManagerIncentive.inputAll',
   'shopManagerIncentive.calculate',
   'shopManagerIncentive.export', 'shopManagerIncentive.sendToPayroll',
+  'shopManagerIncentive.viewInputConfig', 'shopManagerIncentive.manageInputConfig',
 ] as const
 
 const ROLE_PERMISSIONS: Record<string, string[]> = {
@@ -120,6 +121,7 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
     'shopManagerIncentive.view',
     'shopManagerIncentive.calculate',
     'shopManagerIncentive.export', 'shopManagerIncentive.sendToPayroll',
+    'shopManagerIncentive.viewInputConfig',
   ],
   FINANCE_PAYROLL: [
     'employee.view', 'salary.view', 'reports.view',
@@ -164,6 +166,7 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
     'shopManagerIncentive.view', 'shopManagerIncentive.createPeriod', 'shopManagerIncentive.updatePeriod',
     'shopManagerIncentive.inputSales', 'shopManagerIncentive.inputAll',
     'shopManagerIncentive.calculate', 'shopManagerIncentive.export', 'shopManagerIncentive.sendToPayroll',
+    'shopManagerIncentive.viewInputConfig', 'shopManagerIncentive.manageInputConfig',
   ],
   ASM: [
     'employee.view', 'reports.view',
@@ -189,11 +192,13 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
     'shopManagerIncentive.view',
     'shopManagerIncentive.inputDistribution',
     'shopManagerIncentive.export',
+    'shopManagerIncentive.viewInputConfig',
   ],
   EBU_HEAD: [
     'shopManagerIncentive.view',
     'shopManagerIncentive.inputEbu',
     'shopManagerIncentive.export',
+    'shopManagerIncentive.viewInputConfig',
   ],
   EMPLOYEE: [],
   AUDITOR: [
@@ -210,6 +215,7 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
     'payrollPreparationSummary.view', 'payrollPreparationSummary.export',
     'shop.view', 'shop.viewCriteriaHistory',
     'shopManagerIncentive.view', 'shopManagerIncentive.export',
+    'shopManagerIncentive.viewInputConfig',
   ],
 }
 
@@ -809,21 +815,21 @@ async function main() {
 
   // Seed ShopManagerIncentiveInputConfig
   const inputConfigs = [
-    { inputCode: 'SHOP_CRITERIA', inputLabel: 'Shop Criteria', ownerDepartment: 'Management', ownerRole: 'Sales Head', inputType: 'SELECT', allowedValues: 'Gold,Silver,Bronze,At-risk', usedInComponent: 'All', displayOrder: 1, isActive: true },
-    { inputCode: 'QGA_ABOVE_90', inputLabel: 'QGA >90%?', ownerDepartment: 'Sales', ownerRole: 'Sales Head', inputType: 'YES_NO', allowedValues: 'Yes,No', usedInComponent: 'QGA Bonus, QGA SIM Commission', displayOrder: 2, isActive: true },
-    { inputCode: 'QGA_QUANTITY', inputLabel: 'QGA Quantity', ownerDepartment: 'Sales', ownerRole: 'Sales Head', inputType: 'NUMBER', allowedValues: null, usedInComponent: 'QGA SIM Commission', displayOrder: 3, isActive: true },
-    { inputCode: 'MM_QO_ABOVE_90', inputLabel: 'MM QO Targets >90%?', ownerDepartment: 'Sales', ownerRole: 'Sales Head', inputType: 'YES_NO', allowedValues: 'Yes,No', usedInComponent: 'QO Bonus', displayOrder: 4, isActive: true },
-    { inputCode: 'DSA_AIRTIME_PERCENT', inputLabel: 'Airtime target achieved by DSA (%)', ownerDepartment: 'Sales', ownerRole: 'Sales Head', inputType: 'PERCENTAGE', allowedValues: null, usedInComponent: 'DSA Achievement Bonus', displayOrder: 5, isActive: true },
-    { inputCode: 'CORRIDOR_STATUS', inputLabel: 'Corridor status', ownerDepartment: 'Distribution', ownerRole: 'Distribution Head', inputType: 'YES_NO', allowedValues: 'Yes,No', usedInComponent: 'BA/Site Bonus', displayOrder: 6, isActive: true },
-    { inputCode: 'EVD_ABOVE_100', inputLabel: 'EVD >100% performance and reconciliation', ownerDepartment: 'Distribution', ownerRole: 'Distribution Head', inputType: 'YES_NO', allowedValues: 'Yes,No', usedInComponent: 'EVD Bonus', displayOrder: 7, isActive: true },
-    { inputCode: 'MPESA_TARGET', inputLabel: 'M-PESA Target achieved and reconciliation', ownerDepartment: 'Distribution', ownerRole: 'Distribution Head', inputType: 'YES_NO', allowedValues: 'Yes,No', usedInComponent: 'M-PESA Commission', displayOrder: 8, isActive: true },
-    { inputCode: 'MPESA_FLOAT_SOLD', inputLabel: 'Actual M-PESA Float Sold', ownerDepartment: 'Distribution', ownerRole: 'Distribution Head', inputType: 'MONEY', allowedValues: null, usedInComponent: 'M-PESA Commission', displayOrder: 9, isActive: true },
-    { inputCode: 'BA_SITE', inputLabel: 'BA/Site', ownerDepartment: 'Distribution', ownerRole: 'Distribution Head', inputType: 'YES_NO', allowedValues: 'Yes,No', usedInComponent: 'BA/Site Bonus', displayOrder: 10, isActive: true },
-    { inputCode: 'EBU_TARGET_ACHIEVED', inputLabel: 'EBU Target Achieved', ownerDepartment: 'EBU', ownerRole: 'EBU Head', inputType: 'YES_NO', allowedValues: 'Yes,No', usedInComponent: 'EBU Activation Bonus', displayOrder: 11, isActive: true },
-    { inputCode: 'EBU_REVENUE_MADE', inputLabel: 'EBU Revenue Made', ownerDepartment: 'EBU', ownerRole: 'EBU Head', inputType: 'YES_NO', allowedValues: 'Yes,No', usedInComponent: 'EBU Activation Bonus, EBU Revenue Share', displayOrder: 12, isActive: true },
-    { inputCode: 'EBU_AVG_TOPUP_ABOVE_500', inputLabel: 'EBU Average Top-Up >500?', ownerDepartment: 'EBU', ownerRole: 'EBU Head', inputType: 'YES_NO', allowedValues: 'Yes,No', usedInComponent: 'EBU Activation Bonus', displayOrder: 13, isActive: true },
-    { inputCode: 'EBU_FIRST_MONTH_LF_REVENUE', inputLabel: 'EBU First Month LF Revenue', ownerDepartment: 'EBU', ownerRole: 'EBU Head', inputType: 'MONEY', allowedValues: null, usedInComponent: 'EBU Revenue Share', displayOrder: 14, isActive: true },
-    { inputCode: 'RESPONSIBLE_REMARKS', inputLabel: 'Responsible Remarks', ownerDepartment: 'Management', ownerRole: 'All', inputType: 'TEXT', allowedValues: null, usedInComponent: null, displayOrder: 15, isActive: true },
+    { inputCode: 'SHOP_CRITERIA', inputLabel: 'Shop Criteria', ownerDepartment: 'Management', ownerRole: 'Sales Head', inputType: 'SELECT', allowedValues: 'Gold,Silver,Bronze,At-risk', usedInComponent: 'All', displayOrder: 1, isActive: true, isRequired: true, blocksCalculation: true, blocksPayrollHandoff: true, helpText: 'Select the shop criteria for this period', requiredWhenJson: null },
+    { inputCode: 'QGA_ABOVE_90', inputLabel: 'QGA >90%?', ownerDepartment: 'Sales', ownerRole: 'Sales Head', inputType: 'YES_NO', allowedValues: 'Yes,No', usedInComponent: 'QGA Bonus, QGA SIM Commission', displayOrder: 2, isActive: true, isRequired: true, blocksCalculation: true, blocksPayrollHandoff: true, helpText: 'Has the shop achieved QGA >90%?', requiredWhenJson: null },
+    { inputCode: 'QGA_QUANTITY', inputLabel: 'QGA Quantity', ownerDepartment: 'Sales', ownerRole: 'Sales Head', inputType: 'NUMBER', allowedValues: null, usedInComponent: 'QGA SIM Commission', displayOrder: 3, isActive: true, isRequired: false, blocksCalculation: true, blocksPayrollHandoff: true, helpText: 'Required when QGA >90% is Yes', minValue: 0, requiredWhenJson: '{"field":"qgaAbove90","equals":true}' },
+    { inputCode: 'MM_QO_ABOVE_90', inputLabel: 'MM QO Targets >90%?', ownerDepartment: 'Sales', ownerRole: 'Sales Head', inputType: 'YES_NO', allowedValues: 'Yes,No', usedInComponent: 'QO Bonus', displayOrder: 4, isActive: true, isRequired: true, blocksCalculation: true, blocksPayrollHandoff: true, helpText: 'Has the shop achieved QO Targets >90%?', requiredWhenJson: null },
+    { inputCode: 'DSA_AIRTIME_PERCENT', inputLabel: 'Airtime target achieved by DSA (%)', ownerDepartment: 'Sales', ownerRole: 'Sales Head', inputType: 'PERCENTAGE', allowedValues: null, usedInComponent: 'DSA Achievement Bonus', displayOrder: 5, isActive: true, isRequired: true, blocksCalculation: true, blocksPayrollHandoff: true, helpText: 'DSA airtime achievement percent (0-200)', minValue: 0, maxValue: 200, requiredWhenJson: null },
+    { inputCode: 'CORRIDOR_STATUS', inputLabel: 'Corridor status', ownerDepartment: 'Distribution', ownerRole: 'Distribution Head', inputType: 'YES_NO', allowedValues: 'Yes,No', usedInComponent: 'BA/Site Bonus', displayOrder: 6, isActive: true, isRequired: true, blocksCalculation: true, blocksPayrollHandoff: true, helpText: 'Is the corridor status achieved?', requiredWhenJson: null },
+    { inputCode: 'EVD_ABOVE_100', inputLabel: 'EVD >100% performance and reconciliation', ownerDepartment: 'Distribution', ownerRole: 'Distribution Head', inputType: 'YES_NO', allowedValues: 'Yes,No', usedInComponent: 'EVD Bonus', displayOrder: 7, isActive: true, isRequired: true, blocksCalculation: true, blocksPayrollHandoff: true, helpText: 'Has the shop achieved EVD >100% and reconciled?', requiredWhenJson: null },
+    { inputCode: 'MPESA_TARGET', inputLabel: 'M-PESA Target achieved and reconciliation', ownerDepartment: 'Distribution', ownerRole: 'Distribution Head', inputType: 'YES_NO', allowedValues: 'Yes,No', usedInComponent: 'M-PESA Commission', displayOrder: 8, isActive: true, isRequired: true, blocksCalculation: true, blocksPayrollHandoff: true, helpText: 'Has the shop achieved M-PESA target and reconciled?', requiredWhenJson: null },
+    { inputCode: 'MPESA_FLOAT_SOLD', inputLabel: 'Actual M-PESA Float Sold', ownerDepartment: 'Distribution', ownerRole: 'Distribution Head', inputType: 'MONEY', allowedValues: null, usedInComponent: 'M-PESA Commission', displayOrder: 9, isActive: true, isRequired: false, blocksCalculation: true, blocksPayrollHandoff: true, helpText: 'Required when M-PESA target is Yes', minValue: 0, requiredWhenJson: '{"field":"mpesaTargetAndReconciled","equals":true}' },
+    { inputCode: 'BA_SITE', inputLabel: 'BA/Site', ownerDepartment: 'Distribution', ownerRole: 'Distribution Head', inputType: 'YES_NO', allowedValues: 'Yes,No', usedInComponent: 'BA/Site Bonus', displayOrder: 10, isActive: true, isRequired: true, blocksCalculation: true, blocksPayrollHandoff: true, helpText: 'Is BA/Site requirement met?', requiredWhenJson: null },
+    { inputCode: 'EBU_TARGET_ACHIEVED', inputLabel: 'EBU Target Achieved', ownerDepartment: 'EBU', ownerRole: 'EBU Head', inputType: 'YES_NO', allowedValues: 'Yes,No', usedInComponent: 'EBU Activation Bonus', displayOrder: 11, isActive: true, isRequired: true, blocksCalculation: true, blocksPayrollHandoff: true, helpText: 'Has the shop achieved EBU target?', requiredWhenJson: null },
+    { inputCode: 'EBU_REVENUE_MADE', inputLabel: 'EBU Revenue Made', ownerDepartment: 'EBU', ownerRole: 'EBU Head', inputType: 'YES_NO', allowedValues: 'Yes,No', usedInComponent: 'EBU Activation Bonus, EBU Revenue Share', displayOrder: 12, isActive: true, isRequired: true, blocksCalculation: true, blocksPayrollHandoff: true, helpText: 'Has the shop made EBU revenue?', requiredWhenJson: null },
+    { inputCode: 'EBU_AVG_TOPUP_ABOVE_500', inputLabel: 'EBU Average Top-Up >500?', ownerDepartment: 'EBU', ownerRole: 'EBU Head', inputType: 'YES_NO', allowedValues: 'Yes,No', usedInComponent: 'EBU Activation Bonus', displayOrder: 13, isActive: true, isRequired: true, blocksCalculation: true, blocksPayrollHandoff: true, helpText: 'Is the average top-up above 500?', requiredWhenJson: null },
+    { inputCode: 'EBU_FIRST_MONTH_LF_REVENUE', inputLabel: 'EBU First Month LF Revenue', ownerDepartment: 'EBU', ownerRole: 'EBU Head', inputType: 'MONEY', allowedValues: null, usedInComponent: 'EBU Revenue Share', displayOrder: 14, isActive: true, isRequired: false, blocksCalculation: true, blocksPayrollHandoff: true, helpText: 'Required when EBU Revenue Made is Yes', minValue: 0, requiredWhenJson: '{"field":"ebuRevenueMade","equals":true}' },
+    { inputCode: 'RESPONSIBLE_REMARKS', inputLabel: 'Responsible Remarks', ownerDepartment: 'Management', ownerRole: 'All', inputType: 'TEXT', allowedValues: null, usedInComponent: null, displayOrder: 15, isActive: true, isRequired: false, blocksCalculation: false, blocksPayrollHandoff: false, helpText: 'Optional remarks', requiredWhenJson: null },
   ]
   for (const cfg of inputConfigs) {
     await prisma.shopManagerIncentiveInputConfig.create({ data: cfg }).catch(() => {})

@@ -6,6 +6,7 @@ import { userHasPermission } from '@/lib/rbac'
 import { success, badRequest, unauthorized, forbidden, notFound, internalError } from '@/lib/api'
 import { createAuditLog } from '@/lib/audit'
 import { shopInUserScope } from '@/lib/incentive-scope'
+import { validateShopCriteria, validateIncentiveInputValues } from '@/lib/shop-manager-incentives'
 
 const updateInputSchema = z.object({
   shopManagerId: z.string().optional(),
@@ -30,6 +31,13 @@ const SALES_FIELDS = ['qgaAbove90', 'qgaQuantity', 'mmQoAbove90', 'dsaAirtimeAch
 const DISTRIBUTION_FIELDS = ['corridorStatus', 'evdAbove100AndReconciled', 'mpesaTargetAndReconciled', 'mpesaFloatSold', 'baSite'] as const
 const EBU_FIELDS = ['ebuTargetAchieved', 'ebuRevenueMade', 'ebuAverageTopupAbove500', 'ebuFirstMonthLfRevenue'] as const
 const ANY_INPUT_FIELDS = ['shopCriteria', 'shopManagerId', 'responsibleRemarks'] as const
+
+const PERFORMANCE_FIELDS = [
+  'qgaAbove90', 'qgaQuantity', 'mmQoAbove90', 'dsaAirtimeAchievementPercent',
+  'corridorStatus', 'evdAbove100AndReconciled', 'mpesaTargetAndReconciled',
+  'mpesaFloatSold', 'baSite', 'ebuTargetAchieved', 'ebuRevenueMade',
+  'ebuAverageTopupAbove500', 'ebuFirstMonthLfRevenue',
+] as const
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string; inputId: string }> }) {
   try {
@@ -73,8 +81,13 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     const hasInputSales = await userHasPermission(session.userId, 'shopManagerIncentive.inputSales')
     const hasInputDistribution = await userHasPermission(session.userId, 'shopManagerIncentive.inputDistribution')
     const hasInputEbu = await userHasPermission(session.userId, 'shopManagerIncentive.inputEbu')
-
     if (!hasInputAll && !hasInputSales && !hasInputDistribution && !hasInputEbu) return forbidden()
+
+    const period = await prisma.shopManagerIncentivePeriod.findUnique({ where: { id } })
+    if (!period) return notFound('Incentive period not found')
+    if (period.status !== 'OPEN' && period.status !== 'CALCULATED') {
+      return badRequest('Period must be in OPEN or CALCULATED status')
+    }
 
     const input = await prisma.shopManagerIncentiveInput.findUnique({
       where: { id: inputId },
@@ -88,43 +101,126 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     const parsed = updateInputSchema.safeParse(body)
     if (!parsed.success) return badRequest('Invalid input', parsed.error.flatten())
 
-    const { ...fieldValues } = parsed.data
+    const fieldValues = parsed.data
 
-    const isAtRisk = input.shopCriteria === 'AT_RISK'
+    const validation = validateIncentiveInputValues(fieldValues as Record<string, unknown>)
+    if (!validation.valid) return badRequest('Validation failed', validation.errors)
+
+    const isCurrentlyAtRisk = input.shopCriteria === 'AT_RISK'
+
+    let validatedCriteria: string | null = null
+    if (fieldValues.shopCriteria !== undefined) {
+      try {
+        validatedCriteria = validateShopCriteria(fieldValues.shopCriteria)
+      } catch (e) {
+        return badRequest((e as Error).message)
+      }
+    }
+
+    const isChangingToAtRisk = validatedCriteria === 'AT_RISK'
+
     const updateData: Record<string, unknown> = {}
     const oldValues: Record<string, unknown> = {}
     const newValues: Record<string, unknown> = {}
 
-    for (const [key, value] of Object.entries(fieldValues)) {
-      if (value === undefined) continue
+    if (isCurrentlyAtRisk) {
+      for (const [key, value] of Object.entries(fieldValues)) {
+        if (value === undefined) continue
+        if (!(ANY_INPUT_FIELDS as readonly string[]).includes(key as any)) {
+          return badRequest('At-risk inputs can only update shopCriteria, shopManagerId, and responsibleRemarks')
+        }
+        updateData[key] = value
+        oldValues[key] = (input as Record<string, unknown>)[key]
+        newValues[key] = value
+      }
+    } else {
+      for (const [key, value] of Object.entries(fieldValues)) {
+        if (value === undefined) continue
 
-      if (isAtRisk && !(ANY_INPUT_FIELDS as readonly string[]).includes(key as any)) {
-        return badRequest(`At-risk inputs can only update shopCriteria, shopManagerId, and responsibleRemarks`)
-      }
+        if ((SALES_FIELDS as readonly string[]).includes(key as any) && !hasInputAll && !hasInputSales) {
+          return forbidden(`You do not have permission to update ${key}`)
+        }
+        if ((DISTRIBUTION_FIELDS as readonly string[]).includes(key as any) && !hasInputAll && !hasInputDistribution) {
+          return forbidden(`You do not have permission to update ${key}`)
+        }
+        if ((EBU_FIELDS as readonly string[]).includes(key as any) && !hasInputAll && !hasInputEbu) {
+          return forbidden(`You do not have permission to update ${key}`)
+        }
 
-      if ((SALES_FIELDS as readonly string[]).includes(key as any) && !hasInputAll && !hasInputSales) {
-        return forbidden(`You do not have permission to update ${key}`)
+        updateData[key] = value
+        oldValues[key] = (input as Record<string, unknown>)[key]
+        newValues[key] = value
       }
-      if ((DISTRIBUTION_FIELDS as readonly string[]).includes(key as any) && !hasInputAll && !hasInputDistribution) {
-        return forbidden(`You do not have permission to update ${key}`)
-      }
-      if ((EBU_FIELDS as readonly string[]).includes(key as any) && !hasInputAll && !hasInputEbu) {
-        return forbidden(`You do not have permission to update ${key}`)
-      }
-
-      updateData[key] = value
-      oldValues[key] = (input as Record<string, unknown>)[key]
-      newValues[key] = value
     }
 
-    if (Object.keys(updateData).length === 0) return badRequest('No fields to update')
+    if (validatedCriteria !== null) {
+      updateData.shopCriteria = validatedCriteria
+      newValues.shopCriteria = validatedCriteria
+    }
 
-    updateData.updatedById = session.userId
+    if (Object.keys(updateData).length === 0) {
+      return badRequest('No fields to update')
+    }
 
-    const updated = await prisma.shopManagerIncentiveInput.update({
-      where: { id: inputId },
-      data: updateData as any,
-    })
+    let updated: any
+    let statusReverted = false
+
+    if (isChangingToAtRisk && !isCurrentlyAtRisk) {
+      updated = await prisma.$transaction(async (tx) => {
+        const cleared: Record<string, unknown> = {}
+        for (const f of PERFORMANCE_FIELDS) {
+          cleared[f as string] = null
+        }
+
+        const result = await tx.shopManagerIncentiveInput.update({
+          where: { id: inputId },
+          data: {
+            ...updateData,
+            ...cleared,
+            updatedById: session.userId,
+          } as any,
+        })
+
+        await tx.shopManagerIncentiveCalculation.deleteMany({
+          where: { inputId },
+        })
+
+        return result
+      })
+
+      for (const f of PERFORMANCE_FIELDS as readonly string[]) {
+        if (!(f in oldValues)) {
+          oldValues[f] = (input as Record<string, unknown>)[f]
+          newValues[f] = null
+        }
+      }
+
+      if (period.status === 'CALCULATED') {
+        await prisma.shopManagerIncentivePeriod.update({
+          where: { id },
+          data: { status: 'OPEN' },
+        })
+        statusReverted = true
+      }
+    } else {
+      updateData.updatedById = session.userId
+
+      updated = await prisma.shopManagerIncentiveInput.update({
+        where: { id: inputId },
+        data: updateData as any,
+      })
+
+      if (period.status === 'CALCULATED') {
+        await prisma.shopManagerIncentivePeriod.update({
+          where: { id },
+          data: { status: 'OPEN' },
+        })
+        await prisma.shopManagerIncentiveCalculation.deleteMany({
+          where: { incentivePeriodId: id },
+        })
+        statusReverted = true
+      }
+    }
 
     await createAuditLog({
       userId: session.userId,
@@ -134,6 +230,17 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       oldValue: Object.keys(oldValues).length > 0 ? oldValues : undefined,
       newValue: Object.keys(newValues).length > 0 ? newValues : undefined,
     })
+
+    if (statusReverted) {
+      await createAuditLog({
+        userId: session.userId,
+        action: 'SHOP_MANAGER_INCENTIVE_RECALCULATION_REQUIRED',
+        entityType: 'ShopManagerIncentivePeriod',
+        entityId: id,
+        oldValue: { status: 'CALCULATED' },
+        newValue: { status: 'OPEN' },
+      })
+    }
 
     return success(updated)
   } catch (err) { console.error(err); return internalError() }

@@ -15,7 +15,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
     const period = await prisma.shopManagerIncentivePeriod.findUnique({
       where: { id },
-      include: { payrollPeriod: { select: { id: true, periodName: true } } },
+      include: { payrollPeriod: { select: { id: true, periodName: true, status: true } } },
     })
     if (!period) return notFound('Incentive period not found')
 
@@ -23,15 +23,43 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       return badRequest(`Period status must be CALCULATED (current: ${period.status})`)
     }
 
-    const result = await sendIncentivesToPayrollInputs(id)
+    if (period.payrollPeriod && (period.payrollPeriod.status === 'INPUT_COLLECTION_CLOSED' || period.payrollPeriod.status === 'CANCELLED')) {
+      return badRequest(`Linked payroll period is ${period.payrollPeriod.status} — cannot handoff`)
+    }
+
+    const body = await req.json().catch(() => ({}))
+    const mode = body.mode === 'SKIP_EXISTING' ? 'SKIP_EXISTING' : 'UPDATE_EXISTING_UNLOCKED'
+
+    const result = await sendIncentivesToPayrollInputs(id, mode)
+
+    const blockedCount = (result.blockedLocked || 0) + (result.missingManager || 0)
 
     await createAuditLog({
       userId: session.userId,
       action: 'SHOP_MANAGER_INCENTIVE_SEND_TO_PAYROLL',
       entityType: 'ShopManagerIncentivePeriod',
       entityId: id,
-      newValue: { periodId: id, payrollPeriodId: period.payrollPeriodId, calculationsProcessed: result.calculationsProcessed },
+      newValue: {
+        periodId: id,
+        payrollPeriodId: period.payrollPeriodId,
+        mode,
+        created: result.created,
+        updated: result.updated,
+        skippedZero: result.skippedZero,
+        blockedLocked: result.blockedLocked,
+        missingManager: result.missingManager,
+      },
     })
+
+    if (blockedCount > 0) {
+      await createAuditLog({
+        userId: session.userId,
+        action: 'SHOP_MANAGER_INCENTIVE_PAYROLL_HANDOFF_BLOCKED',
+        entityType: 'ShopManagerIncentivePeriod',
+        entityId: id,
+        newValue: { blockedLocked: result.blockedLocked, missingManager: result.missingManager },
+      })
+    }
 
     return success(result)
   } catch (err) {

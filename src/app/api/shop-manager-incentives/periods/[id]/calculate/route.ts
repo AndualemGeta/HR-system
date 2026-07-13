@@ -16,10 +16,14 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const period = await prisma.shopManagerIncentivePeriod.findUnique({ where: { id } })
     if (!period) return notFound('Incentive period not found')
     if (period.status !== 'OPEN' && period.status !== 'OPEN_FOR_INPUT') {
-      return badRequest('Period must be in OPEN or OPEN_FOR_INPUT status to calculate')
+      return badRequest('Period must be in OPEN status to calculate')
     }
 
     const result = await calculateAllShopManagerIncentives(id)
+
+    if (result.status === 'BLOCKED') {
+      return badRequest('Calculation blocked: some shops have incomplete inputs', result.blockers)
+    }
 
     await createAuditLog({
       userId: session.userId,
