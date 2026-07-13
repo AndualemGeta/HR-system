@@ -88,7 +88,7 @@ async function main() {
   const distHeadId = distHeadUser.id
   const ebuHeadId = ebuHeadUser.id
   const shopMgr1Id = shopManagerEmp.id
-  const shopMgr2Id = shopManager2Emp.id
+  const shopMgr2Id = shopManager2Emp!.id
   const shopThuId = shopThu.id
   const shopLioId = shopLio.id
   const shopWarId = shopWar.id
