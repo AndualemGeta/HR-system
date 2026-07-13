@@ -18,19 +18,18 @@ const EXPORT_HEADERS = [
   'shopCode',
   'shopName',
   'shopManagerName',
-  'shopCriteria',
-  'corridorType',
-  'QGA_Bonus',
-  'QGA_SIM_Commission',
-  'EVD_Bonus',
-  'BA_Site_Bonus',
-  'MPESA_Commission',
-  'DSA_Achievement_Bonus',
-  'QO_Bonus',
-  'EBU_Activation_Bonus',
-  'EBU_Revenue_Share',
-  'Total',
-  'Status',
+  'criteria',
+  'qgaBonus',
+  'qgaSimCommission',
+  'evdBonus',
+  'mpesaCommission',
+  'baSiteBonus',
+  'dsaAchievementBonus',
+  'qoBonus',
+  'ebuActivationBonus',
+  'ebuRevenueShare',
+  'totalIncentive',
+  'calculationNote',
 ]
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -46,11 +45,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     const calculations = await prisma.shopManagerIncentiveCalculation.findMany({
       where: { incentivePeriodId: id },
       include: {
-        shopLocation: {
-          include: { shopProfile: true },
-        },
-        shopManager: { select: { employeeId: true, fullName: true } },
-        components: true,
+        shopLocation: { select: { id: true, code: true, name: true } },
+        shopManager: { select: { id: true, fullName: true } },
       },
       orderBy: { shopLocation: { code: 'asc' } },
     })
@@ -58,29 +54,23 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     const lines: string[] = [EXPORT_HEADERS.join(',')]
 
     for (const calc of calculations) {
-      const compMap = new Map<string, number>()
-      for (const comp of calc.components) {
-        compMap.set(comp.componentCode, Number(comp.amount))
-      }
-
       const row = [
         period.name,
         calc.shopLocation.code,
         calc.shopLocation.name,
         calc.shopManager?.fullName || '',
         calc.shopCriteria || '',
-        calc.shopLocation.shopProfile?.corridorType || '',
-        compMap.get('QGA_BONUS') || 0,
-        compMap.get('QGA_SIM_COMMISSION') || 0,
-        compMap.get('EVD_BONUS') || 0,
-        compMap.get('BA_SITE_BONUS') || 0,
-        compMap.get('MPESA_COMMISSION') || 0,
-        compMap.get('DSA_ACHIEVEMENT_BONUS') || 0,
-        compMap.get('QO_BONUS') || 0,
-        compMap.get('EBU_ACTIVATION_BONUS') || 0,
-        compMap.get('EBU_REVENUE_SHARE') || 0,
-        Number(calc.totalAmount || 0),
-        calc.status,
+        calc.qgaBonus || 0,
+        calc.qgaSimCommission || 0,
+        calc.evdBonus || 0,
+        calc.mpesaCommission || 0,
+        calc.baSiteBonus || 0,
+        calc.dsaAchievementBonus || 0,
+        calc.qoBonus || 0,
+        calc.ebuActivationBonus || 0,
+        calc.ebuRevenueShare || 0,
+        calc.totalIncentive || 0,
+        calc.calculationNote || '',
       ]
 
       lines.push(row.map(v => escapeCsv(v)).join(','))

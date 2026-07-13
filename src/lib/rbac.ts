@@ -90,12 +90,11 @@ export type PermissionKey =
   | 'shopManagerIncentive.view'
   | 'shopManagerIncentive.createPeriod'
   | 'shopManagerIncentive.updatePeriod'
-  | 'shopManagerIncentive.input'
-  | 'shopManagerIncentive.import'
+  | 'shopManagerIncentive.inputSales'
+  | 'shopManagerIncentive.inputDistribution'
+  | 'shopManagerIncentive.inputEbu'
+  | 'shopManagerIncentive.inputAll'
   | 'shopManagerIncentive.calculate'
-  | 'shopManagerIncentive.review'
-  | 'shopManagerIncentive.approve'
-  | 'shopManagerIncentive.lock'
   | 'shopManagerIncentive.export'
   | 'shopManagerIncentive.sendToPayroll'
 
@@ -229,12 +228,11 @@ const ALL_PERMISSIONS_MAP: Record<string, boolean> = {
   'shopManagerIncentive.view': true,
   'shopManagerIncentive.createPeriod': true,
   'shopManagerIncentive.updatePeriod': true,
-  'shopManagerIncentive.input': true,
-  'shopManagerIncentive.import': true,
+  'shopManagerIncentive.inputSales': true,
+  'shopManagerIncentive.inputDistribution': true,
+  'shopManagerIncentive.inputEbu': true,
+  'shopManagerIncentive.inputAll': true,
   'shopManagerIncentive.calculate': true,
-  'shopManagerIncentive.review': true,
-  'shopManagerIncentive.approve': true,
-  'shopManagerIncentive.lock': true,
   'shopManagerIncentive.export': true,
   'shopManagerIncentive.sendToPayroll': true,
 }

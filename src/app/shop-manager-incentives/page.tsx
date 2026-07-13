@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Plus, Eye, XCircle } from 'lucide-react'
+import { Plus, Eye, XCircle, CheckCircle } from 'lucide-react'
 
 interface CreatedBy { id: string; name: string; email: string }
 interface PayrollPeriod { id: string; periodName: string }
@@ -13,15 +13,11 @@ interface Period {
 }
 
 const statusColors: Record<string, string> = {
-  DRAFT: '#6b7280', OPEN_FOR_INPUT: '#3b82f6', READY_FOR_CALCULATION: '#eab308',
-  CALCULATED: '#22c55e', UNDER_REVIEW: '#a855f7', APPROVED: '#6366f1',
-  LOCKED: '#1f2937', CANCELLED: '#ef4444',
+  DRAFT: '#6b7280', OPEN: '#3b82f6', CALCULATED: '#22c55e', CANCELLED: '#ef4444',
 }
 
 const statusLabels: Record<string, string> = {
-  DRAFT: 'Draft', OPEN_FOR_INPUT: 'Open for Input', READY_FOR_CALCULATION: 'Ready for Calc',
-  CALCULATED: 'Calculated', UNDER_REVIEW: 'Under Review', APPROVED: 'Approved',
-  LOCKED: 'Locked', CANCELLED: 'Cancelled',
+  DRAFT: 'Draft', OPEN: 'Open', CALCULATED: 'Calculated', CANCELLED: 'Cancelled',
 }
 
 export default function ShopManagerIncentivesPage() {
@@ -43,12 +39,30 @@ export default function ShopManagerIncentivesPage() {
     finally { setLoading(false) }
   }
 
+  async function handleDelete(id: string) {
+    if (!confirm('Delete this incentive period?')) return
+    try {
+      const res = await fetch(`/api/shop-manager-incentives/periods/${id}`, { method: 'DELETE' })
+      if (res.ok) fetchPeriods()
+      else { const j = await res.json(); alert(j.error || 'Failed to delete') }
+    } catch { alert('Network error') }
+  }
+
   async function handleCancel(id: string) {
     if (!confirm('Cancel this incentive period?')) return
     try {
       const res = await fetch(`/api/shop-manager-incentives/periods/${id}/cancel`, { method: 'POST' })
       if (res.ok) fetchPeriods()
       else { const j = await res.json(); alert(j.error || 'Failed to cancel') }
+    } catch { alert('Network error') }
+  }
+
+  async function handleOpen(id: string) {
+    if (!confirm('Open this period for input?')) return
+    try {
+      const res = await fetch(`/api/shop-manager-incentives/periods/${id}/open`, { method: 'POST' })
+      if (res.ok) fetchPeriods()
+      else { const j = await res.json(); alert(j.error || 'Failed to open') }
     } catch { alert('Network error') }
   }
 
@@ -69,14 +83,11 @@ export default function ShopManagerIncentivesPage() {
           <thead>
             <tr className="bg-gray-100">
               <th className="border p-2 text-left">Period Name</th>
-              <th className="border p-2 text-left">Payroll Period</th>
               <th className="border p-2 text-left">Month</th>
               <th className="border p-2 text-left">Year</th>
+              <th className="border p-2 text-left">Payroll Period</th>
               <th className="border p-2 text-left">Status</th>
               <th className="border p-2 text-left">Total Shops</th>
-              <th className="border p-2 text-left">Total Calculated</th>
-              <th className="border p-2 text-left">Total Approved</th>
-              <th className="border p-2 text-left">Created By</th>
               <th className="border p-2 text-left">Actions</th>
             </tr>
           </thead>
@@ -84,23 +95,24 @@ export default function ShopManagerIncentivesPage() {
             {periods.map(p => (
               <tr key={p.id} className="hover:bg-gray-50">
                 <td className="border p-2 font-medium">{p.name}</td>
-                <td className="border p-2">{p.payrollPeriod?.periodName || '-'}</td>
                 <td className="border p-2">{p.month}</td>
                 <td className="border p-2">{p.year}</td>
+                <td className="border p-2">{p.payrollPeriod?.periodName || '-'}</td>
                 <td className="border p-2">
                   <span style={{ backgroundColor: statusColors[p.status] || '#6b7280', color: '#fff' }} className="px-2 py-0.5 rounded text-xs font-semibold">
                     {statusLabels[p.status] || p.status}
                   </span>
                 </td>
                 <td className="border p-2">{p.totalShops}</td>
-                <td className="border p-2">{p.totalCalculatedAmount.toLocaleString()}</td>
-                <td className="border p-2">{p.totalApprovedAmount.toLocaleString()}</td>
-                <td className="border p-2">{p.createdBy?.name || '-'}</td>
                 <td className="border p-2">
                   <div className="flex gap-1">
                     <button onClick={() => router.push(`/shop-manager-incentives/${p.id}`)} className="p-1 text-blue-600" title="View"><Eye size={16} /></button>
                     {p.status === 'DRAFT' && (
-                      <button onClick={() => handleCancel(p.id)} className="p-1 text-red-600" title="Cancel"><XCircle size={16} /></button>
+                      <>
+                        <button onClick={() => handleOpen(p.id)} className="p-1 text-green-600" title="Open"><CheckCircle size={16} /></button>
+                        <button onClick={() => handleDelete(p.id)} className="p-1 text-red-600" title="Delete"><XCircle size={16} /></button>
+                        <button onClick={() => handleCancel(p.id)} className="p-1 text-orange-600" title="Cancel"><XCircle size={16} /></button>
+                      </>
                     )}
                   </div>
                 </td>

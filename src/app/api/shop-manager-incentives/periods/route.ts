@@ -11,7 +11,6 @@ const createSchema = z.object({
   name: z.string().min(1),
   month: z.number().int().min(1).max(12),
   year: z.number().int().min(2020),
-  notes: z.string().optional(),
 })
 
 export async function GET(req: NextRequest) {
@@ -40,49 +39,15 @@ export async function GET(req: NextRequest) {
           payrollPeriod: { select: { id: true, periodName: true } },
           _count: {
             select: {
-              performanceInputs: true,
+              inputs: true,
               calculations: true,
-              issues: true,
             },
           },
         },
       }),
     ])
 
-    const periodIds = periods.map(p => p.id)
-
-    const calculationSums = await prisma.shopManagerIncentiveCalculation.groupBy({
-      by: ['incentivePeriodId'],
-      where: { incentivePeriodId: { in: periodIds } },
-      _sum: { totalAmount: true },
-    })
-
-    const approvedSums = await prisma.shopManagerIncentiveCalculation.groupBy({
-      by: ['incentivePeriodId'],
-      where: { incentivePeriodId: { in: periodIds }, status: 'APPROVED' },
-      _sum: { totalAmount: true },
-    })
-
-    const calcSumMap = new Map(calculationSums.map(c => [c.incentivePeriodId, Number(c._sum.totalAmount) || 0]))
-    const approvedSumMap = new Map(approvedSums.map(c => [c.incentivePeriodId, Number(c._sum.totalAmount) || 0]))
-
-    const data = periods.map(p => ({
-      id: p.id,
-      name: p.name,
-      month: p.month,
-      year: p.year,
-      status: p.status,
-      notes: p.notes,
-      totalShops: p._count.performanceInputs,
-      totalCalculatedAmount: calcSumMap.get(p.id) ?? 0,
-      totalApprovedAmount: approvedSumMap.get(p.id) ?? 0,
-      createdBy: p.createdBy,
-      payrollPeriod: p.payrollPeriod,
-      createdAt: p.createdAt,
-      updatedAt: p.updatedAt,
-    }))
-
-    return success({ data, total, page, pageSize, totalPages: Math.ceil(total / pageSize) })
+    return success({ data: periods, total, page, pageSize, totalPages: Math.ceil(total / pageSize) })
   } catch (err) { console.error(err); return internalError() }
 }
 
@@ -96,7 +61,7 @@ export async function POST(req: NextRequest) {
     const parsed = createSchema.safeParse(body)
     if (!parsed.success) return badRequest('Invalid input', parsed.error.flatten())
 
-    const { payrollPeriodId, name, month, year, notes } = parsed.data
+    const { payrollPeriodId, name, month, year } = parsed.data
 
     const payrollPeriod = await prisma.payrollPeriod.findUnique({ where: { id: payrollPeriodId } })
     if (!payrollPeriod) return notFound('Payroll period not found')
@@ -110,7 +75,6 @@ export async function POST(req: NextRequest) {
         name,
         month,
         year,
-        notes,
         status: 'DRAFT',
         createdById: session.userId,
       },
@@ -121,7 +85,7 @@ export async function POST(req: NextRequest) {
       action: 'SHOP_MANAGER_INCENTIVE_PERIOD_CREATE',
       entityType: 'ShopManagerIncentivePeriod',
       entityId: period.id,
-      newValue: { payrollPeriodId, name, month, year, notes },
+      newValue: { payrollPeriodId, name, month, year },
     })
 
     return success(period, 201)

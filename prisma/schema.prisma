@@ -362,63 +362,12 @@ enum ShopCriteria {
 enum IncentivePeriodStatus {
   DRAFT
   OPEN_FOR_INPUT
-  READY_FOR_CALCULATION
+  OPEN
   CALCULATED
   UNDER_REVIEW
   APPROVED
   LOCKED
   CANCELLED
-}
-
-enum PerformanceInputStatus {
-  DRAFT
-  SUBMITTED
-  RETURNED
-  ACCEPTED
-  REJECTED
-  LOCKED
-}
-
-enum CalculationStatus {
-  NOT_READY
-  CALCULATED
-  UNDER_REVIEW
-  APPROVED
-  LOCKED
-  BLOCKED
-}
-
-enum IncentiveComponentCode {
-  QGA_BONUS
-  QGA_SIM_COMMISSION
-  EVD_BONUS
-  BA_SITE_BONUS
-  MPESA_COMMISSION
-  DSA_ACHIEVEMENT_BONUS
-  QO_BONUS
-  EBU_ACTIVATION_BONUS
-  EBU_REVENUE_SHARE
-  TOTAL
-}
-
-enum IncentiveIssueSeverity {
-  BLOCKER
-  WARNING
-  INFO
-}
-
-enum IncentiveIssueCode {
-  MISSING_SHOP_MANAGER
-  MISSING_SHOP_CRITERIA
-  SHOP_CRITERIA_UNASSIGNED
-  SHOP_AT_RISK_ZERO_INCENTIVE
-  MISSING_CORRIDOR_TYPE
-  MISSING_QGA_INPUT
-  MISSING_EVD_INPUT
-  MISSING_MPESA_RECONCILIATION
-  MISSING_DSA_INPUT
-  MISSING_QO_INPUT
-  MISSING_EBU_INPUT
 }
 
 enum AuditAction {
@@ -549,14 +498,7 @@ enum AuditAction {
   SHOP_MANAGER_INCENTIVE_PERIOD_OPEN
   SHOP_MANAGER_INCENTIVE_INPUT_CREATE
   SHOP_MANAGER_INCENTIVE_INPUT_UPDATE
-  SHOP_MANAGER_INCENTIVE_INPUT_SUBMIT
-  SHOP_MANAGER_INCENTIVE_INPUT_ACCEPT
-  SHOP_MANAGER_INCENTIVE_INPUT_REJECT
-  SHOP_MANAGER_INCENTIVE_INPUT_RETURN
   SHOP_MANAGER_INCENTIVE_CALCULATE
-  SHOP_MANAGER_INCENTIVE_REVIEW_START
-  SHOP_MANAGER_INCENTIVE_APPROVE
-  SHOP_MANAGER_INCENTIVE_LOCK
   SHOP_MANAGER_INCENTIVE_EXPORT
   SHOP_MANAGER_INCENTIVE_SEND_TO_PAYROLL
   OTHER
@@ -598,17 +540,8 @@ model User {
   shopCriteriaUpdated           ShopCriteriaStatusHistory[]       @relation("ShopCriteriaUpdater")
   shopCriteriaApproved          ShopCriteriaStatusHistory[]       @relation("ShopCriteriaApprover")
   incentivePeriodsCreated       ShopManagerIncentivePeriod[]      @relation("IncentivePeriodCreatedBy")
-  incentivePeriodsReviewed      ShopManagerIncentivePeriod[]      @relation("IncentivePeriodReviewedBy")
-  incentivePeriodsApproved      ShopManagerIncentivePeriod[]      @relation("IncentivePeriodApprovedBy")
-  incentivePeriodsLocked        ShopManagerIncentivePeriod[]      @relation("IncentivePeriodLockedBy")
-  incentiveInputsCreated        ShopManagerPerformanceInput[]     @relation("IncentiveInputCreatedBy")
-  incentiveInputsUpdated        ShopManagerPerformanceInput[]     @relation("IncentiveInputUpdatedBy")
-  incentiveInputsSubmitted      ShopManagerPerformanceInput[]     @relation("IncentiveInputSubmittedBy")
-  incentiveInputsReviewed       ShopManagerPerformanceInput[]     @relation("IncentiveInputReviewedBy")
-  incentiveCalculations         ShopManagerIncentiveCalculation[] @relation("IncentiveCalculatedBy")
-  incentiveApprovals            ShopManagerIncentiveCalculation[] @relation("IncentiveApprovedBy")
-  incentiveLocks                ShopManagerIncentiveCalculation[] @relation("IncentiveLockedBy")
-  incentiveIssueResolved        ShopManagerIncentiveIssue[]       @relation("IncentiveIssueResolvedBy")
+  incentiveInputsCreated        ShopManagerIncentiveInput[]       @relation("IncentiveInputCreatedBy")
+  incentiveInputsUpdated        ShopManagerIncentiveInput[]       @relation("IncentiveInputUpdatedBy")
 }
 
 model Role {
@@ -691,9 +624,8 @@ model Location {
   manager                    Employee?                         @relation("LocationManager", fields: [managerId], references: [id])
   shopProfile                ShopProfile?
   criteriaHistory            ShopCriteriaStatusHistory[]
-  incentivePerformanceInputs ShopManagerPerformanceInput[]
-  incentiveCalculations      ShopManagerIncentiveCalculation[]
-  incentiveIssues            ShopManagerIncentiveIssue[]
+  incentiveInputs      ShopManagerIncentiveInput[]
+  incentiveCalculations ShopManagerIncentiveCalculation[]
 
   @@index([type])
   @@index([parentId])
@@ -799,9 +731,8 @@ model Employee {
   payrollInputs                PayrollInput[]
   payrollInputWaivers          PayrollInputWaiver[]
   shopDefaultManagerProfiles   ShopProfile[]                     @relation("ShopDefaultManager")
-  incentivePerformanceInputs   ShopManagerPerformanceInput[]     @relation("IncentivePerformanceInputManager")
-  incentiveCalculations        ShopManagerIncentiveCalculation[] @relation("IncentiveCalculationManager")
-  incentiveIssues              ShopManagerIncentiveIssue[]       @relation("IncentiveIssueManager")
+  incentiveInputs      ShopManagerIncentiveInput[]     @relation("IncentiveInputManager")
+  incentiveCalculations ShopManagerIncentiveCalculation[] @relation("IncentiveCalculationManager")
 
   @@index([employmentStatus])
   @@index([currentRole])
@@ -1886,152 +1817,101 @@ model PayrollInputWaiver {
 }
 
 model ShopManagerIncentivePeriod {
-  id                String                            @id @default(uuid())
-  payrollPeriodId   String                            @unique
-  name              String
-  month             Int
-  year              Int
-  status            IncentivePeriodStatus             @default(DRAFT)
-  notes             String?
-  createdById       String?
-  reviewedById      String?
-  approvedById      String?
-  lockedById        String?
-  createdAt         DateTime                          @default(now())
-  updatedAt         DateTime                          @updatedAt
-  reviewedAt        DateTime?
-  approvedAt        DateTime?
-  lockedAt          DateTime?
-  cancelledAt       DateTime?
-  payrollPeriod     PayrollPeriod                     @relation(fields: [payrollPeriodId], references: [id])
-  createdBy         User?                             @relation("IncentivePeriodCreatedBy", fields: [createdById], references: [id])
-  reviewedBy        User?                             @relation("IncentivePeriodReviewedBy", fields: [reviewedById], references: [id])
-  approvedBy        User?                             @relation("IncentivePeriodApprovedBy", fields: [approvedById], references: [id])
-  lockedBy          User?                             @relation("IncentivePeriodLockedBy", fields: [lockedById], references: [id])
-  performanceInputs ShopManagerPerformanceInput[]
-  calculations      ShopManagerIncentiveCalculation[]
-  issues            ShopManagerIncentiveIssue[]
+  id              String                          @id @default(uuid())
+  payrollPeriodId String                          @unique
+  name            String
+  month           Int
+  year            Int
+  status          IncentivePeriodStatus           @default(DRAFT)
+  createdById     String?
+  createdAt       DateTime                        @default(now())
+  updatedAt       DateTime                        @updatedAt
+  payrollPeriod   PayrollPeriod                   @relation(fields: [payrollPeriodId], references: [id])
+  createdBy       User?                           @relation("IncentivePeriodCreatedBy", fields: [createdById], references: [id])
+  inputs          ShopManagerIncentiveInput[]
+  calculations    ShopManagerIncentiveCalculation[]
 
   @@index([payrollPeriodId])
   @@index([status])
   @@index([month, year])
 }
 
-model ShopManagerPerformanceInput {
-  id                           String                           @id @default(uuid())
+model ShopManagerIncentiveInput {
+  id                           String       @id @default(uuid())
   incentivePeriodId            String
   shopLocationId               String
   shopManagerId                String?
   shopCriteria                 ShopCriteria?
-  corridorType                 CorridorType?
-  qgaAchievementPercent        Decimal?                         @db.Decimal(6, 2)
-  qgaCount                     Int?
-  evdAchievementPercent        Decimal?                         @db.Decimal(6, 2)
-  evdReconciled                Boolean?
-  baSiteRequirementMet         Boolean?
-  mpesaFloatSold               Decimal?                         @db.Decimal(12, 2)
-  mpesaTargetAchieved          Boolean?
-  mpesaReconciled              Boolean?
-  dsaAirtimeAchievementPercent Decimal?                         @db.Decimal(6, 2)
-  mmQoTargetPercent            Decimal?                         @db.Decimal(6, 2)
+  corridorStatus               Boolean?
+  qgaAbove90                   Boolean?
+  qgaQuantity                  Int?
+  mmQoAbove90                  Boolean?
+  dsaAirtimeAchievementPercent Decimal?     @db.Decimal(6, 2)
+  evdAbove100AndReconciled     Boolean?
+  mpesaTargetAndReconciled     Boolean?
+  mpesaFloatSold               Decimal?     @db.Decimal(12, 2)
+  baSite                       Boolean?
   ebuTargetAchieved            Boolean?
-  ebuRevenue                   Decimal?                         @db.Decimal(12, 2)
-  ebuAverageTopup              Decimal?                         @db.Decimal(10, 2)
-  ebuFirstMonthLeapfrogRevenue Decimal?                         @db.Decimal(12, 2)
-  inputStatus                  PerformanceInputStatus           @default(DRAFT)
-  notes                        String?
+  ebuRevenueMade               Boolean?
+  ebuAverageTopupAbove500      Boolean?
+  ebuFirstMonthLfRevenue       Decimal?     @db.Decimal(12, 2)
+  responsibleRemarks           String?
   createdById                  String?
   updatedById                  String?
-  submittedById                String?
-  reviewedById                 String?
-  createdAt                    DateTime                         @default(now())
-  updatedAt                    DateTime                         @updatedAt
-  submittedAt                  DateTime?
-  reviewedAt                   DateTime?
-  incentivePeriod              ShopManagerIncentivePeriod       @relation(fields: [incentivePeriodId], references: [id], onDelete: Cascade)
-  shopLocation                 Location                         @relation(fields: [shopLocationId], references: [id])
-  shopManager                  Employee?                        @relation("IncentivePerformanceInputManager", fields: [shopManagerId], references: [id])
-  createdBy                    User?                            @relation("IncentiveInputCreatedBy", fields: [createdById], references: [id])
-  updatedBy                    User?                            @relation("IncentiveInputUpdatedBy", fields: [updatedById], references: [id])
-  submittedBy                  User?                            @relation("IncentiveInputSubmittedBy", fields: [submittedById], references: [id])
-  reviewedBy                   User?                            @relation("IncentiveInputReviewedBy", fields: [reviewedById], references: [id])
+  createdAt                    DateTime     @default(now())
+  updatedAt                    DateTime     @updatedAt
+  incentivePeriod              ShopManagerIncentivePeriod @relation(fields: [incentivePeriodId], references: [id], onDelete: Cascade)
+  shopLocation                 Location     @relation(fields: [shopLocationId], references: [id])
+  shopManager                  Employee?    @relation("IncentiveInputManager", fields: [shopManagerId], references: [id])
+  createdBy                    User?        @relation("IncentiveInputCreatedBy", fields: [createdById], references: [id])
+  updatedBy                    User?        @relation("IncentiveInputUpdatedBy", fields: [updatedById], references: [id])
   calculation                  ShopManagerIncentiveCalculation?
 
   @@unique([incentivePeriodId, shopLocationId])
   @@index([incentivePeriodId])
   @@index([shopLocationId])
-  @@index([inputStatus])
 }
 
 model ShopManagerIncentiveCalculation {
-  id                 String                          @id @default(uuid())
+  id                 String    @id @default(uuid())
   incentivePeriodId  String
-  performanceInputId String?                         @unique
+  inputId            String?   @unique
   shopLocationId     String
   shopManagerId      String?
   shopCriteria       ShopCriteria?
-  status             CalculationStatus               @default(NOT_READY)
-  totalAmount        Decimal?                        @db.Decimal(12, 2)
-  blockerCount       Int                             @default(0)
-  warningCount       Int                             @default(0)
-  calculatedById     String?
-  approvedById       String?
-  lockedById         String?
+  qgaBonus           Decimal?  @db.Decimal(12, 2)
+  qgaSimCommission   Decimal?  @db.Decimal(12, 2)
+  evdBonus           Decimal?  @db.Decimal(12, 2)
+  mpesaCommission    Decimal?  @db.Decimal(12, 2)
+  baSiteBonus        Decimal?  @db.Decimal(12, 2)
+  dsaAchievementBonus Decimal? @db.Decimal(12, 2)
+  qoBonus            Decimal?  @db.Decimal(12, 2)
+  ebuActivationBonus Decimal?  @db.Decimal(12, 2)
+  ebuRevenueShare    Decimal?  @db.Decimal(12, 2)
+  totalIncentive     Decimal?  @db.Decimal(12, 2)
+  calculationNote    String?
   calculatedAt       DateTime?
-  approvedAt         DateTime?
-  lockedAt           DateTime?
-  createdAt          DateTime                        @default(now())
-  updatedAt          DateTime                        @updatedAt
-  incentivePeriod    ShopManagerIncentivePeriod      @relation(fields: [incentivePeriodId], references: [id], onDelete: Cascade)
-  performanceInput   ShopManagerPerformanceInput?    @relation(fields: [performanceInputId], references: [id])
-  shopLocation       Location                        @relation(fields: [shopLocationId], references: [id])
-  shopManager        Employee?                       @relation("IncentiveCalculationManager", fields: [shopManagerId], references: [id])
-  calculatedBy       User?                           @relation("IncentiveCalculatedBy", fields: [calculatedById], references: [id])
-  approvedBy         User?                           @relation("IncentiveApprovedBy", fields: [approvedById], references: [id])
-  lockedBy           User?                           @relation("IncentiveLockedBy", fields: [lockedById], references: [id])
-  components         ShopManagerIncentiveComponent[]
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+  incentivePeriod    ShopManagerIncentivePeriod @relation(fields: [incentivePeriodId], references: [id], onDelete: Cascade)
+  input              ShopManagerIncentiveInput? @relation(fields: [inputId], references: [id])
+  shopLocation       Location  @relation(fields: [shopLocationId], references: [id])
+  shopManager        Employee? @relation("IncentiveCalculationManager", fields: [shopManagerId], references: [id])
 
   @@unique([incentivePeriodId, shopLocationId])
   @@index([incentivePeriodId])
   @@index([shopLocationId])
-  @@index([status])
 }
 
-model ShopManagerIncentiveComponent {
-  id              String                          @id @default(uuid())
-  calculationId   String
-  componentCode   IncentiveComponentCode
-  componentName   String
-  inputMetric     String?
-  inputValue      Decimal?                        @db.Decimal(12, 2)
-  conditionMet    Boolean?
-  amount          Decimal                         @db.Decimal(12, 2)
-  calculationNote String?
-  createdAt       DateTime                        @default(now())
-  calculation     ShopManagerIncentiveCalculation @relation(fields: [calculationId], references: [id], onDelete: Cascade)
-
-  @@index([calculationId])
-  @@index([componentCode])
-}
-
-model ShopManagerIncentiveIssue {
-  id                String                     @id @default(uuid())
-  incentivePeriodId String
-  shopLocationId    String?
-  shopManagerId     String?
-  severity          IncentiveIssueSeverity
-  issueCode         IncentiveIssueCode
-  message           String
-  isResolved        Boolean                    @default(false)
-  resolvedById      String?
-  resolvedAt        DateTime?
-  createdAt         DateTime                   @default(now())
-  incentivePeriod   ShopManagerIncentivePeriod @relation(fields: [incentivePeriodId], references: [id], onDelete: Cascade)
-  shopLocation      Location?                  @relation(fields: [shopLocationId], references: [id])
-  shopManager       Employee?                  @relation("IncentiveIssueManager", fields: [shopManagerId], references: [id])
-  resolvedBy        User?                      @relation("IncentiveIssueResolvedBy", fields: [resolvedById], references: [id])
-
-  @@index([incentivePeriodId])
-  @@index([severity])
-  @@index([issueCode])
+model ShopManagerIncentiveInputConfig {
+  id               String  @id @default(uuid())
+  inputCode        String  @unique
+  inputLabel       String
+  ownerDepartment  String
+  ownerRole        String
+  inputType        String
+  allowedValues    String?
+  usedInComponent  String?
+  displayOrder     Int     @default(0)
+  isActive         Boolean @default(true)
 }

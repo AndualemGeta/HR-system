@@ -12,7 +12,6 @@ export default function NewIncentivePeriodPage() {
   const [name, setName] = useState('')
   const [month, setMonth] = useState('')
   const [year, setYear] = useState('')
-  const [notes, setNotes] = useState('')
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [submitting, setSubmitting] = useState(false)
   const [fetchError, setFetchError] = useState<string | null>(null)
@@ -44,7 +43,7 @@ export default function NewIncentivePeriodPage() {
       const res = await fetch('/api/shop-manager-incentives/periods', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ payrollPeriodId, name: name.trim(), month: parseInt(month, 10), year: parseInt(year, 10), notes: notes.trim() || undefined }),
+        body: JSON.stringify({ payrollPeriodId, name: name.trim(), month: parseInt(month, 10), year: parseInt(year, 10) }),
       })
       const json = await res.json()
       if (!res.ok) {
@@ -102,11 +101,6 @@ export default function NewIncentivePeriodPage() {
             <input type="number" min={2020} value={year} onChange={e => setYear(e.target.value)} placeholder="e.g. 2026" className="border rounded px-3 py-2 w-full" />
             {errors.year && <p className="text-red-500 text-xs mt-1">{errors.year}</p>}
           </div>
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium mb-1">Notes</label>
-          <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={3} className="border rounded px-3 py-2 w-full" placeholder="Optional notes..." />
         </div>
 
         <div className="flex gap-3">

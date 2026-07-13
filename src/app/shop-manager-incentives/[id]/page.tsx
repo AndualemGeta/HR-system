@@ -6,32 +6,27 @@ import { useParams, useRouter } from 'next/navigation'
 interface PeriodDetail {
   id: string; name: string; month: number; year: number; status: string; notes: string | null
   createdBy: { id: string; name: string; email: string } | null
-  reviewedBy: { id: string; name: string; email: string } | null
-  approvedBy: { id: string; name: string; email: string } | null
-  lockedBy: { id: string; name: string; email: string } | null
   payrollPeriod: { id: string; periodName: string; periodStart: string; periodEnd: string; status: string } | null
-  _count: { performanceInputs: number; calculations: number; issues: number }
+  _count: { inputs: number; calculations: number }
   createdAt: string; updatedAt: string
 }
 
 interface Dashboard {
-  totalShops: number; eligibleShops: number; atRiskShops: number
-  missingCriteria: number; missingManager: number
-  totalCalculated: number; totalApproved: number
-  issueCounts: { severity: string; count: number }[]
-  recentAuditLogs: { id: string; action: string; createdAt: string; user: { name: string } | null }[]
+  totalShops: number; goldCount: number; silverCount: number; bronzeCount: number; atRiskCount: number
+  totalIncentive: number; averageIncentive: number; highestIncentive: number
+  componentTotals: {
+    qgaBonus: number; qgaSimCommission: number; evdBonus: number
+    mpesaCommission: number; baSiteBonus: number; dsaAchievementBonus: number
+    qoBonus: number; ebuActivationBonus: number; ebuRevenueShare: number
+  }
 }
 
 const statusColors: Record<string, string> = {
-  DRAFT: '#6b7280', OPEN_FOR_INPUT: '#3b82f6', READY_FOR_CALCULATION: '#eab308',
-  CALCULATED: '#22c55e', UNDER_REVIEW: '#a855f7', APPROVED: '#6366f1',
-  LOCKED: '#1f2937', CANCELLED: '#ef4444',
+  DRAFT: '#6b7280', OPEN: '#3b82f6', CALCULATED: '#22c55e', CANCELLED: '#ef4444',
 }
 
 const statusLabels: Record<string, string> = {
-  DRAFT: 'Draft', OPEN_FOR_INPUT: 'Open for Input', READY_FOR_CALCULATION: 'Ready for Calc',
-  CALCULATED: 'Calculated', UNDER_REVIEW: 'Under Review', APPROVED: 'Approved',
-  LOCKED: 'Locked', CANCELLED: 'Cancelled',
+  DRAFT: 'Draft', OPEN: 'Open', CALCULATED: 'Calculated', CANCELLED: 'Cancelled',
 }
 
 export default function IncentivePeriodDetailPage() {
@@ -78,12 +73,6 @@ export default function IncentivePeriodDetailPage() {
   if (!period) return <div className="p-6"><p>Period not found</p></div>
 
   const s = period.status
-  const navLinks = [
-    { label: 'Inputs', path: `/shop-manager-incentives/${id}/inputs`, show: s !== 'DRAFT' && s !== 'CANCELLED' },
-    { label: 'Calculations', path: `/shop-manager-incentives/${id}/calculations`, show: s === 'CALCULATED' || s === 'UNDER_REVIEW' || s === 'APPROVED' || s === 'LOCKED' },
-    { label: 'Review', path: `/shop-manager-incentives/${id}/review`, show: s === 'UNDER_REVIEW' || s === 'APPROVED' },
-    { label: 'Import', path: `/shop-manager-incentives/${id}/import`, show: s !== 'CANCELLED' },
-  ]
 
   return (
     <div className="p-6 max-w-6xl mx-auto">
@@ -106,120 +95,104 @@ export default function IncentivePeriodDetailPage() {
           <p className="text-sm text-gray-500">Total Shops</p>
         </div>
         <div className="border rounded p-4 text-center">
-          <p className="text-2xl font-bold text-green-600">{dashboard?.eligibleShops ?? '-'}</p>
-          <p className="text-sm text-gray-500">Eligible</p>
+          <p className="text-2xl font-bold text-yellow-600">{dashboard?.goldCount ?? '-'}</p>
+          <p className="text-sm text-gray-500">Gold</p>
         </div>
         <div className="border rounded p-4 text-center">
-          <p className="text-2xl font-bold text-red-600">{dashboard?.atRiskShops ?? '-'}</p>
-          <p className="text-sm text-gray-500">At-Risk</p>
+          <p className="text-2xl font-bold text-gray-400">{dashboard?.silverCount ?? '-'}</p>
+          <p className="text-sm text-gray-500">Silver</p>
         </div>
         <div className="border rounded p-4 text-center">
-          <p className="text-2xl font-bold text-yellow-600">{dashboard?.missingCriteria ?? '-'}</p>
-          <p className="text-sm text-gray-500">Missing Criteria</p>
+          <p className="text-2xl font-bold text-orange-600">{dashboard?.bronzeCount ?? '-'}</p>
+          <p className="text-sm text-gray-500">Bronze</p>
         </div>
         <div className="border rounded p-4 text-center">
-          <p className="text-2xl font-bold text-orange-600">{dashboard?.missingManager ?? '-'}</p>
-          <p className="text-sm text-gray-500">Missing Manager</p>
+          <p className="text-2xl font-bold text-red-600">{dashboard?.atRiskCount ?? '-'}</p>
+          <p className="text-sm text-gray-500">At-risk</p>
         </div>
         <div className="border rounded p-4 text-center">
-          <p className="text-2xl font-bold">{dashboard?.totalCalculated?.toLocaleString() ?? '-'}</p>
-          <p className="text-sm text-gray-500">Total Calculated</p>
+          <p className="text-2xl font-bold">{dashboard?.totalIncentive?.toLocaleString() ?? '-'}</p>
+          <p className="text-sm text-gray-500">Total Incentive</p>
         </div>
         <div className="border rounded p-4 text-center">
-          <p className="text-2xl font-bold text-indigo-600">{dashboard?.totalApproved?.toLocaleString() ?? '-'}</p>
-          <p className="text-sm text-gray-500">Total Approved</p>
+          <p className="text-2xl font-bold">{dashboard?.averageIncentive?.toLocaleString() ?? '-'}</p>
+          <p className="text-sm text-gray-500">Average</p>
         </div>
         <div className="border rounded p-4 text-center">
-          <p className="text-2xl font-bold">{period._count.issues}</p>
-          <p className="text-sm text-gray-500">Issues</p>
+          <p className="text-2xl font-bold">{dashboard?.highestIncentive?.toLocaleString() ?? '-'}</p>
+          <p className="text-sm text-gray-500">Highest</p>
         </div>
       </div>
 
       <div className="flex gap-2 mb-6 flex-wrap">
         {s === 'DRAFT' && (
-          <button onClick={() => handleAction('open for input', 'open')} disabled={actionLoading} className="bg-blue-600 text-white px-4 py-2 rounded text-sm disabled:opacity-50">
-            Open for Input
-          </button>
+          <>
+            <button onClick={() => handleAction('open', 'open')} disabled={actionLoading} className="bg-blue-600 text-white px-4 py-2 rounded text-sm disabled:opacity-50">
+              Open
+            </button>
+            <button onClick={() => handleAction('cancel', 'cancel')} disabled={actionLoading} className="bg-red-600 text-white px-4 py-2 rounded text-sm disabled:opacity-50">
+              Cancel
+            </button>
+          </>
         )}
-        {(s === 'OPEN_FOR_INPUT' || s === 'READY_FOR_CALCULATION') && (
+        {s === 'OPEN' && (
           <button onClick={() => handleAction('calculate', 'calculate')} disabled={actionLoading} className="bg-yellow-600 text-white px-4 py-2 rounded text-sm disabled:opacity-50">
             Calculate
           </button>
         )}
         {s === 'CALCULATED' && (
-          <button onClick={() => handleAction('start review', 'start-review')} disabled={actionLoading} className="bg-purple-600 text-white px-4 py-2 rounded text-sm disabled:opacity-50">
-            Start Review
-          </button>
-        )}
-        {s === 'UNDER_REVIEW' && (
-          <button onClick={() => handleAction('approve', 'approve')} disabled={actionLoading} className="bg-green-600 text-white px-4 py-2 rounded text-sm disabled:opacity-50">
-            Approve
-          </button>
-        )}
-        {(s === 'APPROVED' || s === 'LOCKED') && (
-          <button onClick={() => handleAction('send to payroll inputs', 'send-to-payroll-inputs')} disabled={actionLoading} className="bg-indigo-600 text-white px-4 py-2 rounded text-sm disabled:opacity-50">
-            Send to Payroll Inputs
-          </button>
-        )}
-        {s === 'APPROVED' && (
-          <button onClick={() => handleAction('lock', 'lock')} disabled={actionLoading} className="bg-gray-800 text-white px-4 py-2 rounded text-sm disabled:opacity-50">
-            Lock
-          </button>
-        )}
-        {s !== 'LOCKED' && s !== 'CANCELLED' && (
-          <button onClick={() => handleAction('cancel', 'cancel')} disabled={actionLoading} className="bg-red-600 text-white px-4 py-2 rounded text-sm disabled:opacity-50">
-            Cancel
-          </button>
+          <>
+            <button onClick={() => handleAction('send to payroll inputs', 'send-to-payroll-inputs')} disabled={actionLoading} className="bg-indigo-600 text-white px-4 py-2 rounded text-sm disabled:opacity-50">
+              Send to Payroll Inputs
+            </button>
+            <button onClick={() => window.open(`/api/shop-manager-incentives/periods/${id}/export`, '_blank')} className="bg-green-600 text-white px-4 py-2 rounded text-sm">
+              Export
+            </button>
+          </>
         )}
       </div>
 
       <div className="flex gap-3 mb-6 flex-wrap">
-        {navLinks.filter(l => l.show).map(l => (
-          <button key={l.path} onClick={() => router.push(l.path)} className="px-4 py-2 border rounded text-sm hover:bg-gray-50">
-            {l.label}
+        {s !== 'DRAFT' && s !== 'CANCELLED' && (
+          <button onClick={() => router.push(`/shop-manager-incentives/${id}/inputs`)} className="px-4 py-2 border rounded text-sm hover:bg-gray-50">
+            Inputs
           </button>
-        ))}
+        )}
+        {s === 'CALCULATED' && (
+          <button onClick={() => router.push(`/shop-manager-incentives/${id}/calculations`)} className="px-4 py-2 border rounded text-sm hover:bg-gray-50">
+            Calculations
+          </button>
+        )}
       </div>
 
-      <div className="border rounded p-4 mb-6">
+      {dashboard && dashboard.totalIncentive > 0 && (
+        <div className="border rounded p-4 mb-6">
+          <h2 className="font-semibold mb-2">Component Totals</h2>
+          <div className="grid grid-cols-3 md:grid-cols-5 gap-2 text-sm">
+            <div className="bg-gray-50 rounded p-2"><span className="text-gray-500">QGA Bonus:</span> {dashboard.componentTotals.qgaBonus.toLocaleString()}</div>
+            <div className="bg-gray-50 rounded p-2"><span className="text-gray-500">QGA SIM:</span> {dashboard.componentTotals.qgaSimCommission.toLocaleString()}</div>
+            <div className="bg-gray-50 rounded p-2"><span className="text-gray-500">EVD:</span> {dashboard.componentTotals.evdBonus.toLocaleString()}</div>
+            <div className="bg-gray-50 rounded p-2"><span className="text-gray-500">M-PESA:</span> {dashboard.componentTotals.mpesaCommission.toLocaleString()}</div>
+            <div className="bg-gray-50 rounded p-2"><span className="text-gray-500">BA/Site:</span> {dashboard.componentTotals.baSiteBonus.toLocaleString()}</div>
+            <div className="bg-gray-50 rounded p-2"><span className="text-gray-500">DSA:</span> {dashboard.componentTotals.dsaAchievementBonus.toLocaleString()}</div>
+            <div className="bg-gray-50 rounded p-2"><span className="text-gray-500">QO:</span> {dashboard.componentTotals.qoBonus.toLocaleString()}</div>
+            <div className="bg-gray-50 rounded p-2"><span className="text-gray-500">EBU Act:</span> {dashboard.componentTotals.ebuActivationBonus.toLocaleString()}</div>
+            <div className="bg-gray-50 rounded p-2"><span className="text-gray-500">EBU Rev:</span> {dashboard.componentTotals.ebuRevenueShare.toLocaleString()}</div>
+          </div>
+        </div>
+      )}
+
+      <div className="border rounded p-4">
         <h2 className="font-semibold mb-2">Period Details</h2>
         <div className="grid grid-cols-2 gap-2 text-sm">
           <p><span className="text-gray-500">Status:</span> {statusLabels[s] || s}</p>
           <p><span className="text-gray-500">Month/Year:</span> {period.month}/{period.year}</p>
           <p><span className="text-gray-500">Payroll Period:</span> {period.payrollPeriod?.periodName || '-'}</p>
           <p><span className="text-gray-500">Created By:</span> {period.createdBy?.name || '-'}</p>
-          <p><span className="text-gray-500">Reviewed By:</span> {period.reviewedBy?.name || '-'}</p>
-          <p><span className="text-gray-500">Approved By:</span> {period.approvedBy?.name || '-'}</p>
-          <p><span className="text-gray-500">Locked By:</span> {period.lockedBy?.name || '-'}</p>
-          <p><span className="text-gray-500">Notes:</span> {period.notes || '-'}</p>
-          <p><span className="text-gray-500">Inputs:</span> {period._count.performanceInputs}</p>
+          <p><span className="text-gray-500">Inputs:</span> {period._count.inputs}</p>
           <p><span className="text-gray-500">Calculations:</span> {period._count.calculations}</p>
         </div>
       </div>
-
-      {dashboard?.issueCounts && dashboard.issueCounts.length > 0 && (
-        <div className="border rounded p-4 mb-6">
-          <h2 className="font-semibold mb-2">Issue Summary</h2>
-          <div className="flex gap-4">
-            {dashboard.issueCounts.map(ic => (
-              <div key={ic.severity} className="text-sm">
-                <span className="font-medium">{ic.severity}:</span> {ic.count}
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {dashboard?.recentAuditLogs && dashboard.recentAuditLogs.length > 0 && (
-        <div className="border rounded p-4">
-          <h2 className="font-semibold mb-2">Recent Activity</h2>
-          <div className="space-y-1 text-sm">
-            {dashboard.recentAuditLogs.map(log => (
-              <p key={log.id}><span className="text-gray-500">{new Date(log.createdAt).toLocaleString()}</span> - {log.user?.name || 'System'}: {log.action}</p>
-            ))}
-          </div>
-        </div>
-      )}
     </div>
   )
 }

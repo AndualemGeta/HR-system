@@ -14,11 +14,16 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
     const period = await prisma.shopManagerIncentivePeriod.findUnique({ where: { id } })
     if (!period) return notFound('Incentive period not found')
-    if (period.status !== 'DRAFT') return badRequest('Only DRAFT periods can be opened for input')
+    if (period.status !== 'DRAFT') return badRequest('Only DRAFT periods can be opened')
+
+    const inputCount = await prisma.shopManagerIncentiveInput.count({
+      where: { incentivePeriodId: id },
+    })
+    if (inputCount === 0) return badRequest('No valid inputs exist for this period')
 
     const updated = await prisma.shopManagerIncentivePeriod.update({
       where: { id },
-      data: { status: 'OPEN_FOR_INPUT' },
+      data: { status: 'OPEN' },
     })
 
     await createAuditLog({

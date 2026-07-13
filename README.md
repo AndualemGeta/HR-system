@@ -22,22 +22,29 @@ Secure, role-based HR employee registration and management system for Leapfrog S
 - New models: ShopProfile (corridorType, defaultShopManagerId, isIncentiveEligible), ShopCriteriaStatusHistory (criteria, effectiveFrom/To, reason)
 - 85 tests
 
-**Phase 4C.2 adds — Shop Manager Incentive & KPI Calculation:**
-- Incentive Period Management — CRUD with lifecycle: DRAFT → OPEN_FOR_INPUT → CALCULATED → UNDER_REVIEW → APPROVED → LOCKED → Send to Payroll
-- Performance Input Management — create, update, submit, accept, reject, return for individual shop performance data
+**Phase 4C.2 adds — Shop Manager Incentive (Management Input Form Design):**
+- Management Input Form design: period-based, department-owned input fields, no approval/review workflow
+- Period Management — CRUD with lifecycle: DRAFT → OPEN → CALCULATED → CANCELLED (no review/approve/lock states)
+- Input Management — create and update department-scoped performance inputs (Google Sheet-style table)
 - 9 Incentive Component Calculations: QGA Bonus (5K/3K/1.5K), QGA SIM Commission (count×1.5/count×1/0), EVD Bonus (3K/2K/0), BA/Site Bonus (4K/2K/0), M-PESA Commission (float×2%/float×2%/0), DSA Achievement Bonus (2K/1.5K/1K/0), QO Target Bonus (4K/0), EBU Activation Bonus (3K/1.5K/0.5K), EBU Revenue Share (25%/15%/0%)
-- Incentive tier amounts based on Shop Criteria (GOLD/SILVER/BRONZE); AT_RISK = all zero
-- CSV Template Download, Import Preview & Confirm, Export Summary
-- Payroll Handoff — sends approved/locked incentive calculations to Payroll Inputs with 3 overwrite modes (SKIP_EXISTING / UPDATE_EXISTING_DRAFT_ONLY / REPLACE_EXISTING_NOT_LOCKED)
-- Batch Calculation Engine — calculates all shops in a period and stores components + issues
-- 11 new permissions: shopManagerIncentive.view/createPeriod/updatePeriod/input/import/calculate/review/approve/lock/export/sendToPayroll
-- 17 new audit actions for period/input lifecycle events
-- 5 new Prisma models: ShopManagerIncentivePeriod, ShopManagerPerformanceInput, ShopManagerIncentiveCalculation, ShopManagerIncentiveComponent, ShopManagerIncentiveIssue
-- 10 new PayrollInputTypes seeded for incentive components + total
-- 7 UI pages: Incentive Periods list, New Period, Period Dashboard, Inputs, Calculations, Review, Import
-- 121 tests
+- Incentive tier amounts based on Shop Criteria (GOLD/SILVER/BRONZE); AT_RISK = all components zeroed
+- Department-scoped input ownership: Sales Head (QGA fields), Distribution Head (corridor/EVD/M-PESA/BA fields), EBU Head (EBU fields); inputAll permission overrides all
+- At-risk shops: input fields locked (except shopCriteria and responsibleRemarks), all components = 0
+- Config-driven input fields via ShopManagerIncentiveInputConfig (inputCode, label, department, type, displayOrder)
+- CSV Export of calculated incentives
+- Payroll Handoff — sends calculated incentives to Payroll Inputs with SKIP_EXISTING mode
+- Batch Calculation Engine — pure sync function for all 9 components; batch orchestrator for per-period calculation
+- 10 new permissions: shopManagerIncentive.view/createPeriod/updatePeriod/inputSales/inputDistribution/inputEbu/inputAll/calculate/export/sendToPayroll
+- 8 new audit actions: PERIOD_CREATE/UPDATE/OPEN, INPUT_CREATE/UPDATE, CALCULATE, EXPORT, SEND_TO_PAYROLL
+- 4 Prisma models: ShopManagerIncentivePeriod, ShopManagerIncentiveInput, ShopManagerIncentiveCalculation, ShopManagerIncentiveInputConfig
+- No ShopManagerIncentiveComponent, ShopManagerIncentiveIssue, PerformanceInputStatus, or CalculationStatus models/enums
+- 2 new RBAC roles: DISTRIBUTION_HEAD, EBU_HEAD (14 total roles)
+- Input fields: qgaAbove90 (Boolean), qgaQuantity (Int), corridorStatus (Boolean), evdAbove100AndReconciled (Boolean), mpesaTargetAndReconciled (Boolean), baSite (Boolean), ebuRevenueMade (Boolean), ebuAverageTopupAbove500 (Boolean), ebuFirstMonthLfRevenue (Decimal), plus legacy numeric fields
+- 5 UI pages: Incentive Periods list, New Period, Period Dashboard, Inputs (Google Sheet-style), Calculations
+- No Review or Import pages
+- 180 tests
 
-**Phase 4C.2 does NOT build HR-BP approval workflow, final payroll calculation, income tax, pension, net payslips, payment export, quarterly auto-calc, general KPI engine, or ASM/DSA commission engine.**
+**Phase 4C.2 does NOT build: approval/review workflow for incentives, final payroll calculation, income tax, pension, net salary, payslip, bank/M-PESA payment export, quarterly auto-calculation, general KPI engine, ASM/DSA commission engine, or attendance/leave management.**
 
 **Phase 4A adds:**
 - Payroll Period Setup and Monthly Input Collection
@@ -67,7 +74,7 @@ Secure, role-based HR employee registration and management system for Leapfrog S
 - Next.js 15 App Router + TypeScript
 - Prisma ORM + PostgreSQL
 - Email/password auth with HTTP-only cookies
-- RBAC with 97 granular permission keys across 12 roles
+- RBAC with 96 granular permission keys across 14 roles
 - bcryptjs password hashing (12 rounds)
 - Zod request validation
 - Audit logging for all sensitive actions (61+ audit actions)
@@ -161,12 +168,14 @@ Open `http://localhost:3000`.
 | `dsa@leapfrog.com` | DSA | Meron Tadesse |
 | `shopacct@leapfrog.com` | SHOP_ACCOUNTANT | Bezawit Assefa |
 | `employee@leapfrog.com` | EMPLOYEE | Employee User |
+| `distribution.head@leapfrog.com` | DISTRIBUTION_HEAD | Mulugeta Ayele (Distribution Head) |
+| `ebu.head@leapfrog.com` | EBU_HEAD | Tigist Wondimu (EBU Head) |
 | `auditor@leapfrog.com` | AUDITOR | Yonas Tadesse |
 
 ## Tests
 
 ```powershell
-npm test                # Run all tests (42 Phase 1 + 41 Phase 2A + 27 Phase 2B + 38 Phase 3 + 78 Phase 3.5 + 35 Phase 4A + 35 Phase 4B + 91 Phase 4C.1 + 121 Phase 4C.2 = 508)
+npm test                # Run all tests (42 Phase 1 + 41 Phase 2A + 27 Phase 2B + 38 Phase 3 + 78 Phase 3.5 + 35 Phase 4A + 35 Phase 4B + 91 Phase 4C.1 + 180 Phase 4C.2 = 567)
 npm run test:phase1     # Run baseline tests only (42)
 npm run test:phase2a    # Run Phase 2A tests only (41)
 npm run test:phase2b    # Run Phase 2B tests only (27)
@@ -175,13 +184,13 @@ npm run test:phase3_5   # Run Phase 3.5 tests only (78)
 npm run test:phase4a    # Run Phase 4A tests only (35)
 npm run test:phase4b    # Run Phase 4B tests only (35)
 npm run test:phase4c1   # Run Phase 4C.1 tests only (91)
-npm run test:phase4c2   # Run Phase 4C.2 tests only (121)
+npm run test:phase4c2   # Run Phase 4C.2 tests only (180)
 npm run typecheck
 npm run lint
 npm run build
 ```
 
-All pass clean — 508 tests covering authentication, RBAC, employee registration, salary visibility, assignments, audit logging, organization data, document upload/visibility/download/deactivation, required document rules, onboarding completion, import normalization/column mapping/validation/confirm, payroll readiness, pay component CRUD, pay rule CRUD, rule activation/deactivation, preview calculations, data quality scanning/resolution, change request workflow (create/approve/reject/cancel), salary rule approval workflow (request/approve/reject), phase control checklist, payroll period management, employee selection, input type setup, monthly input collection, department submission tracking, CSV import, shop master CRUD/criteria/permissions, and shop manager incentive lifecycle/calculation rules (all 9 components AT_RISK/UNASSIGNED/permissions/scope).
+All pass clean — 567 tests covering authentication, RBAC, employee registration, salary visibility, assignments, audit logging, organization data, document upload/visibility/download/deactivation, required document rules, onboarding completion, import normalization/column mapping/validation/confirm, payroll readiness, pay component CRUD, pay rule CRUD, rule activation/deactivation, preview calculations, data quality scanning/resolution, change request workflow (create/approve/reject/cancel), salary rule approval workflow (request/approve/reject), phase control checklist, payroll period management, employee selection, input type setup, monthly input collection, department submission tracking, CSV import, shop master CRUD/criteria/permissions, and shop manager incentive lifecycle/calculation rules (all 9 components AT_RISK/permissions/department-scope).
 
 ## Key Design Decisions
 

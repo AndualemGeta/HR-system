@@ -8,7 +8,6 @@ import { createAuditLog } from '@/lib/audit'
 
 const updateSchema = z.object({
   name: z.string().min(1).optional(),
-  notes: z.string().optional(),
   month: z.number().int().min(1).max(12).optional(),
   year: z.number().int().min(2020).optional(),
 })
@@ -24,22 +23,24 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       where: { id },
       include: {
         createdBy: { select: { id: true, name: true, email: true } },
-        reviewedBy: { select: { id: true, name: true, email: true } },
-        approvedBy: { select: { id: true, name: true, email: true } },
-        lockedBy: { select: { id: true, name: true, email: true } },
         payrollPeriod: { select: { id: true, periodName: true, periodStart: true, periodEnd: true, status: true } },
         _count: {
           select: {
-            performanceInputs: true,
+            inputs: true,
             calculations: true,
-            issues: true,
           },
         },
       },
     })
     if (!period) return notFound('Incentive period not found')
 
-    return success(period)
+    const shopCount = await prisma.shopManagerIncentiveInput.groupBy({
+      by: ['shopLocationId'],
+      where: { incentivePeriodId: id },
+      _count: true,
+    })
+
+    return success({ ...period, shopCount: shopCount.length })
   } catch (err) { console.error(err); return internalError() }
 }
 
@@ -52,15 +53,13 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
     const period = await prisma.shopManagerIncentivePeriod.findUnique({ where: { id } })
     if (!period) return notFound('Incentive period not found')
-    if (period.status !== 'DRAFT' && period.status !== 'OPEN_FOR_INPUT') {
-      return badRequest('Only periods in DRAFT or OPEN_FOR_INPUT status can be edited')
-    }
+    if (period.status !== 'DRAFT') return badRequest('Only periods in DRAFT status can be edited')
 
     const body = await req.json().catch(() => ({}))
     const parsed = updateSchema.safeParse(body)
     if (!parsed.success) return badRequest('Invalid input', parsed.error.flatten())
 
-    const { name, notes, month, year } = parsed.data
+    const { name, month, year } = parsed.data
     const updateData: Record<string, unknown> = {}
     const oldValues: Record<string, unknown> = {}
     const newValues: Record<string, unknown> = {}
@@ -69,11 +68,6 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       updateData.name = name
       oldValues.name = period.name
       newValues.name = name
-    }
-    if (notes !== undefined) {
-      updateData.notes = notes
-      oldValues.notes = period.notes
-      newValues.notes = notes
     }
     if (month !== undefined) {
       updateData.month = month
@@ -85,6 +79,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       oldValues.year = period.year
       newValues.year = year
     }
+
+    if (Object.keys(updateData).length === 0) return badRequest('No fields to update')
 
     const updated = await prisma.shopManagerIncentivePeriod.update({
       where: { id },

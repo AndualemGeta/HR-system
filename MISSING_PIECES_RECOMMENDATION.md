@@ -156,22 +156,36 @@ These models exist in the Prisma schema but have no implementation:
 | UI Pages | DONE | /shops, /shops/new, /shops/[id], /shops/[id]/edit, /shops/[id]/criteria |
 | Tests | DONE | 85 tests passing |
 
+## Phase 4C.2 — Shop Manager Incentive (Management Input Form — Updated Design)
+
+| Module | Status | Details |
+|---|---|---|
+| Schema (3 models) | DONE | ShopManagerIncentivePeriod, ShopManagerIncentiveInput (simplified fields), ShopManagerIncentiveCalculation (flat 9 components), ShopManagerIncentiveInputConfig (config-driven fields) |
+| No approval models | DONE | No ShopManagerIncentiveComponent, ShopManagerIncentiveIssue, PerformanceInputStatus, CalculationStatus |
+| Period lifecycle | DONE | DRAFT → OPEN → CALCULATED → CANCELLED (no UNDER_REVIEW/APPROVED/LOCKED/READY_FOR_CALCULATION) |
+| Calculation engine | DONE | 9 pure-sync components + TOTAL; AT_RISK=all zero; batch orchestrator; payroll handoff (SKIP_EXISTING) |
+| Department input ownership | DONE | Sales Head (QGA), Distribution Head (corridor/EVD/M-PESA/BA), EBU Head (EBU); inputAll overrides |
+| At-risk lock | DONE | PATCH only allows shopCriteria/responsibleRemarks when AT_RISK; calculation all zero |
+| API routes (10) | DONE | Periods CRUD, open/cancel, inputs CRUD, calculate, export, send-to-payroll-inputs, dashboard |
+| UI pages (5) | DONE | List, New, Dashboard, Inputs (Google Sheet-style), Calculations |
+| RBAC (10 perms + 2 new roles) | DONE | 96 permissions, 14 roles including DISTRIBUTION_HEAD, EBU_HEAD |
+| Tests | DONE | 180+ covering permissions (110), criteria (4), CRUD (10), calculation rules (49), workflow (8), regression (2) |
+| Quality gates | DONE | tsc ✓, lint ✓, build (68 routes) ✓, Phase 4C.2 tests (180/180) ✓ |
+
 ## Known Limitations
 
-- Shop Manager incentive calculation is NOT implemented (Phase 4C.2)
-- QGA bonus, EVD bonus, M-PESA commission, DSA achievement bonus, QO bonus, EBU incentive NOT implemented
-- No automated shop criteria calculation from sales/KPI data (manual only)
-- No shop performance dashboard or reports
+- QGA bonus, EVD bonus, M-PESA commission, DSA achievement bonus, QO bonus, EBU incentive implemented
+- Shop Manager incentive is management-input based — no automated criteria calculation from sales/KPI data
+- No shop performance dashboard or reports (beyond incentive dashboard)
 - No bulk shop import from CSV
 - No shop assignment history tracking (only current assignment tracked)
 - Deactivate shop does not auto-reassign employees
-- No email notifications for shop status changes
+- No email notifications for shop status changes or incentive period events
 - No soft delete for shops (isActive flag only)
 - No cycle detection in hierarchy (must rely on data integrity)
 - Phase 2a and Phase 2b test suites fail pre-existing with `TypeError: fetch failed ECONNREFUSED` — unrelated to shop or payroll phases
 
 ## Next Steps
 
-1. User review of Phase 4C.1 (follow USER_REVIEW_GUIDE.md)
-2. Phase 4C.2 — Shop Manager Incentive Calculation
-3. Phase 5 — Full Payroll Calculation with Ethiopian PAYE/pension
+1. User review of Phase 4C.2 (follow USER_REVIEW_GUIDE.md)
+2. Phase 5 — Full Payroll Calculation with Ethiopian PAYE/pension

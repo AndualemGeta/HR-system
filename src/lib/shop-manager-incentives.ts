@@ -1,630 +1,262 @@
 import { prisma } from './prisma'
-import { ShopCriteria, CalculationStatus, IncentiveComponentCode, IncentiveIssueSeverity, IncentiveIssueCode, IncentivePeriodStatus } from '@prisma/client'
 
 function round2(n: number): number {
   return Math.round(n * 100) / 100
 }
 
-export async function getShopCriteriaForPeriod(shopId: string, periodDate: Date): Promise<{ criteria: string | null; historyEntry: any }> {
-  const entry = await prisma.shopCriteriaStatusHistory.findFirst({
-    where: {
-      shopLocationId: shopId,
-      effectiveFrom: { lte: periodDate },
-      OR: [
-        { effectiveTo: null },
-        { effectiveTo: { gte: periodDate } },
-      ],
-    },
-    orderBy: { effectiveFrom: 'desc' },
-  })
+const ALLOWED_CRITERIA = ['GOLD', 'SILVER', 'BRONZE', 'AT_RISK']
 
-  if (!entry) {
-    return { criteria: null, historyEntry: null }
-  }
-
-  return { criteria: entry.criteria, historyEntry: entry }
+export function validateShopCriteria(criteria: string): string {
+  const upper = criteria.toUpperCase().replace('-', '_')
+  if (ALLOWED_CRITERIA.includes(upper)) return upper
+  throw new Error(`Invalid shop criteria: ${criteria}. Must be Gold, Silver, Bronze, or At-risk.`)
 }
 
-export async function getShopProfileForIncentive(shopId: string): Promise<{ corridorType: string; shopManagerId: string | null; isIncentiveEligible: boolean } | null> {
-  const profile = await prisma.shopProfile.findUnique({
-    where: { shopLocationId: shopId },
-  })
+export function calculateShopManagerIncentive(input: {
+  shopCriteria: string
+  qgaAbove90: boolean | null
+  qgaQuantity: number | null
+  mmQoAbove90: boolean | null
+  dsaAirtimeAchievementPercent: number | null
+  corridorStatus: boolean | null
+  evdAbove100AndReconciled: boolean | null
+  mpesaTargetAndReconciled: boolean | null
+  mpesaFloatSold: number | null
+  baSite: boolean | null
+  ebuTargetAchieved: boolean | null
+  ebuRevenueMade: boolean | null
+  ebuAverageTopupAbove500: boolean | null
+  ebuFirstMonthLfRevenue: number | null
+}): {
+  qgaBonus: number
+  qgaSimCommission: number
+  evdBonus: number
+  mpesaCommission: number
+  baSiteBonus: number
+  dsaAchievementBonus: number
+  qoBonus: number
+  ebuActivationBonus: number
+  ebuRevenueShare: number
+  totalIncentive: number
+  calculationNote: string
+} {
+  const criteria = input.shopCriteria.toUpperCase().replace('-', '_')
 
-  if (!profile) return null
-
-  return {
-    corridorType: profile.corridorType,
-    shopManagerId: profile.defaultShopManagerId,
-    isIncentiveEligible: profile.isIncentiveEligible,
-  }
-}
-
-export async function validatePerformanceInput(input: any): Promise<{ valid: boolean; issues: Array<{ severity: string; issueCode: string; message: string }> }> {
-  const issues: Array<{ severity: string; issueCode: string; message: string }> = []
-
-  if (!input.shopManagerId) {
-    issues.push({
-      severity: 'BLOCKER',
-      issueCode: 'MISSING_SHOP_MANAGER',
-      message: 'No shop manager assigned to this shop',
-    })
-  }
-
-  if (!input.shopCriteria || input.shopCriteria === 'UNASSIGNED') {
-    issues.push({
-      severity: 'BLOCKER',
-      issueCode: 'SHOP_CRITERIA_UNASSIGNED',
-      message: 'Shop criteria has not been assigned',
-    })
-  }
-
-  if (!input.corridorType || input.corridorType === 'UNKNOWN') {
-    issues.push({
-      severity: 'WARNING',
-      issueCode: 'MISSING_CORRIDOR_TYPE',
-      message: 'Corridor type is not set for this shop',
-    })
+  if (criteria === 'AT_RISK') {
+    return {
+      qgaBonus: 0, qgaSimCommission: 0, evdBonus: 0, mpesaCommission: 0,
+      baSiteBonus: 0, dsaAchievementBonus: 0, qoBonus: 0,
+      ebuActivationBonus: 0, ebuRevenueShare: 0, totalIncentive: 0,
+      calculationNote: 'At-risk shop: all incentive components are zero.',
+    }
   }
 
-  if (input.qgaAchievementPercent === null || input.qgaAchievementPercent === undefined || input.qgaCount === null || input.qgaCount === undefined) {
-    issues.push({
-      severity: 'WARNING',
-      issueCode: 'MISSING_QGA_INPUT',
-      message: 'QGA performance data is missing',
-    })
+  if (!ALLOWED_CRITERIA.includes(criteria)) {
+    return {
+      qgaBonus: 0, qgaSimCommission: 0, evdBonus: 0, mpesaCommission: 0,
+      baSiteBonus: 0, dsaAchievementBonus: 0, qoBonus: 0,
+      ebuActivationBonus: 0, ebuRevenueShare: 0, totalIncentive: 0,
+      calculationNote: `Invalid shop criteria: ${input.shopCriteria}. Must be Gold, Silver, Bronze, or At-risk.`,
+    }
   }
-
-  if (input.evdAchievementPercent === null || input.evdAchievementPercent === undefined || input.evdReconciled === null || input.evdReconciled === undefined) {
-    issues.push({
-      severity: 'WARNING',
-      issueCode: 'MISSING_EVD_INPUT',
-      message: 'EVD performance data is missing',
-    })
-  }
-
-  if (input.mpesaFloatSold === null || input.mpesaFloatSold === undefined || input.mpesaTargetAchieved === null || input.mpesaTargetAchieved === undefined || input.mpesaReconciled === null || input.mpesaReconciled === undefined) {
-    issues.push({
-      severity: 'WARNING',
-      issueCode: 'MISSING_MPESA_RECONCILIATION',
-      message: 'M-PESA performance data is missing',
-    })
-  }
-
-  if (input.dsaAirtimeAchievementPercent === null || input.dsaAirtimeAchievementPercent === undefined) {
-    issues.push({
-      severity: 'WARNING',
-      issueCode: 'MISSING_DSA_INPUT',
-      message: 'DSA achievement data is missing',
-    })
-  }
-
-  if (input.mmQoTargetPercent === null || input.mmQoTargetPercent === undefined) {
-    issues.push({
-      severity: 'WARNING',
-      issueCode: 'MISSING_QO_INPUT',
-      message: 'QO performance data is missing',
-    })
-  }
-
-  if (input.ebuTargetAchieved === null || input.ebuTargetAchieved === undefined || input.ebuRevenue === null || input.ebuRevenue === undefined) {
-    issues.push({
-      severity: 'WARNING',
-      issueCode: 'MISSING_EBU_INPUT',
-      message: 'EBU performance data is missing',
-    })
-  }
-
-  return {
-    valid: issues.length === 0 || issues.every(i => i.severity !== 'BLOCKER'),
-    issues,
-  }
-}
-
-export async function calculateShopManagerIncentive(input: {
-  shopCriteria: string;
-  corridorType: string;
-  qgaAchievementPercent: number | null;
-  qgaCount: number | null;
-  evdAchievementPercent: number | null;
-  evdReconciled: boolean | null;
-  baSiteRequirementMet: boolean | null;
-  mpesaFloatSold: number | null;
-  mpesaTargetAchieved: boolean | null;
-  mpesaReconciled: boolean | null;
-  dsaAirtimeAchievementPercent: number | null;
-  mmQoTargetPercent: number | null;
-  ebuTargetAchieved: boolean | null;
-  ebuRevenue: number | null;
-  ebuAverageTopup: number | null;
-  ebuFirstMonthLeapfrogRevenue: number | null;
-}): Promise<{
-  components: Array<{
-    componentCode: string;
-    componentName: string;
-    inputMetric: string | null;
-    inputValue: number | null;
-    conditionMet: boolean | null;
-    amount: number;
-    calculationNote: string | null;
-  }>;
-  totalAmount: number;
-  issues: Array<{ severity: string; issueCode: string; message: string }>;
-}> {
-  const issues: Array<{ severity: string; issueCode: string; message: string }> = []
-  const components: Array<{
-    componentCode: string;
-    componentName: string;
-    inputMetric: string | null;
-    inputValue: number | null;
-    conditionMet: boolean | null;
-    amount: number;
-    calculationNote: string | null;
-  }> = []
-
-  if (input.shopCriteria === 'UNASSIGNED') {
-    issues.push({
-      severity: 'BLOCKER',
-      issueCode: 'SHOP_CRITERIA_UNASSIGNED',
-      message: 'Cannot calculate incentive: shop criteria is unassigned',
-    })
-    return { components: [], totalAmount: 0, issues }
-  }
-
-  if (input.shopCriteria === 'AT_RISK') {
-    issues.push({
-      severity: 'INFO',
-      issueCode: 'SHOP_AT_RISK_ZERO_INCENTIVE',
-      message: 'Shop is AT_RISK: all incentive components are zero',
-    })
-    return { components: [], totalAmount: 0, issues }
-  }
-
-  const criteria = input.shopCriteria as ShopCriteria
 
   function criteriaAmount(gold: number, silver: number, bronze: number): number {
     if (criteria === 'GOLD') return gold
     if (criteria === 'SILVER') return silver
-    if (criteria === 'BRONZE') return bronze
-    return 0
+    return bronze
   }
 
-  // QGA_BONUS
-  let qgaBonusAmount = 0
-  if (input.qgaAchievementPercent !== null && input.qgaAchievementPercent > 90) {
-    qgaBonusAmount = criteriaAmount(5000, 3000, 1500)
-  }
-  components.push({
-    componentCode: 'QGA_BONUS',
-    componentName: 'QGA Bonus',
-    inputMetric: 'qgaAchievementPercent',
-    inputValue: input.qgaAchievementPercent,
-    conditionMet: input.qgaAchievementPercent !== null ? input.qgaAchievementPercent > 90 : null,
-    amount: round2(qgaBonusAmount),
-    calculationNote: input.qgaAchievementPercent !== null && input.qgaAchievementPercent > 90
-      ? `Achieved ${input.qgaAchievementPercent}% > 90% threshold`
-      : input.qgaAchievementPercent !== null
-        ? `Achieved ${input.qgaAchievementPercent}% does not exceed 90% threshold`
-        : 'QGA achievement data missing',
-  })
+  // QGA Bonus
+  let qgaBonus = 0
+  if (input.qgaAbove90 === true) qgaBonus = criteriaAmount(5000, 3000, 1500)
 
-  // QGA_SIM_COMMISSION
-  let qgaSimAmount = 0
-  if (input.qgaAchievementPercent !== null && input.qgaAchievementPercent > 90 && input.qgaCount !== null) {
-    qgaSimAmount = criteriaAmount(input.qgaCount * 1.5, input.qgaCount * 1, 0)
+  // QGA SIM Commission
+  let qgaSimCommission = 0
+  if (input.qgaAbove90 === true && input.qgaQuantity !== null) {
+    qgaSimCommission = criteriaAmount(input.qgaQuantity * 1.5, input.qgaQuantity * 1, 0)
   }
-  components.push({
-    componentCode: 'QGA_SIM_COMMISSION',
-    componentName: 'QGA SIM Commission',
-    inputMetric: 'qgaCount',
-    inputValue: input.qgaCount,
-    conditionMet: input.qgaAchievementPercent !== null ? input.qgaAchievementPercent > 90 : null,
-    amount: round2(qgaSimAmount),
-    calculationNote: criteria === 'BRONZE' ? 'Bronze shops do not earn QGA SIM commission'
-      : input.qgaAchievementPercent !== null && input.qgaAchievementPercent > 90 && input.qgaCount !== null
-        ? `Achieved ${input.qgaAchievementPercent}% > 90%: ${input.qgaCount} SIMs × ${criteria === 'GOLD' ? '1.5' : '1.0'}`
-        : input.qgaAchievementPercent !== null
-          ? `Achieved ${input.qgaAchievementPercent}% does not exceed 90% threshold`
-          : 'QGA data insufficient',
-  })
 
-  // EVD_BONUS
-  let evdAmount = 0
-  if (input.evdAchievementPercent !== null && input.evdAchievementPercent > 100 && input.evdReconciled === true) {
-    evdAmount = criteriaAmount(3000, 2000, 0)
+  // EVD Bonus
+  let evdBonus = 0
+  if (input.evdAbove100AndReconciled === true) evdBonus = criteriaAmount(3000, 2000, 0)
+
+  // M-PESA Commission
+  let mpesaCommission = 0
+  if (input.mpesaTargetAndReconciled === true && input.mpesaFloatSold !== null) {
+    mpesaCommission = criteriaAmount(input.mpesaFloatSold * 0.02, input.mpesaFloatSold * 0.02, 0)
   }
-  components.push({
-    componentCode: 'EVD_BONUS',
-    componentName: 'EVD Bonus',
-    inputMetric: 'evdAchievementPercent',
-    inputValue: input.evdAchievementPercent,
-    conditionMet: input.evdAchievementPercent !== null ? (input.evdAchievementPercent > 100 && input.evdReconciled === true) : null,
-    amount: round2(evdAmount),
-    calculationNote: criteria === 'BRONZE' ? 'Bronze shops do not earn EVD bonus'
-      : input.evdAchievementPercent !== null && input.evdAchievementPercent > 100 && input.evdReconciled === true
-        ? `Achieved ${input.evdAchievementPercent}% > 100% and reconciled`
-        : input.evdAchievementPercent !== null
-          ? `Condition not met (${input.evdAchievementPercent}%, reconciled: ${input.evdReconciled})`
-          : 'EVD data insufficient',
-  })
 
-  // BA_SITE_BONUS
-  let baAmount = 0
-  if (input.baSiteRequirementMet === true) {
-    baAmount = criteriaAmount(4000, 2000, 0)
-  }
-  components.push({
-    componentCode: 'BA_SITE_BONUS',
-    componentName: 'BA/Site Bonus',
-    inputMetric: 'baSiteRequirementMet',
-    inputValue: input.baSiteRequirementMet !== null ? (input.baSiteRequirementMet ? 1 : 0) : null,
-    conditionMet: input.baSiteRequirementMet,
-    amount: round2(baAmount),
-    calculationNote: criteria === 'BRONZE' ? 'Bronze shops do not earn BA/Site bonus'
-      : input.baSiteRequirementMet === true
-        ? 'BA/Site requirement met'
-        : input.baSiteRequirementMet === false
-          ? 'BA/Site requirement not met'
-          : 'BA/Site data missing',
-  })
+  // BA/Site Bonus
+  let baSiteBonus = 0
+  if (input.baSite === true) baSiteBonus = criteriaAmount(4000, 2000, 0)
 
-  // MPESA_COMMISSION
-  let mpesaAmount = 0
-  if (input.mpesaTargetAchieved === true && input.mpesaReconciled === true && input.mpesaFloatSold !== null) {
-    mpesaAmount = criteriaAmount(input.mpesaFloatSold * 0.02, input.mpesaFloatSold * 0.02, 0)
-  }
-  components.push({
-    componentCode: 'MPESA_COMMISSION',
-    componentName: 'M-PESA Commission',
-    inputMetric: 'mpesaFloatSold',
-    inputValue: input.mpesaFloatSold,
-    conditionMet: (input.mpesaTargetAchieved === true && input.mpesaReconciled === true),
-    amount: round2(mpesaAmount),
-    calculationNote: criteria === 'BRONZE' ? 'Bronze shops do not earn M-PESA commission'
-      : input.mpesaTargetAchieved === true && input.mpesaReconciled === true && input.mpesaFloatSold !== null
-        ? `Target achieved, reconciled: ${input.mpesaFloatSold} × 0.02`
-        : `Condition not met (target: ${input.mpesaTargetAchieved}, reconciled: ${input.mpesaReconciled})`,
-  })
-
-  // DSA_ACHIEVEMENT_BONUS
-  let dsaAmount = 0
+  // DSA Achievement Bonus
+  let dsaAchievementBonus = 0
   if (input.dsaAirtimeAchievementPercent !== null) {
-    if (input.dsaAirtimeAchievementPercent > 90) {
-      dsaAmount = 2000
-    } else if (input.dsaAirtimeAchievementPercent >= 60 && input.dsaAirtimeAchievementPercent <= 89) {
-      dsaAmount = 1500
-    } else if (input.dsaAirtimeAchievementPercent >= 50 && input.dsaAirtimeAchievementPercent <= 59) {
-      dsaAmount = 1000
-    }
+    if (input.dsaAirtimeAchievementPercent > 90) dsaAchievementBonus = 2000
+    else if (input.dsaAirtimeAchievementPercent >= 60) dsaAchievementBonus = 1500
+    else if (input.dsaAirtimeAchievementPercent >= 50) dsaAchievementBonus = 1000
   }
-  components.push({
-    componentCode: 'DSA_ACHIEVEMENT_BONUS',
-    componentName: 'DSA Achievement Bonus',
-    inputMetric: 'dsaAirtimeAchievementPercent',
-    inputValue: input.dsaAirtimeAchievementPercent,
-    conditionMet: input.dsaAirtimeAchievementPercent !== null ? input.dsaAirtimeAchievementPercent >= 50 : null,
-    amount: round2(dsaAmount),
-    calculationNote: input.dsaAirtimeAchievementPercent !== null
-      ? `DSA achievement ${input.dsaAirtimeAchievementPercent}% → ${dsaAmount}`
-      : 'DSA data missing',
-  })
 
-  // QO_BONUS
-  let qoAmount = 0
-  if (input.mmQoTargetPercent !== null && input.mmQoTargetPercent > 90) {
-    qoAmount = 4000
+  // QO Bonus
+  let qoBonus = 0
+  if (input.mmQoAbove90 === true) qoBonus = 4000
+
+  // EBU Activation Bonus
+  let ebuActivationBonus = 0
+  if (input.ebuTargetAchieved === true && input.ebuRevenueMade === true && input.ebuAverageTopupAbove500 === true) {
+    ebuActivationBonus = criteriaAmount(3000, 1500, 500)
   }
-  components.push({
-    componentCode: 'QO_BONUS',
-    componentName: 'QO Bonus',
-    inputMetric: 'mmQoTargetPercent',
-    inputValue: input.mmQoTargetPercent,
-    conditionMet: input.mmQoTargetPercent !== null ? input.mmQoTargetPercent > 90 : null,
-    amount: round2(qoAmount),
-    calculationNote: input.mmQoTargetPercent !== null && input.mmQoTargetPercent > 90
-      ? `QO ${input.mmQoTargetPercent}% > 90% threshold`
-      : input.mmQoTargetPercent !== null
-        ? `QO ${input.mmQoTargetPercent}% does not exceed 90% threshold`
-        : 'QO data missing',
-  })
 
-  // EBU_ACTIVATION_BONUS
-  let ebuActivationAmount = 0
-  if (input.ebuTargetAchieved === true && input.ebuRevenue !== null && input.ebuRevenue > 0 && input.ebuAverageTopup !== null && input.ebuAverageTopup > 500) {
-    ebuActivationAmount = criteriaAmount(3000, 1500, 500)
+  // EBU Revenue Share
+  let ebuRevenueShare = 0
+  if (input.ebuRevenueMade === true && input.ebuFirstMonthLfRevenue !== null) {
+    ebuRevenueShare = criteriaAmount(input.ebuFirstMonthLfRevenue * 0.25, input.ebuFirstMonthLfRevenue * 0.15, 0)
   }
-  components.push({
-    componentCode: 'EBU_ACTIVATION_BONUS',
-    componentName: 'EBU Activation Bonus',
-    inputMetric: 'ebuRevenue',
-    inputValue: input.ebuRevenue,
-    conditionMet: input.ebuTargetAchieved === true && input.ebuRevenue !== null && input.ebuRevenue > 0 && input.ebuAverageTopup !== null && input.ebuAverageTopup > 500,
-    amount: round2(ebuActivationAmount),
-    calculationNote: input.ebuTargetAchieved === true && input.ebuRevenue !== null && input.ebuRevenue > 0 && input.ebuAverageTopup !== null && input.ebuAverageTopup > 500
-      ? `Target achieved, revenue ${input.ebuRevenue} > 0, avg topup ${input.ebuAverageTopup} > 500: ${criteria} = ${ebuActivationAmount}`
-      : `Condition not met (target: ${input.ebuTargetAchieved}, revenue: ${input.ebuRevenue}, avgTopup: ${input.ebuAverageTopup})`,
-  })
 
-  // EBU_REVENUE_SHARE
-  let ebuRevenueAmount = 0
-  if (input.ebuFirstMonthLeapfrogRevenue !== null) {
-    ebuRevenueAmount = criteriaAmount(
-      input.ebuFirstMonthLeapfrogRevenue * 0.25,
-      input.ebuFirstMonthLeapfrogRevenue * 0.15,
-      0,
-    )
+  const totalIncentive = round2(qgaBonus + qgaSimCommission + evdBonus + mpesaCommission + baSiteBonus + dsaAchievementBonus + qoBonus + ebuActivationBonus + ebuRevenueShare)
+
+  qgaBonus = round2(qgaBonus)
+  qgaSimCommission = round2(qgaSimCommission)
+  evdBonus = round2(evdBonus)
+  mpesaCommission = round2(mpesaCommission)
+  baSiteBonus = round2(baSiteBonus)
+  dsaAchievementBonus = round2(dsaAchievementBonus)
+  qoBonus = round2(qoBonus)
+  ebuActivationBonus = round2(ebuActivationBonus)
+  ebuRevenueShare = round2(ebuRevenueShare)
+
+  return {
+    qgaBonus, qgaSimCommission, evdBonus, mpesaCommission, baSiteBonus,
+    dsaAchievementBonus, qoBonus, ebuActivationBonus, ebuRevenueShare,
+    totalIncentive,
+    calculationNote: `Calculated for ${criteria} shop`,
   }
-  components.push({
-    componentCode: 'EBU_REVENUE_SHARE',
-    componentName: 'EBU Revenue Share',
-    inputMetric: 'ebuFirstMonthLeapfrogRevenue',
-    inputValue: input.ebuFirstMonthLeapfrogRevenue,
-    conditionMet: input.ebuFirstMonthLeapfrogRevenue !== null ? input.ebuFirstMonthLeapfrogRevenue > 0 : null,
-    amount: round2(ebuRevenueAmount),
-    calculationNote: criteria === 'BRONZE' ? 'Bronze shops do not earn EBU revenue share'
-      : input.ebuFirstMonthLeapfrogRevenue !== null
-        ? `${input.ebuFirstMonthLeapfrogRevenue} × ${criteria === 'GOLD' ? '0.25' : '0.15'}`
-        : 'EBU first month revenue data missing',
-  })
-
-  const totalAmount = round2(components.reduce((sum, c) => sum + c.amount, 0))
-
-  components.push({
-    componentCode: 'TOTAL',
-    componentName: 'Total Incentive',
-    inputMetric: null,
-    inputValue: null,
-    conditionMet: null,
-    amount: totalAmount,
-    calculationNote: `Sum of all components = ${totalAmount}`,
-  })
-
-  return { components, totalAmount, issues }
 }
 
 export async function calculateAllShopManagerIncentives(periodId: string): Promise<any> {
   const period = await prisma.shopManagerIncentivePeriod.findUnique({
     where: { id: periodId },
     include: {
-      performanceInputs: {
+      inputs: {
         include: {
-          shopLocation: {
-            include: {
-              shopProfile: true,
-            },
-          },
+          shopLocation: { include: { shopProfile: true } },
           shopManager: true,
         },
       },
     },
   })
 
-  if (!period) {
-    throw new Error(`Incentive period not found: ${periodId}`)
-  }
+  if (!period) throw new Error(`Incentive period not found: ${periodId}`)
 
   const results: any[] = []
 
-  for (const perfInput of period.performanceInputs) {
-    const inputId = perfInput.id
-    const shopId = perfInput.shopLocationId
-
-    const shopProfile = perfInput.shopLocation.shopProfile
-
-    let shopCriteria = perfInput.shopCriteria
-    if (!shopCriteria) {
-      const criteriaResult = await getShopCriteriaForPeriod(shopId, new Date(period.year, period.month - 1))
-      shopCriteria = criteriaResult.criteria as any
-    }
+  for (const input of period.inputs) {
+    if (!input.shopCriteria) continue
+    const criteria = input.shopCriteria
 
     const calcInput = {
-      shopCriteria: shopCriteria || 'UNASSIGNED',
-      corridorType: perfInput.corridorType || 'UNKNOWN',
-      qgaAchievementPercent: perfInput.qgaAchievementPercent ? Number(perfInput.qgaAchievementPercent) : null,
-      qgaCount: perfInput.qgaCount,
-      evdAchievementPercent: perfInput.evdAchievementPercent ? Number(perfInput.evdAchievementPercent) : null,
-      evdReconciled: perfInput.evdReconciled,
-      baSiteRequirementMet: perfInput.baSiteRequirementMet,
-      mpesaFloatSold: perfInput.mpesaFloatSold ? Number(perfInput.mpesaFloatSold) : null,
-      mpesaTargetAchieved: perfInput.mpesaTargetAchieved,
-      mpesaReconciled: perfInput.mpesaReconciled,
-      dsaAirtimeAchievementPercent: perfInput.dsaAirtimeAchievementPercent ? Number(perfInput.dsaAirtimeAchievementPercent) : null,
-      mmQoTargetPercent: perfInput.mmQoTargetPercent ? Number(perfInput.mmQoTargetPercent) : null,
-      ebuTargetAchieved: perfInput.ebuTargetAchieved,
-      ebuRevenue: perfInput.ebuRevenue ? Number(perfInput.ebuRevenue) : null,
-      ebuAverageTopup: perfInput.ebuAverageTopup ? Number(perfInput.ebuAverageTopup) : null,
-      ebuFirstMonthLeapfrogRevenue: perfInput.ebuFirstMonthLeapfrogRevenue ? Number(perfInput.ebuFirstMonthLeapfrogRevenue) : null,
+      shopCriteria: criteria,
+      qgaAbove90: input.qgaAbove90,
+      qgaQuantity: input.qgaQuantity,
+      mmQoAbove90: input.mmQoAbove90,
+      dsaAirtimeAchievementPercent: input.dsaAirtimeAchievementPercent ? Number(input.dsaAirtimeAchievementPercent) : null,
+      corridorStatus: input.corridorStatus,
+      evdAbove100AndReconciled: input.evdAbove100AndReconciled,
+      mpesaTargetAndReconciled: input.mpesaTargetAndReconciled,
+      mpesaFloatSold: input.mpesaFloatSold ? Number(input.mpesaFloatSold) : null,
+      baSite: input.baSite,
+      ebuTargetAchieved: input.ebuTargetAchieved,
+      ebuRevenueMade: input.ebuRevenueMade,
+      ebuAverageTopupAbove500: input.ebuAverageTopupAbove500,
+      ebuFirstMonthLfRevenue: input.ebuFirstMonthLfRevenue ? Number(input.ebuFirstMonthLfRevenue) : null,
     }
 
-    const validationResult = await validatePerformanceInput({
-      shopManagerId: perfInput.shopManagerId,
-      shopCriteria: calcInput.shopCriteria,
-      corridorType: calcInput.corridorType,
-      qgaAchievementPercent: calcInput.qgaAchievementPercent,
-      qgaCount: calcInput.qgaCount,
-      evdAchievementPercent: calcInput.evdAchievementPercent,
-      evdReconciled: calcInput.evdReconciled,
-      baSiteRequirementMet: calcInput.baSiteRequirementMet,
-      mpesaFloatSold: calcInput.mpesaFloatSold,
-      mpesaTargetAchieved: calcInput.mpesaTargetAchieved,
-      mpesaReconciled: calcInput.mpesaReconciled,
-      dsaAirtimeAchievementPercent: calcInput.dsaAirtimeAchievementPercent,
-      mmQoTargetPercent: calcInput.mmQoTargetPercent,
-      ebuTargetAchieved: calcInput.ebuTargetAchieved,
-      ebuRevenue: calcInput.ebuRevenue,
-      ebuAverageTopup: calcInput.ebuAverageTopup,
-      ebuFirstMonthLeapfrogRevenue: calcInput.ebuFirstMonthLeapfrogRevenue,
+    const result = calculateShopManagerIncentive(calcInput)
+
+    const existing = await prisma.shopManagerIncentiveCalculation.findUnique({
+      where: { incentivePeriodId_shopLocationId: { incentivePeriodId: periodId, shopLocationId: input.shopLocationId } },
     })
 
-    const calculationResult = await calculateShopManagerIncentive(calcInput)
-
-    const blockerCount = calculationResult.issues.filter(i => i.severity === 'BLOCKER').length + validationResult.issues.filter(i => i.severity === 'BLOCKER').length
-    const warningCount = calculationResult.issues.filter(i => i.severity === 'WARNING').length + validationResult.issues.filter(i => i.severity === 'WARNING').length
-
-    const combinedIssues = [...validationResult.issues, ...calculationResult.issues.filter(i => i.severity !== 'INFO')]
-
-    const finalStatus: CalculationStatus = blockerCount > 0 ? 'BLOCKED' : 'CALCULATED'
-
-    const existingCalc = await prisma.shopManagerIncentiveCalculation.findUnique({
-      where: {
-        incentivePeriodId_shopLocationId: {
-          incentivePeriodId: periodId,
-          shopLocationId: shopId,
-        },
-      },
-    })
+    const calcData = {
+      incentivePeriodId: periodId,
+      inputId: input.id,
+      shopLocationId: input.shopLocationId,
+      shopManagerId: input.shopManagerId,
+      shopCriteria: criteria,
+      qgaBonus: result.qgaBonus,
+      qgaSimCommission: result.qgaSimCommission,
+      evdBonus: result.evdBonus,
+      mpesaCommission: result.mpesaCommission,
+      baSiteBonus: result.baSiteBonus,
+      dsaAchievementBonus: result.dsaAchievementBonus,
+      qoBonus: result.qoBonus,
+      ebuActivationBonus: result.ebuActivationBonus,
+      ebuRevenueShare: result.ebuRevenueShare,
+      totalIncentive: result.totalIncentive,
+      calculationNote: result.calculationNote,
+      calculatedAt: new Date(),
+    }
 
     let calculation
-    if (existingCalc) {
+    if (existing) {
       calculation = await prisma.shopManagerIncentiveCalculation.update({
-        where: { id: existingCalc.id },
-        data: {
-          performanceInputId: inputId,
-          shopManagerId: perfInput.shopManagerId,
-          shopCriteria: shopCriteria,
-          status: finalStatus,
-          totalAmount: calculationResult.totalAmount,
-          blockerCount,
-          warningCount,
-          calculatedAt: new Date(),
-        },
-      })
-
-      await prisma.shopManagerIncentiveComponent.deleteMany({
-        where: { calculationId: calculation.id },
-      })
-
-      await prisma.shopManagerIncentiveIssue.deleteMany({
-        where: {
-          incentivePeriodId: periodId,
-          shopLocationId: shopId,
-        },
+        where: { id: existing.id },
+        data: calcData,
       })
     } else {
-      calculation = await prisma.shopManagerIncentiveCalculation.create({
-        data: {
-          incentivePeriodId: periodId,
-          performanceInputId: inputId,
-          shopLocationId: shopId,
-          shopManagerId: perfInput.shopManagerId,
-          shopCriteria: shopCriteria,
-          status: finalStatus,
-          totalAmount: calculationResult.totalAmount,
-          blockerCount,
-          warningCount,
-          calculatedAt: new Date(),
-        },
-      })
+      calculation = await prisma.shopManagerIncentiveCalculation.create({ data: calcData })
     }
 
-    if (calculationResult.components.length > 0) {
-      await prisma.shopManagerIncentiveComponent.createMany({
-        data: calculationResult.components.map(c => ({
-          calculationId: calculation.id,
-          componentCode: c.componentCode as IncentiveComponentCode,
-          componentName: c.componentName,
-          inputMetric: c.inputMetric,
-          inputValue: c.inputValue !== null ? c.inputValue : null,
-          conditionMet: c.conditionMet,
-          amount: c.amount,
-          calculationNote: c.calculationNote,
-        })),
-      })
-    }
-
-    if (combinedIssues.length > 0) {
-      await prisma.shopManagerIncentiveIssue.createMany({
-        data: combinedIssues.map(i => ({
-          incentivePeriodId: periodId,
-          shopLocationId: shopId,
-          shopManagerId: perfInput.shopManagerId,
-          severity: i.severity as IncentiveIssueSeverity,
-          issueCode: i.issueCode as IncentiveIssueCode,
-          message: i.message,
-        })),
-      })
-    }
-
-    results.push({
-      shopId,
-      calculationId: calculation.id,
-      status: finalStatus,
-      totalAmount: calculationResult.totalAmount,
-      issueCount: combinedIssues.length,
-    })
+    results.push({ shopId: input.shopLocationId, calculationId: calculation.id, totalIncentive: result.totalIncentive })
   }
 
   await prisma.shopManagerIncentivePeriod.update({
     where: { id: periodId },
-    data: { status: 'CALCULATED' as IncentivePeriodStatus },
+    data: { status: 'CALCULATED' as any },
   })
 
-  return {
-    periodId,
-    status: 'CALCULATED',
-    calculations: results,
-  }
+  return { periodId, status: 'CALCULATED', calculations: results }
 }
 
-export async function sendApprovedIncentivesToPayrollInputs(
-  periodId: string,
-  options?: { overwriteMode?: string },
-): Promise<any> {
-  const overwriteMode = options?.overwriteMode || 'SKIP_EXISTING'
-
+export async function sendIncentivesToPayrollInputs(periodId: string): Promise<any> {
   const period = await prisma.shopManagerIncentivePeriod.findUnique({
     where: { id: periodId },
     include: { payrollPeriod: true },
   })
-
-  if (!period) {
-    throw new Error(`Incentive period not found: ${periodId}`)
-  }
+  if (!period) throw new Error(`Incentive period not found: ${periodId}`)
 
   const calculations = await prisma.shopManagerIncentiveCalculation.findMany({
-    where: {
-      incentivePeriodId: periodId,
-      status: { in: ['APPROVED', 'LOCKED'] as any },
-    },
-    include: {
-      components: true,
-      shopLocation: true,
-      shopManager: true,
-    },
+    where: { incentivePeriodId: periodId },
+    include: { shopManager: true },
   })
 
   const inputTypes = await prisma.payrollInputType.findMany({
     where: {
       code: {
         in: [
-          'SHOP_MANAGER_QGA_BONUS',
-          'SHOP_MANAGER_QGA_SIM_COMMISSION',
-          'SHOP_MANAGER_EVD_BONUS',
-          'SHOP_MANAGER_BA_SITE_BONUS',
-          'SHOP_MANAGER_MPESA_COMMISSION',
-          'SHOP_MANAGER_DSA_ACHIEVEMENT_BONUS',
-          'SHOP_MANAGER_QO_BONUS',
-          'SHOP_MANAGER_EBU_ACTIVATION_BONUS',
-          'SHOP_MANAGER_EBU_REVENUE_SHARE',
-          'SHOP_MANAGER_TOTAL_INCENTIVE',
+          'SHOP_MANAGER_QGA_BONUS', 'SHOP_MANAGER_QGA_SIM_COMMISSION',
+          'SHOP_MANAGER_EVD_BONUS', 'SHOP_MANAGER_BA_SITE_BONUS',
+          'SHOP_MANAGER_MPESA_COMMISSION', 'SHOP_MANAGER_DSA_ACHIEVEMENT_BONUS',
+          'SHOP_MANAGER_QO_BONUS', 'SHOP_MANAGER_EBU_ACTIVATION_BONUS',
+          'SHOP_MANAGER_EBU_REVENUE_SHARE', 'SHOP_MANAGER_TOTAL_INCENTIVE',
         ],
       },
     },
   })
-
   const inputTypeMap = new Map(inputTypes.map(it => [it.code, it.id]))
 
-  const componentCodeToInputTypeCode: Record<string, string> = {
-    'QGA_BONUS': 'SHOP_MANAGER_QGA_BONUS',
-    'QGA_SIM_COMMISSION': 'SHOP_MANAGER_QGA_SIM_COMMISSION',
-    'EVD_BONUS': 'SHOP_MANAGER_EVD_BONUS',
-    'BA_SITE_BONUS': 'SHOP_MANAGER_BA_SITE_BONUS',
-    'MPESA_COMMISSION': 'SHOP_MANAGER_MPESA_COMMISSION',
-    'DSA_ACHIEVEMENT_BONUS': 'SHOP_MANAGER_DSA_ACHIEVEMENT_BONUS',
-    'QO_BONUS': 'SHOP_MANAGER_QO_BONUS',
-    'EBU_ACTIVATION_BONUS': 'SHOP_MANAGER_EBU_ACTIVATION_BONUS',
-    'EBU_REVENUE_SHARE': 'SHOP_MANAGER_EBU_REVENUE_SHARE',
-    'TOTAL': 'SHOP_MANAGER_TOTAL_INCENTIVE',
-  }
+  const componentFields = [
+    { field: 'qgaBonus' as const, code: 'SHOP_MANAGER_QGA_BONUS' },
+    { field: 'qgaSimCommission' as const, code: 'SHOP_MANAGER_QGA_SIM_COMMISSION' },
+    { field: 'evdBonus' as const, code: 'SHOP_MANAGER_EVD_BONUS' },
+    { field: 'mpesaCommission' as const, code: 'SHOP_MANAGER_MPESA_COMMISSION' },
+    { field: 'baSiteBonus' as const, code: 'SHOP_MANAGER_BA_SITE_BONUS' },
+    { field: 'dsaAchievementBonus' as const, code: 'SHOP_MANAGER_DSA_ACHIEVEMENT_BONUS' },
+    { field: 'qoBonus' as const, code: 'SHOP_MANAGER_QO_BONUS' },
+    { field: 'ebuActivationBonus' as const, code: 'SHOP_MANAGER_EBU_ACTIVATION_BONUS' },
+    { field: 'ebuRevenueShare' as const, code: 'SHOP_MANAGER_EBU_REVENUE_SHARE' },
+  ]
 
   const payrollPeriodId = period.payrollPeriodId
   const results: any[] = []
@@ -632,81 +264,19 @@ export async function sendApprovedIncentivesToPayrollInputs(
   for (const calc of calculations) {
     if (!calc.shopManagerId) continue
 
-    for (const component of calc.components) {
-      const inputTypeCode = componentCodeToInputTypeCode[component.componentCode]
-      if (!inputTypeCode) continue
+    for (const { field, code } of componentFields) {
+      const amount = Number((calc as any)[field] || 0)
+      if (amount <= 0) continue
 
-      const inputTypeId = inputTypeMap.get(inputTypeCode)
+      const inputTypeId = inputTypeMap.get(code)
       if (!inputTypeId) continue
 
-      const existingInput = await prisma.payrollInput.findUnique({
-        where: {
-          payrollPeriodId_employeeId_inputTypeId: {
-            payrollPeriodId,
-            employeeId: calc.shopManagerId,
-            inputTypeId,
-          },
-        },
+      const existing = await prisma.payrollInput.findUnique({
+        where: { payrollPeriodId_employeeId_inputTypeId: { payrollPeriodId, employeeId: calc.shopManagerId, inputTypeId } },
       })
-
-      const existingIsLocked = existingInput?.isLocked === true
-
-      if (existingInput) {
-        if (existingIsLocked) {
-          results.push({
-            shopId: calc.shopLocationId,
-            employeeId: calc.shopManagerId,
-            componentCode: component.componentCode,
-            action: 'SKIPPED_LOCKED',
-          })
-          continue
-        }
-
-        if (overwriteMode === 'SKIP_EXISTING') {
-          results.push({
-            shopId: calc.shopLocationId,
-            employeeId: calc.shopManagerId,
-            componentCode: component.componentCode,
-            action: 'SKIPPED_EXISTING',
-          })
-          continue
-        }
-
-        if (overwriteMode === 'UPDATE_EXISTING_DRAFT_ONLY') {
-          if (existingInput.status !== 'DRAFT') {
-            results.push({
-              shopId: calc.shopLocationId,
-              employeeId: calc.shopManagerId,
-              componentCode: component.componentCode,
-              action: 'SKIPPED_NOT_DRAFT',
-            })
-            continue
-          }
-
-          await prisma.payrollInput.update({
-            where: { id: existingInput.id },
-            data: {
-              value: component.amount,
-              amount: component.amount,
-              note: `Updated from incentive calculation: ${component.calculationNote || ''}`,
-              source: 'SYSTEM',
-            },
-          })
-
-          results.push({
-            shopId: calc.shopLocationId,
-            employeeId: calc.shopManagerId,
-            componentCode: component.componentCode,
-            action: 'UPDATED',
-          })
-          continue
-        }
-
-        if (overwriteMode === 'REPLACE_EXISTING_NOT_LOCKED') {
-          await prisma.payrollInput.delete({
-            where: { id: existingInput.id },
-          })
-        }
+      if (existing) {
+        results.push({ employeeId: calc.shopManagerId, component: code, action: 'SKIPPED_EXISTING' })
+        continue
       }
 
       await prisma.payrollInput.create({
@@ -714,29 +284,40 @@ export async function sendApprovedIncentivesToPayrollInputs(
           payrollPeriodId,
           employeeId: calc.shopManagerId,
           inputTypeId,
-          value: component.amount,
-          amount: component.amount,
-          note: `From incentive calculation: ${component.calculationNote || ''}`,
+          value: amount,
+          amount,
+          note: `From incentive calculation: ${calc.calculationNote || ''}`,
           source: 'SYSTEM',
           status: 'ACCEPTED',
           isLocked: false,
         },
       })
+      results.push({ employeeId: calc.shopManagerId, component: code, action: 'CREATED' })
+    }
 
-      results.push({
-        shopId: calc.shopLocationId,
-        employeeId: calc.shopManagerId,
-        componentCode: component.componentCode,
-        action: 'CREATED',
+    const totalTypeId = inputTypeMap.get('SHOP_MANAGER_TOTAL_INCENTIVE')
+    if (totalTypeId && calc.totalIncentive && Number(calc.totalIncentive) > 0) {
+      const existingTotal = await prisma.payrollInput.findUnique({
+        where: { payrollPeriodId_employeeId_inputTypeId: { payrollPeriodId, employeeId: calc.shopManagerId, inputTypeId: totalTypeId } },
       })
+      if (!existingTotal) {
+        await prisma.payrollInput.create({
+          data: {
+            payrollPeriodId,
+            employeeId: calc.shopManagerId,
+            inputTypeId: totalTypeId,
+            value: Number(calc.totalIncentive),
+            amount: Number(calc.totalIncentive),
+            note: `Total incentive from calculation`,
+            source: 'SYSTEM',
+            status: 'ACCEPTED',
+            isLocked: false,
+          },
+        })
+        results.push({ employeeId: calc.shopManagerId, component: 'SHOP_MANAGER_TOTAL_INCENTIVE', action: 'CREATED' })
+      }
     }
   }
 
-  return {
-    periodId,
-    payrollPeriodId,
-    calculationsProcessed: calculations.length,
-    payrollInputsCreatedOrUpdated: results.length,
-    details: results,
-  }
+  return { periodId, payrollPeriodId, calculationsProcessed: calculations.length, details: results }
 }

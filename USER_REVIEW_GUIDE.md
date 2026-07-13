@@ -366,14 +366,16 @@ This review covers Phase 4A: Payroll Period Setup and Monthly Input Collection. 
 ## Test Commands
 
 ```powershell
-npm test              # Run all tests (42 Phase 1 + 41 Phase 2A + 27 Phase 2B + 38 Phase 3 + 78 Phase 3.5 + 35 Phase 4A = 261)
+npm test              # Run all tests (42 Phase 1 + 41 Phase 2A + 27 Phase 2B + 38 Phase 3 + 78 Phase 3.5 + 35 Phase 4A + 35 Phase 4B + 91 Phase 4C.1 + 180 Phase 4C.2 = 567)
 npm run test:phase1   # Run baseline tests only (42)
 npm run test:phase2a  # Run Phase 2A tests only (41)
 npm run test:phase2b  # Run Phase 2B tests only (27)
 npm run test:phase3   # Run Phase 3 tests only (38)
 npm run test:phase3_5 # Run Phase 3.5 tests only (78)
 npm run test:phase4a  # Run Phase 4A tests only (35)
-npm run test:phase4c1 # Run Phase 4C.1 tests only (85)
+npm run test:phase4b  # Run Phase 4B tests only (35)
+npm run test:phase4c1 # Run Phase 4C.1 tests only (91)
+npm run test:phase4c2 # Run Phase 4C.2 tests only (180)
 npm run typecheck
 npm run lint
 npm run build
@@ -466,4 +468,137 @@ Log in as one of:
 - Payment export (bank or M-PESA)
 
 These will be handled in Phase 4C.2 and Phase 5.
+
+---
+
+## Phase 4C.2 — Shop Manager Incentive (Management Input Form)
+
+### What was built
+
+Phase 4C.2 is a redesigned Management Input Form for Shop Manager Incentive calculation. No approval/review workflow. Department-owned input fields (Sales/Distribution/EBU heads each own their sections). At-risk shops have all incentive components zeroed.
+
+### Prerequisites
+
+Log in as one of:
+- `admin@leapfrog.com` / `Test123!` (SUPER_ADMIN — full access)
+- `hr.admin@leapfrog.com` / `Test123!` (HR_ADMIN — full access)
+- `sales.head@leapfrog.com` / `Test123!` (SALES_HEAD — view + inputSales + inputAll)
+- `distribution.head@leapfrog.com` / `Test123!` (DISTRIBUTION_HEAD — view + inputDistribution + export) — **NEW**
+- `ebu.head@leapfrog.com` / `Test123!` (EBU_HEAD — view + inputEbu + export) — **NEW**
+- `asm@leapfrog.com` / `Test123!` (ASM — view only)
+- `shop.manager@leapfrog.com` / `Test123!` (SHOP_MANAGER — view own shop only)
+- `finance.director@leapfrog.com` / `Test123!` (FINANCE_DIRECTOR — view + calculate + export + sendToPayroll)
+- `auditor@leapfrog.com` / `Test123!` (AUDITOR — view + export)
+
+### 1. Navigate to Shop Manager Incentives
+
+- Click **Incentives > Shop Manager Incentives** on the dashboard (or navigate to `/shop-manager-incentives`)
+- Verify you see a list of incentive periods with columns: Name, Payroll Period, Status, Created At, Actions
+- Verify filters: Status, Search
+- Verify actions: Create New Period button (for users with createPeriod permission)
+
+### 2. Create an Incentive Period
+
+- Click **+ New Period**
+- Enter: Period Name (e.g., "July 2026 Shop Incentive"), select a Payroll Period, Date Range
+- Submit — verify period appears in the list with DRAFT status
+
+### 3. Edit an Incentive Period
+
+- Click the **Edit** icon on a DRAFT period
+- Change the name or date range
+- Verify changes are saved
+
+### 4. Open a Period
+
+- Click **Open** on a DRAFT period
+- Verify status changes to OPEN
+- Verify inputs can now be created
+
+### 5. View Period Dashboard
+
+- Click the period name or **View** icon
+- Verify the dashboard shows:
+  - Status badge
+  - Metric cards (Total Shops, Inputs Submitted, Calculated, Total Incentive)
+  - Action buttons appropriate to the current status
+  - Component breakdown totals
+
+### 6. Manage Inputs (Google Sheet-style Table)
+
+- Navigate to **Inputs** tab (or `/shop-manager-incentives/[id]/inputs`)
+- Verify the table shows all shops in the period with input fields
+- Verify fields are organized by department sections:
+  - **Sales Head section**: QGA Above 90%?, QGA Quantity, MM QO Targets, DSA Airtime %
+  - **Distribution Head section**: Corridor status, EVD Above 100% & Reconciled, M-PESA Target & Reconciled, M-PESA Float Sold, BA/Site
+  - **EBU Head section**: EBU Target, EBU Revenue Made, EBU Avg Top-Up >500?, EBU First Month LF Revenue
+  - **General fields**: Shop Criteria, Shop Manager, Responsible Remarks
+
+### 7. Department-Scoped Input Writing
+
+- Log in as `sales.head@leapfrog.com`
+- Navigate to inputs — verify Sales Head fields (QGA, MM, DSA Airtime) are editable
+- Distribution and EBU fields should be visible but NOT editable (greyed out)
+- Log in as `distribution.head@leapfrog.com`
+- Verify Distribution Head fields are editable, Sales/EBU fields are not
+- Log in as `ebu.head@leapfrog.com`
+- Verify EBU Head fields are editable, Sales/Distribution fields are not
+- Log in as `hr.admin@leapfrog.com` (has inputAll)
+- Verify ALL fields are editable
+
+### 8. At-Risk Lock Behavior
+
+- Set a shop's criteria to **At-risk** in the input form
+- Verify all calculation components for that shop become zero
+- Verify the input fields are locked (only shopCriteria and responsibleRemarks can be changed)
+- Change the criteria back to Gold/Silver/Bronze — verify input fields become editable again
+
+### 9. Trigger Calculation
+
+- Click **Calculate** (or navigate to the period and click Calculate)
+- Verify status changes to CALCULATED
+- Verify all shops now show calculated component amounts
+
+### 10. View Calculation Breakdown
+
+- Navigate to **Calculations** tab (or `/shop-manager-incentives/[id]/calculations`)
+- Verify for each shop:
+  - 9 component rows + TOTAL row
+  - Each component shows: Criteria used, Input values, Calculated amount
+  - At-risk shops show "At-risk shop: all incentive components are zero."
+
+### 11. Export CSV
+
+- Click **Export** on a CALCULATED period
+- Verify CSV downloads with columns: Shop Code, Shop Name, Shop Manager, Criteria, all 9 component columns, Total
+
+### 12. Send to Payroll Inputs
+
+- Click **Send to Payroll Inputs** on a CALCULATED period
+- Verify payroll input records are created for each incentive component + total
+- Run again — verify no duplicate records are created (SKIP_EXISTING mode)
+
+### 13. Cancel a Period
+
+- Click **Cancel** on any period (DRAFT, OPEN, or CALCULATED)
+- Verify status changes to CANCELLED
+
+### 14. Permission Scope Testing
+
+- Log in as `asm@leapfrog.com` — verify only shops in assigned area are visible
+- Log in as `shop.manager@leapfrog.com` — verify only own shop is visible
+- Log in as `employee@leapfrog.com` — verify no incentive access (Access Denied)
+- Log in as `auditor@leapfrog.com` — verify view-only (no create/edit/calculate)
+- Log in as `finance.director@leapfrog.com` — verify view + calculate + export + sendToPayroll
+- Log in as `finance.payroll@leapfrog.com` — verify view + export + sendToPayroll (no calculate)
+
+### What is NOT implemented
+
+- No approval/review workflow for incentive inputs or calculations
+- No final payroll calculation, income tax, pension, net salary calculation
+- No payslip or payment export (bank/M-PESA)
+- No quarterly auto-calculation
+- No general KPI engine
+- No ASM/DSA commission engine
+- No attendance or leave management
 ```

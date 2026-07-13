@@ -2,41 +2,28 @@
 
 import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import { ChevronDown, ChevronRight } from 'lucide-react'
 
-interface ComponentDetail {
-  id: string; componentCode: string; inputValue: number | null
-  conditionResult: string | null; formula: string | null; amount: number; note: string | null
-}
+interface ShopLocation { id: string; name: string; code: string }
+interface ShopManager { id: string; fullName: string; employeeId: string }
 
 interface Calculation {
-  id: string; incentivePeriodId: string; shopLocationId: string; shopCriteria: string | null
-  totalAmount: number; status: string; issues: { id: string; severity: string; message: string }[]
-  components: ComponentDetail[]
-  shopLocation: { id: string; name: string; code: string }
-  shopManager: { id: string; fullName: string } | null
-}
-
-const statusColors: Record<string, string> = {
-  DRAFT: '#6b7280', CALCULATED: '#22c55e', UNDER_REVIEW: '#a855f7',
-  APPROVED: '#6366f1', LOCKED: '#1f2937',
-}
-
-const componentLabels: Record<string, string> = {
-  QGA_BONUS: 'QGA Bonus', QGA_SIM_COMMISSION: 'QGA SIM', EVD_BONUS: 'EVD',
-  BA_SITE_BONUS: 'BA/Site', MPESA_COMMISSION: 'M-PESA', DSA_ACHIEVEMENT_BONUS: 'DSA',
-  QO_BONUS: 'QO', EBU_ACTIVATION_BONUS: 'EBU Activation', EBU_REVENUE_SHARE: 'EBU Revenue',
+  id: string; incentivePeriodId: string; shopLocationId: string
+  shopCriteria: string | null; calculationNote: string | null
+  qgaBonus: number; qgaSimCommission: number; evdBonus: number
+  mpesaCommission: number; baSiteBonus: number; dsaAchievementBonus: number
+  qoBonus: number; ebuActivationBonus: number; ebuRevenueShare: number
+  totalIncentive: number
+  shopLocation: ShopLocation | null
+  shopManager: ShopManager | null
 }
 
 export default function CalculationsPage() {
   const params = useParams()
   const router = useRouter()
   const id = params.id as string
-  const [inputs, setInputs] = useState<any[]>([])
-  const [calculations, setCalculations] = useState<Record<string, Calculation>>({})
+  const [calculations, setCalculations] = useState<Calculation[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set())
 
   useEffect(() => { fetchData() }, [id])
 
@@ -46,31 +33,16 @@ export default function CalculationsPage() {
       const res = await fetch(`/api/shop-manager-incentives/periods/${id}/inputs`)
       const json = await res.json()
       if (!res.ok) { setError(json.error || 'Failed to load'); return }
-      const data = json.data || []
-      setInputs(data)
-
-      const calcMap: Record<string, Calculation> = {}
-      for (const inp of data) {
-        if (inp.calculation) calcMap[inp.shopLocationId] = inp.calculation
+      const inputs = json.data || []
+      const calcs: Calculation[] = []
+      for (const inp of inputs) {
+        if (inp.calculation) {
+          calcs.push({ ...inp.calculation, shopLocation: inp.shopLocation, shopManager: inp.shopManager })
+        }
       }
-      setCalculations(calcMap)
+      setCalculations(calcs)
     } catch { setError('Network error') }
     finally { setLoading(false) }
-  }
-
-  function toggleRow(shopLocationId: string) {
-    setExpandedRows(prev => {
-      const next = new Set(prev)
-      if (next.has(shopLocationId)) next.delete(shopLocationId)
-      else next.add(shopLocationId)
-      return next
-    })
-  }
-
-  function getComponentAmount(calc: Calculation | undefined, code: string): number {
-    if (!calc) return 0
-    const comp = calc.components.find(c => c.componentCode === code)
-    return comp ? Number(comp.amount) : 0
   }
 
   if (loading) return <div className="p-6"><p>Loading calculations...</p></div>
@@ -83,110 +55,68 @@ export default function CalculationsPage() {
         <button onClick={() => router.push(`/shop-manager-incentives/${id}`)} className="text-blue-600 text-sm underline">Back to Period</button>
       </div>
 
-      {inputs.length === 0 ? <p className="text-gray-400">No inputs found for this period.</p> : (
+      {calculations.length === 0 ? <p className="text-gray-400">No calculations found for this period.</p> : (
         <div className="overflow-x-auto">
           <table className="w-full border-collapse border text-sm">
             <thead>
               <tr className="bg-gray-100">
-                <th className="border p-2 text-left w-6"></th>
-                <th className="border p-2 text-left">Shop</th>
-                <th className="border p-2 text-left">Manager</th>
+                <th className="border p-2 text-left">No</th>
+                <th className="border p-2 text-left">Shop / Cluster</th>
+                <th className="border p-2 text-left">Shop Manager</th>
                 <th className="border p-2 text-left">Criteria</th>
-                <th className="border p-2 text-left">QGA Bonus</th>
-                <th className="border p-2 text-left">QGA SIM</th>
-                <th className="border p-2 text-left">EVD</th>
-                <th className="border p-2 text-left">BA/Site</th>
-                <th className="border p-2 text-left">M-PESA</th>
-                <th className="border p-2 text-left">DSA</th>
-                <th className="border p-2 text-left">QO</th>
-                <th className="border p-2 text-left">EBU Act</th>
-                <th className="border p-2 text-left">EBU Rev</th>
-                <th className="border p-2 text-left">Total</th>
-                <th className="border p-2 text-left">Status</th>
-                <th className="border p-2 text-left">Issues</th>
+                <th className="border p-2 text-right">QGA Bonus</th>
+                <th className="border p-2 text-right">QGA SIM</th>
+                <th className="border p-2 text-right">EVD Bonus</th>
+                <th className="border p-2 text-right">M-PESA Comm</th>
+                <th className="border p-2 text-right">BA/Site</th>
+                <th className="border p-2 text-right">DSA Bonus</th>
+                <th className="border p-2 text-right">QO Bonus</th>
+                <th className="border p-2 text-right">EBU Act</th>
+                <th className="border p-2 text-right">EBU Rev Share</th>
+                <th className="border p-2 text-right">Total</th>
+                <th className="border p-2 text-left">Notes</th>
               </tr>
             </thead>
             <tbody>
-              {inputs.map(inp => {
-                const calc = inp.shopLocationId ? calculations[inp.shopLocationId] : undefined
-                const isExpanded = expandedRows.has(inp.shopLocationId)
-                const issueCount = calc?.issues?.length || 0
-
-                return (
-                  <>
-                    <tr key={inp.id} className="hover:bg-gray-50 cursor-pointer" onClick={() => toggleRow(inp.shopLocationId)}>
-                      <td className="border p-2">{isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}</td>
-                      <td className="border p-2">{inp.shopLocation?.code || '-'}<br /><span className="text-xs text-gray-400">{inp.shopLocation?.name || ''}</span></td>
-                      <td className="border p-2">{inp.shopManager?.fullName || '-'}</td>
-                      <td className="border p-2">{inp.shopCriteria || '-'}</td>
-                      <td className="border p-2 text-right">{getComponentAmount(calc, 'QGA_BONUS').toLocaleString()}</td>
-                      <td className="border p-2 text-right">{getComponentAmount(calc, 'QGA_SIM_COMMISSION').toLocaleString()}</td>
-                      <td className="border p-2 text-right">{getComponentAmount(calc, 'EVD_BONUS').toLocaleString()}</td>
-                      <td className="border p-2 text-right">{getComponentAmount(calc, 'BA_SITE_BONUS').toLocaleString()}</td>
-                      <td className="border p-2 text-right">{getComponentAmount(calc, 'MPESA_COMMISSION').toLocaleString()}</td>
-                      <td className="border p-2 text-right">{getComponentAmount(calc, 'DSA_ACHIEVEMENT_BONUS').toLocaleString()}</td>
-                      <td className="border p-2 text-right">{getComponentAmount(calc, 'QO_BONUS').toLocaleString()}</td>
-                      <td className="border p-2 text-right">{getComponentAmount(calc, 'EBU_ACTIVATION_BONUS').toLocaleString()}</td>
-                      <td className="border p-2 text-right">{getComponentAmount(calc, 'EBU_REVENUE_SHARE').toLocaleString()}</td>
-                      <td className="border p-2 text-right font-semibold">{calc ? Number(calc.totalAmount).toLocaleString() : '-'}</td>
-                      <td className="border p-2">
-                        {calc ? (
-                          <span style={{ backgroundColor: statusColors[calc.status] || '#6b7280', color: '#fff' }} className="px-2 py-0.5 rounded text-xs">{calc.status}</span>
-                        ) : (
-                          <span className="text-gray-400 text-xs">No calc</span>
-                        )}
-                      </td>
-                      <td className="border p-2">
-                        {issueCount > 0 ? (
-                          <span className="text-red-600 text-xs font-medium">{issueCount} issue{issueCount > 1 ? 's' : ''}</span>
-                        ) : <span className="text-green-600 text-xs">None</span>}
-                      </td>
-                    </tr>
-                    {isExpanded && calc && (
-                      <tr key={`${inp.id}-detail`}>
-                        <td colSpan={16} className="border p-0">
-                          <div className="bg-gray-50 p-3">
-                            <h4 className="font-semibold mb-2 text-xs text-gray-600">Component Breakdown</h4>
-                            <table className="w-full text-xs border-collapse">
-                              <thead>
-                                <tr className="bg-gray-200">
-                                  <th className="border p-1 text-left">Component</th>
-                                  <th className="border p-1 text-left">Input Value</th>
-                                  <th className="border p-1 text-left">Condition</th>
-                                  <th className="border p-1 text-left">Formula</th>
-                                  <th className="border p-1 text-left">Amount</th>
-                                  <th className="border p-1 text-left">Note</th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {calc.components.map(comp => (
-                                  <tr key={comp.id}>
-                                    <td className="border p-1 font-medium">{componentLabels[comp.componentCode] || comp.componentCode}</td>
-                                    <td className="border p-1">{comp.inputValue ?? '-'}</td>
-                                    <td className="border p-1">{comp.conditionResult ?? '-'}</td>
-                                    <td className="border p-1 font-mono text-xs">{comp.formula ?? '-'}</td>
-                                    <td className="border p-1 text-right font-semibold">{Number(comp.amount).toLocaleString()}</td>
-                                    <td className="border p-1">{comp.note || '-'}</td>
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
-                            {calc.issues && calc.issues.length > 0 && (
-                              <div className="mt-2">
-                                <h4 className="font-semibold mb-1 text-xs text-gray-600">Issues</h4>
-                                {calc.issues.map((iss: any) => (
-                                  <p key={iss.id} className="text-xs text-red-600">{iss.severity}: {iss.message}</p>
-                                ))}
-                              </div>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    )}
-                  </>
-                )
-              })}
+              {calculations.map((c, idx) => (
+                <tr key={c.id} className="hover:bg-gray-50">
+                  <td className="border p-2">{idx + 1}</td>
+                  <td className="border p-2 font-mono">
+                    {c.shopLocation?.code || '-'}
+                    <br /><span className="text-xs text-gray-400">{c.shopLocation?.name || ''}</span>
+                  </td>
+                  <td className="border p-2">{c.shopManager?.fullName || '-'}</td>
+                  <td className="border p-2">{c.shopCriteria || '-'}</td>
+                  <td className="border p-2 text-right">{c.qgaBonus.toLocaleString()}</td>
+                  <td className="border p-2 text-right">{c.qgaSimCommission.toLocaleString()}</td>
+                  <td className="border p-2 text-right">{c.evdBonus.toLocaleString()}</td>
+                  <td className="border p-2 text-right">{c.mpesaCommission.toLocaleString()}</td>
+                  <td className="border p-2 text-right">{c.baSiteBonus.toLocaleString()}</td>
+                  <td className="border p-2 text-right">{c.dsaAchievementBonus.toLocaleString()}</td>
+                  <td className="border p-2 text-right">{c.qoBonus.toLocaleString()}</td>
+                  <td className="border p-2 text-right">{c.ebuActivationBonus.toLocaleString()}</td>
+                  <td className="border p-2 text-right">{c.ebuRevenueShare.toLocaleString()}</td>
+                  <td className="border p-2 text-right font-bold">{c.totalIncentive.toLocaleString()}</td>
+                  <td className="border p-2 text-xs max-w-[120px] truncate">{c.calculationNote || '-'}</td>
+                </tr>
+              ))}
             </tbody>
+            <tfoot>
+              <tr className="bg-gray-50 font-semibold">
+                <td className="border p-2" colSpan={4}>Total</td>
+                <td className="border p-2 text-right">{calculations.reduce((s, c) => s + c.qgaBonus, 0).toLocaleString()}</td>
+                <td className="border p-2 text-right">{calculations.reduce((s, c) => s + c.qgaSimCommission, 0).toLocaleString()}</td>
+                <td className="border p-2 text-right">{calculations.reduce((s, c) => s + c.evdBonus, 0).toLocaleString()}</td>
+                <td className="border p-2 text-right">{calculations.reduce((s, c) => s + c.mpesaCommission, 0).toLocaleString()}</td>
+                <td className="border p-2 text-right">{calculations.reduce((s, c) => s + c.baSiteBonus, 0).toLocaleString()}</td>
+                <td className="border p-2 text-right">{calculations.reduce((s, c) => s + c.dsaAchievementBonus, 0).toLocaleString()}</td>
+                <td className="border p-2 text-right">{calculations.reduce((s, c) => s + c.qoBonus, 0).toLocaleString()}</td>
+                <td className="border p-2 text-right">{calculations.reduce((s, c) => s + c.ebuActivationBonus, 0).toLocaleString()}</td>
+                <td className="border p-2 text-right">{calculations.reduce((s, c) => s + c.ebuRevenueShare, 0).toLocaleString()}</td>
+                <td className="border p-2 text-right">{calculations.reduce((s, c) => s + c.totalIncentive, 0).toLocaleString()}</td>
+                <td className="border p-2"></td>
+              </tr>
+            </tfoot>
           </table>
         </div>
       )}

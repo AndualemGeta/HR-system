@@ -1,11 +1,11 @@
 import { prisma } from '../lib/prisma'
 import { userHasPermission } from '../lib/rbac'
-import { calculateShopManagerIncentive } from '../lib/shop-manager-incentives'
-import { buildIncentiveScopeWhere } from '../lib/incentive-scope'
+import { validateShopCriteria, calculateShopManagerIncentive, calculateAllShopManagerIncentives, sendIncentivesToPayrollInputs } from '../lib/shop-manager-incentives'
 
 let passed = 0
 let failed = 0
 const errors: string[] = []
+const cleanup: (() => Promise<void>)[] = []
 
 async function assert(label: string, fn: () => Promise<boolean | undefined | void>) {
   try {
@@ -17,818 +17,718 @@ async function assert(label: string, fn: () => Promise<boolean | undefined | voi
   }
 }
 
-async function main() {
-  console.log('\n=== Phase 4C.2: Shop Manager Incentive & KPI Calculation Tests ===\n')
+const INCENTIVE_PERMS = [
+  'shopManagerIncentive.view',
+  'shopManagerIncentive.createPeriod',
+  'shopManagerIncentive.updatePeriod',
+  'shopManagerIncentive.inputSales',
+  'shopManagerIncentive.inputDistribution',
+  'shopManagerIncentive.inputEbu',
+  'shopManagerIncentive.inputAll',
+  'shopManagerIncentive.calculate',
+  'shopManagerIncentive.export',
+  'shopManagerIncentive.sendToPayroll',
+] as const
 
-  // ─── Lookup seeded data ──────────────────────────────────────────────────
+type RolePermMap = Record<string, Record<string, boolean>>
+function roleLabel(role: string): string { return role.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) }
+
+async function checkPerms(userId: string | undefined, roleName: string, expected: Record<string, boolean>) {
+  if (!userId) {
+    for (const p of INCENTIVE_PERMS) {
+      assert(`${roleLabel(roleName)} — ${p} = ${expected[p]} (user not found)`, async () => false)
+    }
+    return
+  }
+  for (const p of INCENTIVE_PERMS) {
+    const want = expected[p]
+    assert(`${roleLabel(roleName)} — ${p} = ${want}`, async () => await userHasPermission(userId, p as any) === want)
+  }
+}
+
+async function main() {
+  console.log('\n=== Phase 4C.2: Shop Manager Incentive Calculation Engine Tests ===\n')
+
+  // ─── Lookup Seeded Data ──────────────────────────────────────────────────
   const adminUser = await prisma.user.findUnique({ where: { email: 'admin@leapfrog.com' } })
   const hrAdminUser = await prisma.user.findUnique({ where: { email: 'hr.admin@leapfrog.com' } })
   const salesHeadUser = await prisma.user.findUnique({ where: { email: 'sales.head@leapfrog.com' } })
+  const asmUser = await prisma.user.findUnique({ where: { email: 'asm@leapfrog.com' } })
   const shopManagerUser = await prisma.user.findUnique({ where: { email: 'shop.manager@leapfrog.com' } })
   const shopManagerUser2 = await prisma.user.findUnique({ where: { email: 'shop.manager2@leapfrog.com' } })
-  const asmUser = await prisma.user.findUnique({ where: { email: 'asm@leapfrog.com' } })
   const empUser = await prisma.user.findUnique({ where: { email: 'employee@leapfrog.com' } })
   const auditorUser = await prisma.user.findUnique({ where: { email: 'auditor@leapfrog.com' } })
   const financeDirUser = await prisma.user.findUnique({ where: { email: 'finance.director@leapfrog.com' } })
   const financePayrollUser = await prisma.user.findUnique({ where: { email: 'finance.payroll@leapfrog.com' } })
+  const distHeadUser = await prisma.user.findUnique({ where: { email: 'distribution.head@leapfrog.com' } })
+  const ebuHeadUser = await prisma.user.findUnique({ where: { email: 'ebu.head@leapfrog.com' } })
 
-  // Look up locations & employees for testing
-  const region = await prisma.location.findFirst({ where: { type: 'REGION' } })
-  const area = region ? await prisma.location.findFirst({ where: { type: 'AREA', parentId: region.id } }) : null
+  const shopThu = await prisma.location.findUnique({ where: { code: 'SHOP_THU' } })
+  const shopLio = await prisma.location.findUnique({ where: { code: 'SHOP_LIO' } })
+  const shopWar = await prisma.location.findUnique({ where: { code: 'SHOP_WAR' } })
 
-  const activeShopManager = await prisma.employee.findFirst({ where: { currentRole: 'SHOP_MANAGER', employmentStatus: 'ACTIVE' } })
-  const payrollPeriod = await prisma.payrollPeriod.findFirst()
-  const closedPayrollPeriod = await prisma.payrollPeriod.findFirst({ where: { status: 'CANCELLED' } })
-
-  const actualRegion = await prisma.location.findFirst({ where: { type: 'REGION', name: { contains: 'Addis' } } })
-  const actualArea = actualRegion
-    ? await prisma.location.findFirst({ where: { type: 'AREA', parentId: actualRegion.id, name: 'Thunder Zone' } })
-    : null
+  const shopManagerEmp = await prisma.employee.findFirst({ where: { email: 'shop.manager@leapfrog.com' } })
 
   // ─── Permissions ─────────────────────────────────────────────────────────
-  console.log('[Permissions: Shop Manager Incentive]')
+  console.log('[Permissions]')
 
-  const incentivePerms = [
-    'shopManagerIncentive.view',
-    'shopManagerIncentive.createPeriod',
-    'shopManagerIncentive.updatePeriod',
-    'shopManagerIncentive.input',
-    'shopManagerIncentive.import',
-    'shopManagerIncentive.calculate',
-    'shopManagerIncentive.review',
-    'shopManagerIncentive.approve',
-    'shopManagerIncentive.lock',
-    'shopManagerIncentive.export',
-    'shopManagerIncentive.sendToPayroll',
-  ] as const
+  // SUPER_ADMIN: all 10
+  await checkPerms(adminUser?.id, 'SUPER_ADMIN', {
+    'shopManagerIncentive.view': true,
+    'shopManagerIncentive.createPeriod': true,
+    'shopManagerIncentive.updatePeriod': true,
+    'shopManagerIncentive.inputSales': true,
+    'shopManagerIncentive.inputDistribution': true,
+    'shopManagerIncentive.inputEbu': true,
+    'shopManagerIncentive.inputAll': true,
+    'shopManagerIncentive.calculate': true,
+    'shopManagerIncentive.export': true,
+    'shopManagerIncentive.sendToPayroll': true,
+  })
 
-  if (adminUser) {
-    for (const p of incentivePerms) {
-      assert(`SUPER_ADMIN has ${p}`, async () => await userHasPermission(adminUser.id, p) === true)
-    }
-  }
-  if (hrAdminUser) {
-    for (const p of incentivePerms) {
-      assert(`HR_ADMIN has ${p}`, async () => await userHasPermission(hrAdminUser.id, p) === true)
-    }
-  }
-  if (salesHeadUser) {
-    for (const p of incentivePerms) {
-      if (p === 'shopManagerIncentive.lock') {
-        assert(`SALES_HEAD does NOT have ${p}`, async () => await userHasPermission(salesHeadUser.id, p) === false)
-      } else {
-        assert(`SALES_HEAD has ${p}`, async () => await userHasPermission(salesHeadUser.id, p) === true)
-      }
-    }
-  }
-  if (asmUser) {
-    assert('ASM has shopManagerIncentive.view', async () => await userHasPermission(asmUser.id, 'shopManagerIncentive.view') === true)
-    assert('ASM has shopManagerIncentive.input', async () => await userHasPermission(asmUser.id, 'shopManagerIncentive.input') === true)
-    assert('ASM has shopManagerIncentive.review', async () => await userHasPermission(asmUser.id, 'shopManagerIncentive.review') === true)
-    assert('ASM does NOT have shopManagerIncentive.createPeriod', async () => await userHasPermission(asmUser.id, 'shopManagerIncentive.createPeriod') === false)
-    assert('ASM does NOT have shopManagerIncentive.lock', async () => await userHasPermission(asmUser.id, 'shopManagerIncentive.lock') === false)
-    assert('ASM does NOT have shopManagerIncentive.approve', async () => await userHasPermission(asmUser.id, 'shopManagerIncentive.approve') === false)
-    assert('ASM does NOT have shopManagerIncentive.sendToPayroll', async () => await userHasPermission(asmUser.id, 'shopManagerIncentive.sendToPayroll') === false)
-  }
-  if (shopManagerUser) {
-    assert('SHOP_MANAGER has shopManagerIncentive.view', async () => await userHasPermission(shopManagerUser.id, 'shopManagerIncentive.view') === true)
-    assert('SHOP_MANAGER does NOT have shopManagerIncentive.createPeriod', async () => await userHasPermission(shopManagerUser.id, 'shopManagerIncentive.createPeriod') === false)
-    assert('SHOP_MANAGER does NOT have shopManagerIncentive.input', async () => await userHasPermission(shopManagerUser.id, 'shopManagerIncentive.input') === false)
-    assert('SHOP_MANAGER does NOT have shopManagerIncentive.calculate', async () => await userHasPermission(shopManagerUser.id, 'shopManagerIncentive.calculate') === false)
-  }
-  if (empUser) {
-    assert('EMPLOYEE does NOT have shopManagerIncentive.view', async () => await userHasPermission(empUser.id, 'shopManagerIncentive.view') === false)
-    assert('EMPLOYEE does NOT have shopManagerIncentive.input', async () => await userHasPermission(empUser.id, 'shopManagerIncentive.input') === false)
-  }
-  if (auditorUser) {
-    assert('AUDITOR has shopManagerIncentive.view', async () => await userHasPermission(auditorUser.id, 'shopManagerIncentive.view') === true)
-    assert('AUDITOR has shopManagerIncentive.export', async () => await userHasPermission(auditorUser.id, 'shopManagerIncentive.export') === true)
-    assert('AUDITOR does NOT have shopManagerIncentive.input', async () => await userHasPermission(auditorUser.id, 'shopManagerIncentive.input') === false)
-    assert('AUDITOR does NOT have shopManagerIncentive.review', async () => await userHasPermission(auditorUser.id, 'shopManagerIncentive.review') === false)
-  }
-  if (financeDirUser) {
-    assert('FINANCE_DIRECTOR has shopManagerIncentive.view', async () => await userHasPermission(financeDirUser.id, 'shopManagerIncentive.view') === true)
-    assert('FINANCE_DIRECTOR has shopManagerIncentive.review', async () => await userHasPermission(financeDirUser.id, 'shopManagerIncentive.review') === true)
-    assert('FINANCE_DIRECTOR has shopManagerIncentive.approve', async () => await userHasPermission(financeDirUser.id, 'shopManagerIncentive.approve') === true)
-    assert('FINANCE_DIRECTOR has shopManagerIncentive.lock', async () => await userHasPermission(financeDirUser.id, 'shopManagerIncentive.lock') === true)
-    assert('FINANCE_DIRECTOR has shopManagerIncentive.sendToPayroll', async () => await userHasPermission(financeDirUser.id, 'shopManagerIncentive.sendToPayroll') === true)
-  }
-  if (financePayrollUser) {
-    assert('FINANCE_PAYROLL has shopManagerIncentive.view', async () => await userHasPermission(financePayrollUser.id, 'shopManagerIncentive.view') === true)
-    assert('FINANCE_PAYROLL has shopManagerIncentive.export', async () => await userHasPermission(financePayrollUser.id, 'shopManagerIncentive.export') === true)
-    assert('FINANCE_PAYROLL has shopManagerIncentive.sendToPayroll', async () => await userHasPermission(financePayrollUser.id, 'shopManagerIncentive.sendToPayroll') === true)
-    assert('FINANCE_PAYROLL does NOT have shopManagerIncentive.approve', async () => await userHasPermission(financePayrollUser.id, 'shopManagerIncentive.approve') === false)
-    assert('FINANCE_PAYROLL does NOT have shopManagerIncentive.lock', async () => await userHasPermission(financePayrollUser.id, 'shopManagerIncentive.lock') === false)
-  }
+  // HR_ADMIN: all 10
+  await checkPerms(hrAdminUser?.id, 'HR_ADMIN', {
+    'shopManagerIncentive.view': true,
+    'shopManagerIncentive.createPeriod': true,
+    'shopManagerIncentive.updatePeriod': true,
+    'shopManagerIncentive.inputSales': true,
+    'shopManagerIncentive.inputDistribution': true,
+    'shopManagerIncentive.inputEbu': true,
+    'shopManagerIncentive.inputAll': true,
+    'shopManagerIncentive.calculate': true,
+    'shopManagerIncentive.export': true,
+    'shopManagerIncentive.sendToPayroll': true,
+  })
+
+  // SALES_HEAD: view, createPeriod, updatePeriod, inputSales, inputAll, calculate, export, sendToPayroll (NOT inputDistribution, inputEbu)
+  await checkPerms(salesHeadUser?.id, 'SALES_HEAD', {
+    'shopManagerIncentive.view': true,
+    'shopManagerIncentive.createPeriod': true,
+    'shopManagerIncentive.updatePeriod': true,
+    'shopManagerIncentive.inputSales': true,
+    'shopManagerIncentive.inputDistribution': false,
+    'shopManagerIncentive.inputEbu': false,
+    'shopManagerIncentive.inputAll': true,
+    'shopManagerIncentive.calculate': true,
+    'shopManagerIncentive.export': true,
+    'shopManagerIncentive.sendToPayroll': true,
+  })
+
+  // DISTRIBUTION_HEAD: view, inputDistribution, export (NOT createPeriod, inputSales, inputEbu, calculate, sendToPayroll)
+  await checkPerms(distHeadUser?.id, 'DISTRIBUTION_HEAD', {
+    'shopManagerIncentive.view': true,
+    'shopManagerIncentive.createPeriod': false,
+    'shopManagerIncentive.updatePeriod': false,
+    'shopManagerIncentive.inputSales': false,
+    'shopManagerIncentive.inputDistribution': true,
+    'shopManagerIncentive.inputEbu': false,
+    'shopManagerIncentive.inputAll': false,
+    'shopManagerIncentive.calculate': false,
+    'shopManagerIncentive.export': true,
+    'shopManagerIncentive.sendToPayroll': false,
+  })
+
+  // EBU_HEAD: view, inputEbu, export (NOT inputSales, inputDistribution, createPeriod, calculate)
+  await checkPerms(ebuHeadUser?.id, 'EBU_HEAD', {
+    'shopManagerIncentive.view': true,
+    'shopManagerIncentive.createPeriod': false,
+    'shopManagerIncentive.updatePeriod': false,
+    'shopManagerIncentive.inputSales': false,
+    'shopManagerIncentive.inputDistribution': false,
+    'shopManagerIncentive.inputEbu': true,
+    'shopManagerIncentive.inputAll': false,
+    'shopManagerIncentive.calculate': false,
+    'shopManagerIncentive.export': true,
+    'shopManagerIncentive.sendToPayroll': false,
+  })
+
+  // FINANCE_DIRECTOR: view, calculate, export, sendToPayroll
+  await checkPerms(financeDirUser?.id, 'FINANCE_DIRECTOR', {
+    'shopManagerIncentive.view': true,
+    'shopManagerIncentive.createPeriod': false,
+    'shopManagerIncentive.updatePeriod': false,
+    'shopManagerIncentive.inputSales': false,
+    'shopManagerIncentive.inputDistribution': false,
+    'shopManagerIncentive.inputEbu': false,
+    'shopManagerIncentive.inputAll': false,
+    'shopManagerIncentive.calculate': true,
+    'shopManagerIncentive.export': true,
+    'shopManagerIncentive.sendToPayroll': true,
+  })
+
+  // FINANCE_PAYROLL: view, export, sendToPayroll
+  await checkPerms(financePayrollUser?.id, 'FINANCE_PAYROLL', {
+    'shopManagerIncentive.view': true,
+    'shopManagerIncentive.createPeriod': false,
+    'shopManagerIncentive.updatePeriod': false,
+    'shopManagerIncentive.inputSales': false,
+    'shopManagerIncentive.inputDistribution': false,
+    'shopManagerIncentive.inputEbu': false,
+    'shopManagerIncentive.inputAll': false,
+    'shopManagerIncentive.calculate': false,
+    'shopManagerIncentive.export': true,
+    'shopManagerIncentive.sendToPayroll': true,
+  })
+
+  // ASM: view only
+  await checkPerms(asmUser?.id, 'ASM', {
+    'shopManagerIncentive.view': true,
+    'shopManagerIncentive.createPeriod': false,
+    'shopManagerIncentive.updatePeriod': false,
+    'shopManagerIncentive.inputSales': false,
+    'shopManagerIncentive.inputDistribution': false,
+    'shopManagerIncentive.inputEbu': false,
+    'shopManagerIncentive.inputAll': false,
+    'shopManagerIncentive.calculate': false,
+    'shopManagerIncentive.export': false,
+    'shopManagerIncentive.sendToPayroll': false,
+  })
+
+  // SHOP_MANAGER: view only
+  await checkPerms(shopManagerUser?.id, 'SHOP_MANAGER', {
+    'shopManagerIncentive.view': true,
+    'shopManagerIncentive.createPeriod': false,
+    'shopManagerIncentive.updatePeriod': false,
+    'shopManagerIncentive.inputSales': false,
+    'shopManagerIncentive.inputDistribution': false,
+    'shopManagerIncentive.inputEbu': false,
+    'shopManagerIncentive.inputAll': false,
+    'shopManagerIncentive.calculate': false,
+    'shopManagerIncentive.export': false,
+    'shopManagerIncentive.sendToPayroll': false,
+  })
+
+  // AUDITOR: view, export
+  await checkPerms(auditorUser?.id, 'AUDITOR', {
+    'shopManagerIncentive.view': true,
+    'shopManagerIncentive.createPeriod': false,
+    'shopManagerIncentive.updatePeriod': false,
+    'shopManagerIncentive.inputSales': false,
+    'shopManagerIncentive.inputDistribution': false,
+    'shopManagerIncentive.inputEbu': false,
+    'shopManagerIncentive.inputAll': false,
+    'shopManagerIncentive.calculate': false,
+    'shopManagerIncentive.export': true,
+    'shopManagerIncentive.sendToPayroll': false,
+  })
+
+  // EMPLOYEE: none
+  await checkPerms(empUser?.id, 'EMPLOYEE', {
+    'shopManagerIncentive.view': false,
+    'shopManagerIncentive.createPeriod': false,
+    'shopManagerIncentive.updatePeriod': false,
+    'shopManagerIncentive.inputSales': false,
+    'shopManagerIncentive.inputDistribution': false,
+    'shopManagerIncentive.inputEbu': false,
+    'shopManagerIncentive.inputAll': false,
+    'shopManagerIncentive.calculate': false,
+    'shopManagerIncentive.export': false,
+    'shopManagerIncentive.sendToPayroll': false,
+  })
+
+  // ─── Shop Criteria Validation ────────────────────────────────────────────
+  console.log('\n[Shop Criteria Validation]')
+
+  assert('validateShopCriteria(\'Gold\') returns GOLD', async () => validateShopCriteria('Gold') === 'GOLD')
+  assert('validateShopCriteria(\'At-risk\') returns AT_RISK', async () => validateShopCriteria('At-risk') === 'AT_RISK')
+  assert('validateShopCriteria(\'Unassigned\') throws error', async () => {
+    try { validateShopCriteria('Unassigned'); return false }
+    catch { return true }
+  })
+  assert('validateShopCriteria(\'INVALID\') throws error', async () => {
+    try { validateShopCriteria('INVALID'); return false }
+    catch { return true }
+  })
 
   // ─── Incentive Period CRUD ──────────────────────────────────────────────
   console.log('\n[Incentive Period CRUD]')
 
-  let createdPeriodId: string | null = null
-  let secondPeriodId: string | null = null
+  let testPeriodId: string | null = null
+  let testPayrollPeriodId: string | null = null
+  let testInputId: string | null = null
 
-  if (hrAdminUser && payrollPeriod) {
-    const period = await prisma.shopManagerIncentivePeriod.create({
+  if (adminUser) {
+    const payrollPeriod = await prisma.payrollPeriod.create({
       data: {
-        name: 'Test Period Jan 2026',
-        payrollPeriodId: payrollPeriod.id,
-        month: 1,
-        year: 2026,
-        status: 'DRAFT',
-        createdById: hrAdminUser.id,
+        periodName: 'Test Period 4C2',
+        periodStart: new Date('2026-07-01'),
+        periodEnd: new Date('2026-07-31'),
+        payDate: new Date('2026-08-05'),
+        createdById: adminUser.id,
       },
     })
-    createdPeriodId = period.id
-    assert('can create incentive period', async () => !!period.id && period.status === 'DRAFT')
+    testPayrollPeriodId = payrollPeriod.id
+    cleanup.push(async () => { await prisma.payrollPeriod.delete({ where: { id: payrollPeriod.id } }).catch(() => {}) })
 
-    const periods = await prisma.shopManagerIncentivePeriod.findMany({ where: { year: 2026 } })
-    assert('can list incentive periods', async () => periods.length >= 1)
+    const period = await prisma.shopManagerIncentivePeriod.create({
+      data: {
+        payrollPeriodId: payrollPeriod.id,
+        name: 'July 2026 Test',
+        month: 7,
+        year: 2026,
+        status: 'DRAFT',
+        createdById: adminUser.id,
+      },
+    })
+    testPeriodId = period.id
+    cleanup.push(async () => { await prisma.shopManagerIncentivePeriod.delete({ where: { id: period.id } }).catch(() => {}) })
+
+    assert('can create incentive period with DRAFT status', async () => period.status === 'DRAFT' && !!period.id)
+
+    const periods = await prisma.shopManagerIncentivePeriod.findMany()
+    assert('can list periods', async () => periods.length > 0)
 
     const updated = await prisma.shopManagerIncentivePeriod.update({
       where: { id: period.id },
-      data: { name: 'Test Period Jan 2026 Updated' },
+      data: { name: 'July 2026 Updated' },
     })
-    assert('can update incentive period', async () => updated.name === 'Test Period Jan 2026 Updated')
+    assert('can update period name', async () => updated.name === 'July 2026 Updated')
 
-    if (closedPayrollPeriod && closedPayrollPeriod.id !== payrollPeriod?.id) {
-      const period2 = await prisma.shopManagerIncentivePeriod.create({
+    const opened = await prisma.shopManagerIncentivePeriod.update({
+      where: { id: period.id },
+      data: { status: 'OPEN' },
+    })
+    assert('can open period (DRAFT → OPEN)', async () => opened.status === 'OPEN')
+
+    const cancelled = await prisma.shopManagerIncentivePeriod.update({
+      where: { id: period.id },
+      data: { status: 'CANCELLED' },
+    })
+    assert('can cancel period (OPEN → CANCELLED)', async () => cancelled.status === 'CANCELLED')
+
+    // Clean up this period (will recreate for workflow tests)
+    await prisma.shopManagerIncentivePeriod.delete({ where: { id: period.id } }).catch(() => {})
+    await prisma.payrollPeriod.delete({ where: { id: payrollPeriod.id } }).catch(() => {})
+    testPeriodId = null
+    testPayrollPeriodId = null
+  }
+
+  // ─── Input CRUD ──────────────────────────────────────────────────────────
+  console.log('\n[Input CRUD]')
+
+  if (adminUser && shopThu && shopManagerEmp) {
+    const pp = await prisma.payrollPeriod.create({
+      data: {
+        periodName: 'Input CRUD Period',
+        periodStart: new Date('2026-08-01'),
+        periodEnd: new Date('2026-08-31'),
+        payDate: new Date('2026-09-05'),
+        createdById: adminUser.id,
+      },
+    })
+    cleanup.push(async () => { await prisma.payrollPeriod.delete({ where: { id: pp.id } }).catch(() => {}) })
+
+    const period = await prisma.shopManagerIncentivePeriod.create({
+      data: {
+        payrollPeriodId: pp.id,
+        name: 'Input CRUD Test',
+        month: 8,
+        year: 2026,
+        status: 'OPEN',
+        createdById: adminUser.id,
+      },
+    })
+    cleanup.push(async () => { await prisma.shopManagerIncentivePeriod.delete({ where: { id: period.id } }).catch(() => {}) })
+
+    const input = await prisma.shopManagerIncentiveInput.create({
+      data: {
+        incentivePeriodId: period.id,
+        shopLocationId: shopThu.id,
+        shopManagerId: shopManagerEmp.id,
+        shopCriteria: 'GOLD',
+        qgaAbove90: true,
+        qgaQuantity: 150,
+        mmQoAbove90: true,
+        dsaAirtimeAchievementPercent: 85,
+        corridorStatus: true,
+        evdAbove100AndReconciled: true,
+        mpesaTargetAndReconciled: true,
+        mpesaFloatSold: 50000,
+        baSite: true,
+        ebuTargetAchieved: true,
+        ebuRevenueMade: true,
+        ebuAverageTopupAbove500: true,
+        ebuFirstMonthLfRevenue: 75000,
+        createdById: adminUser.id,
+      },
+    })
+    testInputId = input.id
+    cleanup.push(async () => { await prisma.shopManagerIncentiveInput.delete({ where: { id: input.id } }).catch(() => {}) })
+
+    assert('create input with valid shop location, shop criteria, sales fields', async () => {
+      return input.shopCriteria === 'GOLD' && input.qgaAbove90 === true && input.qgaQuantity === 150
+    })
+
+    // At-risk input
+    const atRiskInput = await prisma.shopManagerIncentiveInput.create({
+      data: {
+        incentivePeriodId: period.id,
+        shopLocationId: shopLio?.id || shopThu.id,
+        shopCriteria: 'AT_RISK',
+        qgaAbove90: true,
+        qgaQuantity: 100,
+        createdById: adminUser.id,
+      },
+    })
+    cleanup.push(async () => { await prisma.shopManagerIncentiveInput.delete({ where: { id: atRiskInput.id } }).catch(() => {}) })
+    assert('create input with At-risk criteria stores other fields', async () => {
+      return atRiskInput.shopCriteria === 'AT_RISK' && atRiskInput.qgaAbove90 === true && atRiskInput.qgaQuantity === 100
+    })
+
+    // Update input
+    const updatedInput = await prisma.shopManagerIncentiveInput.update({
+      where: { id: input.id },
+      data: { qgaQuantity: 200, responsibleRemarks: 'Updated for testing' },
+    })
+    assert('update input fields', async () => updatedInput.qgaQuantity === 200 && updatedInput.responsibleRemarks === 'Updated for testing')
+
+    // Unique constraint on (incentivePeriodId, shopLocationId)
+    try {
+      await prisma.shopManagerIncentiveInput.create({
         data: {
-          name: 'Test Period Feb 2026',
-          payrollPeriodId: closedPayrollPeriod.id,
-          month: 2,
-          year: 2026,
-          status: 'DRAFT',
-          createdById: hrAdminUser.id,
+          incentivePeriodId: period.id,
+          shopLocationId: shopThu.id,
+          shopManagerId: shopManagerEmp.id,
+          shopCriteria: 'SILVER',
+          createdById: adminUser.id,
         },
       })
-      secondPeriodId = period2.id
+      assert('unique constraint on incentivePeriodId + shopLocationId', async () => false)
+    } catch {
+      assert('unique constraint on incentivePeriodId + shopLocationId', async () => true)
     }
+
+    // Clean up for workflow tests
+    await prisma.shopManagerIncentiveInput.deleteMany({ where: { incentivePeriodId: period.id } }).catch(() => {})
+    await prisma.shopManagerIncentivePeriod.delete({ where: { id: period.id } }).catch(() => {})
+    await prisma.payrollPeriod.delete({ where: { id: pp.id } }).catch(() => {})
+    testInputId = null
   }
 
-  // ─── Incentive Period State Machine ──────────────────────────────────────
-  console.log('\n[Incentive Period State Machine]')
+  // ─── Calculation Rules ───────────────────────────────────────────────────
+  console.log('\n[Calculation Rules - QGA Bonus]')
 
-  if (createdPeriodId) {
-    const p1 = await prisma.shopManagerIncentivePeriod.update({
-      where: { id: createdPeriodId },
-      data: { status: 'OPEN_FOR_INPUT' },
+  assert('GOLD + qgaAbove90=true → qgaBonus = 5000', async () => {
+    const r = calculateShopManagerIncentive({ shopCriteria: 'GOLD', qgaAbove90: true, qgaQuantity: null, mmQoAbove90: null, dsaAirtimeAchievementPercent: null, corridorStatus: null, evdAbove100AndReconciled: null, mpesaTargetAndReconciled: null, mpesaFloatSold: null, baSite: null, ebuTargetAchieved: null, ebuRevenueMade: null, ebuAverageTopupAbove500: null, ebuFirstMonthLfRevenue: null })
+    return r.qgaBonus === 5000
+  })
+  assert('SILVER + qgaAbove90=true → qgaBonus = 3000', async () => {
+    const r = calculateShopManagerIncentive({ shopCriteria: 'SILVER', qgaAbove90: true, qgaQuantity: null, mmQoAbove90: null, dsaAirtimeAchievementPercent: null, corridorStatus: null, evdAbove100AndReconciled: null, mpesaTargetAndReconciled: null, mpesaFloatSold: null, baSite: null, ebuTargetAchieved: null, ebuRevenueMade: null, ebuAverageTopupAbove500: null, ebuFirstMonthLfRevenue: null })
+    return r.qgaBonus === 3000
+  })
+  assert('BRONZE + qgaAbove90=true → qgaBonus = 1500', async () => {
+    const r = calculateShopManagerIncentive({ shopCriteria: 'BRONZE', qgaAbove90: true, qgaQuantity: null, mmQoAbove90: null, dsaAirtimeAchievementPercent: null, corridorStatus: null, evdAbove100AndReconciled: null, mpesaTargetAndReconciled: null, mpesaFloatSold: null, baSite: null, ebuTargetAchieved: null, ebuRevenueMade: null, ebuAverageTopupAbove500: null, ebuFirstMonthLfRevenue: null })
+    return r.qgaBonus === 1500
+  })
+  assert('qgaAbove90=false → qgaBonus = 0', async () => {
+    const r = calculateShopManagerIncentive({ shopCriteria: 'GOLD', qgaAbove90: false, qgaQuantity: null, mmQoAbove90: null, dsaAirtimeAchievementPercent: null, corridorStatus: null, evdAbove100AndReconciled: null, mpesaTargetAndReconciled: null, mpesaFloatSold: null, baSite: null, ebuTargetAchieved: null, ebuRevenueMade: null, ebuAverageTopupAbove500: null, ebuFirstMonthLfRevenue: null })
+    return r.qgaBonus === 0
+  })
+
+  console.log('[Calculation Rules - QGA SIM Commission]')
+  assert('GOLD + qgaAbove90=true + qgaQuantity=100 → qgaSimCommission = 150', async () => {
+    const r = calculateShopManagerIncentive({ shopCriteria: 'GOLD', qgaAbove90: true, qgaQuantity: 100, mmQoAbove90: null, dsaAirtimeAchievementPercent: null, corridorStatus: null, evdAbove100AndReconciled: null, mpesaTargetAndReconciled: null, mpesaFloatSold: null, baSite: null, ebuTargetAchieved: null, ebuRevenueMade: null, ebuAverageTopupAbove500: null, ebuFirstMonthLfRevenue: null })
+    return r.qgaSimCommission === 150
+  })
+  assert('SILVER + qgaAbove90=true + qgaQuantity=100 → qgaSimCommission = 100', async () => {
+    const r = calculateShopManagerIncentive({ shopCriteria: 'SILVER', qgaAbove90: true, qgaQuantity: 100, mmQoAbove90: null, dsaAirtimeAchievementPercent: null, corridorStatus: null, evdAbove100AndReconciled: null, mpesaTargetAndReconciled: null, mpesaFloatSold: null, baSite: null, ebuTargetAchieved: null, ebuRevenueMade: null, ebuAverageTopupAbove500: null, ebuFirstMonthLfRevenue: null })
+    return r.qgaSimCommission === 100
+  })
+  assert('BRONZE + qgaAbove90=true + qgaQuantity=100 → qgaSimCommission = 0', async () => {
+    const r = calculateShopManagerIncentive({ shopCriteria: 'BRONZE', qgaAbove90: true, qgaQuantity: 100, mmQoAbove90: null, dsaAirtimeAchievementPercent: null, corridorStatus: null, evdAbove100AndReconciled: null, mpesaTargetAndReconciled: null, mpesaFloatSold: null, baSite: null, ebuTargetAchieved: null, ebuRevenueMade: null, ebuAverageTopupAbove500: null, ebuFirstMonthLfRevenue: null })
+    return r.qgaSimCommission === 0
+  })
+  assert('qgaAbove90=false → qgaSimCommission = 0', async () => {
+    const r = calculateShopManagerIncentive({ shopCriteria: 'GOLD', qgaAbove90: false, qgaQuantity: 100, mmQoAbove90: null, dsaAirtimeAchievementPercent: null, corridorStatus: null, evdAbove100AndReconciled: null, mpesaTargetAndReconciled: null, mpesaFloatSold: null, baSite: null, ebuTargetAchieved: null, ebuRevenueMade: null, ebuAverageTopupAbove500: null, ebuFirstMonthLfRevenue: null })
+    return r.qgaSimCommission === 0
+  })
+  assert('qgaAbove90=true + qgaQuantity=null → qgaSimCommission = 0', async () => {
+    const r = calculateShopManagerIncentive({ shopCriteria: 'GOLD', qgaAbove90: true, qgaQuantity: null, mmQoAbove90: null, dsaAirtimeAchievementPercent: null, corridorStatus: null, evdAbove100AndReconciled: null, mpesaTargetAndReconciled: null, mpesaFloatSold: null, baSite: null, ebuTargetAchieved: null, ebuRevenueMade: null, ebuAverageTopupAbove500: null, ebuFirstMonthLfRevenue: null })
+    return r.qgaSimCommission === 0
+  })
+
+  console.log('[Calculation Rules - EVD Bonus]')
+  assert('GOLD + evdAbove100AndReconciled=true → evdBonus = 3000', async () => {
+    const r = calculateShopManagerIncentive({ shopCriteria: 'GOLD', qgaAbove90: null, qgaQuantity: null, mmQoAbove90: null, dsaAirtimeAchievementPercent: null, corridorStatus: null, evdAbove100AndReconciled: true, mpesaTargetAndReconciled: null, mpesaFloatSold: null, baSite: null, ebuTargetAchieved: null, ebuRevenueMade: null, ebuAverageTopupAbove500: null, ebuFirstMonthLfRevenue: null })
+    return r.evdBonus === 3000
+  })
+  assert('SILVER + evdAbove100AndReconciled=true → evdBonus = 2000', async () => {
+    const r = calculateShopManagerIncentive({ shopCriteria: 'SILVER', qgaAbove90: null, qgaQuantity: null, mmQoAbove90: null, dsaAirtimeAchievementPercent: null, corridorStatus: null, evdAbove100AndReconciled: true, mpesaTargetAndReconciled: null, mpesaFloatSold: null, baSite: null, ebuTargetAchieved: null, ebuRevenueMade: null, ebuAverageTopupAbove500: null, ebuFirstMonthLfRevenue: null })
+    return r.evdBonus === 2000
+  })
+  assert('BRONZE + evdAbove100AndReconciled=true → evdBonus = 0', async () => {
+    const r = calculateShopManagerIncentive({ shopCriteria: 'BRONZE', qgaAbove90: null, qgaQuantity: null, mmQoAbove90: null, dsaAirtimeAchievementPercent: null, corridorStatus: null, evdAbove100AndReconciled: true, mpesaTargetAndReconciled: null, mpesaFloatSold: null, baSite: null, ebuTargetAchieved: null, ebuRevenueMade: null, ebuAverageTopupAbove500: null, ebuFirstMonthLfRevenue: null })
+    return r.evdBonus === 0
+  })
+  assert('evdAbove100AndReconciled=false → evdBonus = 0', async () => {
+    const r = calculateShopManagerIncentive({ shopCriteria: 'GOLD', qgaAbove90: null, qgaQuantity: null, mmQoAbove90: null, dsaAirtimeAchievementPercent: null, corridorStatus: null, evdAbove100AndReconciled: false, mpesaTargetAndReconciled: null, mpesaFloatSold: null, baSite: null, ebuTargetAchieved: null, ebuRevenueMade: null, ebuAverageTopupAbove500: null, ebuFirstMonthLfRevenue: null })
+    return r.evdBonus === 0
+  })
+
+  console.log('[Calculation Rules - M-PESA Commission]')
+  assert('GOLD + target=true + floatSold=100000 → mpesaCommission = 2000', async () => {
+    const r = calculateShopManagerIncentive({ shopCriteria: 'GOLD', qgaAbove90: null, qgaQuantity: null, mmQoAbove90: null, dsaAirtimeAchievementPercent: null, corridorStatus: null, evdAbove100AndReconciled: null, mpesaTargetAndReconciled: true, mpesaFloatSold: 100000, baSite: null, ebuTargetAchieved: null, ebuRevenueMade: null, ebuAverageTopupAbove500: null, ebuFirstMonthLfRevenue: null })
+    return r.mpesaCommission === 2000
+  })
+  assert('SILVER + target=true + floatSold=100000 → mpesaCommission = 2000', async () => {
+    const r = calculateShopManagerIncentive({ shopCriteria: 'SILVER', qgaAbove90: null, qgaQuantity: null, mmQoAbove90: null, dsaAirtimeAchievementPercent: null, corridorStatus: null, evdAbove100AndReconciled: null, mpesaTargetAndReconciled: true, mpesaFloatSold: 100000, baSite: null, ebuTargetAchieved: null, ebuRevenueMade: null, ebuAverageTopupAbove500: null, ebuFirstMonthLfRevenue: null })
+    return r.mpesaCommission === 2000
+  })
+  assert('BRONZE + target=true + floatSold=100000 → mpesaCommission = 0', async () => {
+    const r = calculateShopManagerIncentive({ shopCriteria: 'BRONZE', qgaAbove90: null, qgaQuantity: null, mmQoAbove90: null, dsaAirtimeAchievementPercent: null, corridorStatus: null, evdAbove100AndReconciled: null, mpesaTargetAndReconciled: true, mpesaFloatSold: 100000, baSite: null, ebuTargetAchieved: null, ebuRevenueMade: null, ebuAverageTopupAbove500: null, ebuFirstMonthLfRevenue: null })
+    return r.mpesaCommission === 0
+  })
+  assert('mpesaTargetAndReconciled=false → mpesaCommission = 0', async () => {
+    const r = calculateShopManagerIncentive({ shopCriteria: 'GOLD', qgaAbove90: null, qgaQuantity: null, mmQoAbove90: null, dsaAirtimeAchievementPercent: null, corridorStatus: null, evdAbove100AndReconciled: null, mpesaTargetAndReconciled: false, mpesaFloatSold: 100000, baSite: null, ebuTargetAchieved: null, ebuRevenueMade: null, ebuAverageTopupAbove500: null, ebuFirstMonthLfRevenue: null })
+    return r.mpesaCommission === 0
+  })
+  assert('target=true + floatSold=null → mpesaCommission = 0', async () => {
+    const r = calculateShopManagerIncentive({ shopCriteria: 'GOLD', qgaAbove90: null, qgaQuantity: null, mmQoAbove90: null, dsaAirtimeAchievementPercent: null, corridorStatus: null, evdAbove100AndReconciled: null, mpesaTargetAndReconciled: true, mpesaFloatSold: null, baSite: null, ebuTargetAchieved: null, ebuRevenueMade: null, ebuAverageTopupAbove500: null, ebuFirstMonthLfRevenue: null })
+    return r.mpesaCommission === 0
+  })
+
+  console.log('[Calculation Rules - BA/Site Bonus]')
+  assert('GOLD + baSite=true → baSiteBonus = 4000', async () => {
+    const r = calculateShopManagerIncentive({ shopCriteria: 'GOLD', qgaAbove90: null, qgaQuantity: null, mmQoAbove90: null, dsaAirtimeAchievementPercent: null, corridorStatus: null, evdAbove100AndReconciled: null, mpesaTargetAndReconciled: null, mpesaFloatSold: null, baSite: true, ebuTargetAchieved: null, ebuRevenueMade: null, ebuAverageTopupAbove500: null, ebuFirstMonthLfRevenue: null })
+    return r.baSiteBonus === 4000
+  })
+  assert('SILVER + baSite=true → baSiteBonus = 2000', async () => {
+    const r = calculateShopManagerIncentive({ shopCriteria: 'SILVER', qgaAbove90: null, qgaQuantity: null, mmQoAbove90: null, dsaAirtimeAchievementPercent: null, corridorStatus: null, evdAbove100AndReconciled: null, mpesaTargetAndReconciled: null, mpesaFloatSold: null, baSite: true, ebuTargetAchieved: null, ebuRevenueMade: null, ebuAverageTopupAbove500: null, ebuFirstMonthLfRevenue: null })
+    return r.baSiteBonus === 2000
+  })
+  assert('BRONZE + baSite=true → baSiteBonus = 0', async () => {
+    const r = calculateShopManagerIncentive({ shopCriteria: 'BRONZE', qgaAbove90: null, qgaQuantity: null, mmQoAbove90: null, dsaAirtimeAchievementPercent: null, corridorStatus: null, evdAbove100AndReconciled: null, mpesaTargetAndReconciled: null, mpesaFloatSold: null, baSite: true, ebuTargetAchieved: null, ebuRevenueMade: null, ebuAverageTopupAbove500: null, ebuFirstMonthLfRevenue: null })
+    return r.baSiteBonus === 0
+  })
+  assert('baSite=false → baSiteBonus = 0', async () => {
+    const r = calculateShopManagerIncentive({ shopCriteria: 'GOLD', qgaAbove90: null, qgaQuantity: null, mmQoAbove90: null, dsaAirtimeAchievementPercent: null, corridorStatus: null, evdAbove100AndReconciled: null, mpesaTargetAndReconciled: null, mpesaFloatSold: null, baSite: false, ebuTargetAchieved: null, ebuRevenueMade: null, ebuAverageTopupAbove500: null, ebuFirstMonthLfRevenue: null })
+    return r.baSiteBonus === 0
+  })
+
+  console.log('[Calculation Rules - DSA Achievement Bonus]')
+  assert('dsaAirtimeAchievementPercent > 90 → dsaAchievementBonus = 2000', async () => {
+    const r = calculateShopManagerIncentive({ shopCriteria: 'GOLD', qgaAbove90: null, qgaQuantity: null, mmQoAbove90: null, dsaAirtimeAchievementPercent: 95, corridorStatus: null, evdAbove100AndReconciled: null, mpesaTargetAndReconciled: null, mpesaFloatSold: null, baSite: null, ebuTargetAchieved: null, ebuRevenueMade: null, ebuAverageTopupAbove500: null, ebuFirstMonthLfRevenue: null })
+    return r.dsaAchievementBonus === 2000
+  })
+  assert('dsa 60-89% → dsaAchievementBonus = 1500', async () => {
+    const r = calculateShopManagerIncentive({ shopCriteria: 'GOLD', qgaAbove90: null, qgaQuantity: null, mmQoAbove90: null, dsaAirtimeAchievementPercent: 75, corridorStatus: null, evdAbove100AndReconciled: null, mpesaTargetAndReconciled: null, mpesaFloatSold: null, baSite: null, ebuTargetAchieved: null, ebuRevenueMade: null, ebuAverageTopupAbove500: null, ebuFirstMonthLfRevenue: null })
+    return r.dsaAchievementBonus === 1500
+  })
+  assert('dsa 50-59% → dsaAchievementBonus = 1000', async () => {
+    const r = calculateShopManagerIncentive({ shopCriteria: 'GOLD', qgaAbove90: null, qgaQuantity: null, mmQoAbove90: null, dsaAirtimeAchievementPercent: 55, corridorStatus: null, evdAbove100AndReconciled: null, mpesaTargetAndReconciled: null, mpesaFloatSold: null, baSite: null, ebuTargetAchieved: null, ebuRevenueMade: null, ebuAverageTopupAbove500: null, ebuFirstMonthLfRevenue: null })
+    return r.dsaAchievementBonus === 1000
+  })
+  assert('dsa < 50% → dsaAchievementBonus = 0', async () => {
+    const r = calculateShopManagerIncentive({ shopCriteria: 'GOLD', qgaAbove90: null, qgaQuantity: null, mmQoAbove90: null, dsaAirtimeAchievementPercent: 30, corridorStatus: null, evdAbove100AndReconciled: null, mpesaTargetAndReconciled: null, mpesaFloatSold: null, baSite: null, ebuTargetAchieved: null, ebuRevenueMade: null, ebuAverageTopupAbove500: null, ebuFirstMonthLfRevenue: null })
+    return r.dsaAchievementBonus === 0
+  })
+  assert('dsa null → dsaAchievementBonus = 0', async () => {
+    const r = calculateShopManagerIncentive({ shopCriteria: 'GOLD', qgaAbove90: null, qgaQuantity: null, mmQoAbove90: null, dsaAirtimeAchievementPercent: null, corridorStatus: null, evdAbove100AndReconciled: null, mpesaTargetAndReconciled: null, mpesaFloatSold: null, baSite: null, ebuTargetAchieved: null, ebuRevenueMade: null, ebuAverageTopupAbove500: null, ebuFirstMonthLfRevenue: null })
+    return r.dsaAchievementBonus === 0
+  })
+
+  console.log('[Calculation Rules - QO Bonus]')
+  assert('mmQoAbove90=true → qoBonus = 4000', async () => {
+    const r = calculateShopManagerIncentive({ shopCriteria: 'GOLD', qgaAbove90: null, qgaQuantity: null, mmQoAbove90: true, dsaAirtimeAchievementPercent: null, corridorStatus: null, evdAbove100AndReconciled: null, mpesaTargetAndReconciled: null, mpesaFloatSold: null, baSite: null, ebuTargetAchieved: null, ebuRevenueMade: null, ebuAverageTopupAbove500: null, ebuFirstMonthLfRevenue: null })
+    return r.qoBonus === 4000
+  })
+  assert('mmQoAbove90=false → qoBonus = 0', async () => {
+    const r = calculateShopManagerIncentive({ shopCriteria: 'GOLD', qgaAbove90: null, qgaQuantity: null, mmQoAbove90: false, dsaAirtimeAchievementPercent: null, corridorStatus: null, evdAbove100AndReconciled: null, mpesaTargetAndReconciled: null, mpesaFloatSold: null, baSite: null, ebuTargetAchieved: null, ebuRevenueMade: null, ebuAverageTopupAbove500: null, ebuFirstMonthLfRevenue: null })
+    return r.qoBonus === 0
+  })
+
+  console.log('[Calculation Rules - EBU Activation Bonus]')
+  assert('GOLD + all 3 EBU conditions → ebuActivationBonus = 3000', async () => {
+    const r = calculateShopManagerIncentive({ shopCriteria: 'GOLD', qgaAbove90: null, qgaQuantity: null, mmQoAbove90: null, dsaAirtimeAchievementPercent: null, corridorStatus: null, evdAbove100AndReconciled: null, mpesaTargetAndReconciled: null, mpesaFloatSold: null, baSite: null, ebuTargetAchieved: true, ebuRevenueMade: true, ebuAverageTopupAbove500: true, ebuFirstMonthLfRevenue: null })
+    return r.ebuActivationBonus === 3000
+  })
+  assert('SILVER + all 3 EBU conditions → ebuActivationBonus = 1500', async () => {
+    const r = calculateShopManagerIncentive({ shopCriteria: 'SILVER', qgaAbove90: null, qgaQuantity: null, mmQoAbove90: null, dsaAirtimeAchievementPercent: null, corridorStatus: null, evdAbove100AndReconciled: null, mpesaTargetAndReconciled: null, mpesaFloatSold: null, baSite: null, ebuTargetAchieved: true, ebuRevenueMade: true, ebuAverageTopupAbove500: true, ebuFirstMonthLfRevenue: null })
+    return r.ebuActivationBonus === 1500
+  })
+  assert('BRONZE + all 3 EBU conditions → ebuActivationBonus = 500', async () => {
+    const r = calculateShopManagerIncentive({ shopCriteria: 'BRONZE', qgaAbove90: null, qgaQuantity: null, mmQoAbove90: null, dsaAirtimeAchievementPercent: null, corridorStatus: null, evdAbove100AndReconciled: null, mpesaTargetAndReconciled: null, mpesaFloatSold: null, baSite: null, ebuTargetAchieved: true, ebuRevenueMade: true, ebuAverageTopupAbove500: true, ebuFirstMonthLfRevenue: null })
+    return r.ebuActivationBonus === 500
+  })
+  assert('ebuTargetAchieved=false → ebuActivationBonus = 0', async () => {
+    const r = calculateShopManagerIncentive({ shopCriteria: 'GOLD', qgaAbove90: null, qgaQuantity: null, mmQoAbove90: null, dsaAirtimeAchievementPercent: null, corridorStatus: null, evdAbove100AndReconciled: null, mpesaTargetAndReconciled: null, mpesaFloatSold: null, baSite: null, ebuTargetAchieved: false, ebuRevenueMade: true, ebuAverageTopupAbove500: true, ebuFirstMonthLfRevenue: null })
+    return r.ebuActivationBonus === 0
+  })
+  assert('ebuRevenueMade=false → ebuActivationBonus = 0', async () => {
+    const r = calculateShopManagerIncentive({ shopCriteria: 'GOLD', qgaAbove90: null, qgaQuantity: null, mmQoAbove90: null, dsaAirtimeAchievementPercent: null, corridorStatus: null, evdAbove100AndReconciled: null, mpesaTargetAndReconciled: null, mpesaFloatSold: null, baSite: null, ebuTargetAchieved: true, ebuRevenueMade: false, ebuAverageTopupAbove500: true, ebuFirstMonthLfRevenue: null })
+    return r.ebuActivationBonus === 0
+  })
+  assert('ebuAverageTopupAbove500=false → ebuActivationBonus = 0', async () => {
+    const r = calculateShopManagerIncentive({ shopCriteria: 'GOLD', qgaAbove90: null, qgaQuantity: null, mmQoAbove90: null, dsaAirtimeAchievementPercent: null, corridorStatus: null, evdAbove100AndReconciled: null, mpesaTargetAndReconciled: null, mpesaFloatSold: null, baSite: null, ebuTargetAchieved: true, ebuRevenueMade: true, ebuAverageTopupAbove500: false, ebuFirstMonthLfRevenue: null })
+    return r.ebuActivationBonus === 0
+  })
+  assert('all 3 EBU conditions null → ebuActivationBonus = 0', async () => {
+    const r = calculateShopManagerIncentive({ shopCriteria: 'GOLD', qgaAbove90: null, qgaQuantity: null, mmQoAbove90: null, dsaAirtimeAchievementPercent: null, corridorStatus: null, evdAbove100AndReconciled: null, mpesaTargetAndReconciled: null, mpesaFloatSold: null, baSite: null, ebuTargetAchieved: null, ebuRevenueMade: null, ebuAverageTopupAbove500: null, ebuFirstMonthLfRevenue: null })
+    return r.ebuActivationBonus === 0
+  })
+
+  console.log('[Calculation Rules - EBU Revenue Share]')
+  assert('GOLD + revenue=true + firstMonthLF=100000 → ebuRevenueShare = 25000', async () => {
+    const r = calculateShopManagerIncentive({ shopCriteria: 'GOLD', qgaAbove90: null, qgaQuantity: null, mmQoAbove90: null, dsaAirtimeAchievementPercent: null, corridorStatus: null, evdAbove100AndReconciled: null, mpesaTargetAndReconciled: null, mpesaFloatSold: null, baSite: null, ebuTargetAchieved: null, ebuRevenueMade: true, ebuAverageTopupAbove500: null, ebuFirstMonthLfRevenue: 100000 })
+    return r.ebuRevenueShare === 25000
+  })
+  assert('SILVER + revenue=true + firstMonthLF=100000 → ebuRevenueShare = 15000', async () => {
+    const r = calculateShopManagerIncentive({ shopCriteria: 'SILVER', qgaAbove90: null, qgaQuantity: null, mmQoAbove90: null, dsaAirtimeAchievementPercent: null, corridorStatus: null, evdAbove100AndReconciled: null, mpesaTargetAndReconciled: null, mpesaFloatSold: null, baSite: null, ebuTargetAchieved: null, ebuRevenueMade: true, ebuAverageTopupAbove500: null, ebuFirstMonthLfRevenue: 100000 })
+    return r.ebuRevenueShare === 15000
+  })
+  assert('BRONZE + revenue=true + firstMonthLF=100000 → ebuRevenueShare = 0', async () => {
+    const r = calculateShopManagerIncentive({ shopCriteria: 'BRONZE', qgaAbove90: null, qgaQuantity: null, mmQoAbove90: null, dsaAirtimeAchievementPercent: null, corridorStatus: null, evdAbove100AndReconciled: null, mpesaTargetAndReconciled: null, mpesaFloatSold: null, baSite: null, ebuTargetAchieved: null, ebuRevenueMade: true, ebuAverageTopupAbove500: null, ebuFirstMonthLfRevenue: 100000 })
+    return r.ebuRevenueShare === 0
+  })
+  assert('ebuRevenueMade=false → ebuRevenueShare = 0', async () => {
+    const r = calculateShopManagerIncentive({ shopCriteria: 'GOLD', qgaAbove90: null, qgaQuantity: null, mmQoAbove90: null, dsaAirtimeAchievementPercent: null, corridorStatus: null, evdAbove100AndReconciled: null, mpesaTargetAndReconciled: null, mpesaFloatSold: null, baSite: null, ebuTargetAchieved: null, ebuRevenueMade: false, ebuAverageTopupAbove500: null, ebuFirstMonthLfRevenue: 100000 })
+    return r.ebuRevenueShare === 0
+  })
+  assert('firstMonthLF=null → ebuRevenueShare = 0', async () => {
+    const r = calculateShopManagerIncentive({ shopCriteria: 'GOLD', qgaAbove90: null, qgaQuantity: null, mmQoAbove90: null, dsaAirtimeAchievementPercent: null, corridorStatus: null, evdAbove100AndReconciled: null, mpesaTargetAndReconciled: null, mpesaFloatSold: null, baSite: null, ebuTargetAchieved: null, ebuRevenueMade: true, ebuAverageTopupAbove500: null, ebuFirstMonthLfRevenue: null })
+    return r.ebuRevenueShare === 0
+  })
+  assert('GOLD + revenue=true + firstMonthLF=50000 → ebuRevenueShare = 12500', async () => {
+    const r = calculateShopManagerIncentive({ shopCriteria: 'GOLD', qgaAbove90: null, qgaQuantity: null, mmQoAbove90: null, dsaAirtimeAchievementPercent: null, corridorStatus: null, evdAbove100AndReconciled: null, mpesaTargetAndReconciled: null, mpesaFloatSold: null, baSite: null, ebuTargetAchieved: null, ebuRevenueMade: true, ebuAverageTopupAbove500: null, ebuFirstMonthLfRevenue: 50000 })
+    return r.ebuRevenueShare === 12500
+  })
+  assert('GOLD + revenue=true + firstMonthLF=75000 → ebuRevenueShare = 18750', async () => {
+    const r = calculateShopManagerIncentive({ shopCriteria: 'GOLD', qgaAbove90: null, qgaQuantity: null, mmQoAbove90: null, dsaAirtimeAchievementPercent: null, corridorStatus: null, evdAbove100AndReconciled: null, mpesaTargetAndReconciled: null, mpesaFloatSold: null, baSite: null, ebuTargetAchieved: null, ebuRevenueMade: true, ebuAverageTopupAbove500: null, ebuFirstMonthLfRevenue: 75000 })
+    return r.ebuRevenueShare === 18750
+  })
+
+  // ─── Calculation Rules - AT_RISK ─────────────────────────────────────────
+  console.log('[Calculation Rules - AT_RISK]')
+  assert('AT_RISK all components = 0', async () => {
+    const r = calculateShopManagerIncentive({ shopCriteria: 'AT_RISK', qgaAbove90: true, qgaQuantity: 100, mmQoAbove90: true, dsaAirtimeAchievementPercent: 95, corridorStatus: true, evdAbove100AndReconciled: true, mpesaTargetAndReconciled: true, mpesaFloatSold: 100000, baSite: true, ebuTargetAchieved: true, ebuRevenueMade: true, ebuAverageTopupAbove500: true, ebuFirstMonthLfRevenue: 100000 })
+    return r.qgaBonus === 0 && r.qgaSimCommission === 0 && r.evdBonus === 0 && r.mpesaCommission === 0 && r.baSiteBonus === 0 && r.dsaAchievementBonus === 0 && r.qoBonus === 0 && r.ebuActivationBonus === 0 && r.ebuRevenueShare === 0 && r.totalIncentive === 0
+  })
+  assert('AT_RISK calculation note', async () => {
+    const r = calculateShopManagerIncentive({ shopCriteria: 'AT_RISK', qgaAbove90: null, qgaQuantity: null, mmQoAbove90: null, dsaAirtimeAchievementPercent: null, corridorStatus: null, evdAbove100AndReconciled: null, mpesaTargetAndReconciled: null, mpesaFloatSold: null, baSite: null, ebuTargetAchieved: null, ebuRevenueMade: null, ebuAverageTopupAbove500: null, ebuFirstMonthLfRevenue: null })
+    return r.calculationNote === 'At-risk shop: all incentive components are zero.'
+  })
+
+  // ─── Calculation Rules - Total ───────────────────────────────────────────
+  console.log('[Calculation Rules - Total]')
+  assert('total = sum of all 9 components (GOLD, all positive)', async () => {
+    const r = calculateShopManagerIncentive({
+      shopCriteria: 'GOLD', qgaAbove90: true, qgaQuantity: 100,
+      corridorStatus: true,
+      evdAbove100AndReconciled: true,
+      mpesaTargetAndReconciled: true, mpesaFloatSold: 100000,
+      baSite: true,
+      dsaAirtimeAchievementPercent: 95,
+      mmQoAbove90: true,
+      ebuTargetAchieved: true, ebuRevenueMade: true, ebuAverageTopupAbove500: true, ebuFirstMonthLfRevenue: 100000,
     })
-    assert('can transition DRAFT → OPEN_FOR_INPUT', async () => p1.status === 'OPEN_FOR_INPUT')
+    // 5000 + 150 + 3000 + 2000 + 4000 + 2000 + 4000 + 3000 + 25000 = 48150
+    return r.totalIncentive === 48150
+  })
 
-    const p2 = await prisma.shopManagerIncentivePeriod.update({
-      where: { id: createdPeriodId },
-      data: { status: 'CANCELLED' },
-    })
-    assert('can cancel from OPEN_FOR_INPUT', async () => p2.status === 'CANCELLED')
+  // ─── Workflow ────────────────────────────────────────────────────────────
+  console.log('\n[Workflow]')
 
-    await prisma.shopManagerIncentivePeriod.update({
-      where: { id: createdPeriodId },
-      data: { status: 'DRAFT' },
-    })
-    const p3 = await prisma.shopManagerIncentivePeriod.update({
-      where: { id: createdPeriodId },
-      data: { status: 'CANCELLED' },
-    })
-    assert('can cancel from DRAFT', async () => p3.status === 'CANCELLED')
-
-    await prisma.shopManagerIncentivePeriod.update({
-      where: { id: createdPeriodId },
-      data: { status: 'DRAFT' },
-    })
-  }
-
-  // ─── Performance Input with Scope ────────────────────────────────────────
-  console.log('\n[Performance Input]')
-
-  let testShopId: string | null = null
-  let testInputId: string | null = null
-
-  if (hrAdminUser && region) {
-    const testShop = await prisma.location.create({
-      data: { name: 'Incentive Test Shop', code: 'TINC_' + Date.now(), type: 'SHOP', parentId: area?.id || region.id, isActive: true },
-    })
-    testShopId = testShop.id
-
-    await prisma.shopProfile.create({
+  if (adminUser && shopThu && shopManagerEmp) {
+    const wfPayrollPeriod = await prisma.payrollPeriod.create({
       data: {
-        shopLocationId: testShop.id,
-        defaultShopManagerId: activeShopManager?.id || null,
-        corridorType: 'CORRIDOR',
-        createdById: hrAdminUser.id,
+        periodName: 'Workflow Test Period',
+        periodStart: new Date('2026-09-01'),
+        periodEnd: new Date('2026-09-30'),
+        payDate: new Date('2026-10-05'),
+        createdById: adminUser.id,
       },
     })
 
-    await prisma.shopCriteriaStatusHistory.create({
-      data: { shopLocationId: testShop.id, criteria: 'GOLD', effectiveFrom: new Date(), updatedById: hrAdminUser.id },
+    const wfPeriod = await prisma.shopManagerIncentivePeriod.create({
+      data: {
+        payrollPeriodId: wfPayrollPeriod.id,
+        name: 'Workflow Test Sep 2026',
+        month: 9,
+        year: 2026,
+        status: 'DRAFT',
+        createdById: adminUser.id,
+      },
+    })
+    cleanup.push(async () => { await prisma.shopManagerIncentivePeriod.delete({ where: { id: wfPeriod.id } }).catch(() => {}) })
+    cleanup.push(async () => { await prisma.payrollPeriod.delete({ where: { id: wfPayrollPeriod.id } }).catch(() => {}) })
+
+    assert('workflow: create period with DRAFT', async () => wfPeriod.status === 'DRAFT')
+
+    await prisma.shopManagerIncentivePeriod.update({ where: { id: wfPeriod.id }, data: { status: 'OPEN' } })
+    assert('workflow: open period (DRAFT → OPEN)', async () => {
+      const p = await prisma.shopManagerIncentivePeriod.findUnique({ where: { id: wfPeriod.id } })
+      return p?.status === 'OPEN'
     })
 
-    if (createdPeriodId) {
-      const input = await prisma.shopManagerPerformanceInput.create({
-        data: {
-          incentivePeriodId: createdPeriodId,
-          shopLocationId: testShop.id,
-          shopManagerId: activeShopManager?.id || null,
-          shopCriteria: 'GOLD',
-          corridorType: 'CORRIDOR',
-          qgaAchievementPercent: 95,
-          qgaCount: 50,
-          evdAchievementPercent: 120,
-          evdReconciled: true,
-          baSiteRequirementMet: true,
-          mpesaFloatSold: 100000,
-          mpesaTargetAchieved: true,
-          mpesaReconciled: true,
-          dsaAirtimeAchievementPercent: 85,
-          mmQoTargetPercent: 92,
-          ebuTargetAchieved: true,
-          ebuRevenue: 50000,
-          ebuAverageTopup: 600,
-          ebuFirstMonthLeapfrogRevenue: 30000,
-          inputStatus: 'DRAFT',
-          createdById: hrAdminUser.id,
-        },
-      })
-      testInputId = input.id
-      assert('can create performance input', async () => !!input.id && input.inputStatus === 'DRAFT')
+    const wfInput = await prisma.shopManagerIncentiveInput.create({
+      data: {
+        incentivePeriodId: wfPeriod.id,
+        shopLocationId: shopThu.id,
+        shopManagerId: shopManagerEmp.id,
+        shopCriteria: 'GOLD',
+        qgaAbove90: true,
+        qgaQuantity: 100,
+        mmQoAbove90: true,
+        dsaAirtimeAchievementPercent: 95,
+        corridorStatus: true,
+        evdAbove100AndReconciled: true,
+        mpesaTargetAndReconciled: true,
+        mpesaFloatSold: 100000,
+        baSite: true,
+        ebuTargetAchieved: true,
+        ebuRevenueMade: true,
+        ebuAverageTopupAbove500: true,
+        ebuFirstMonthLfRevenue: 100000,
+        createdById: adminUser.id,
+      },
+    })
+    cleanup.push(async () => { await prisma.shopManagerIncentiveInput.delete({ where: { id: wfInput.id } }).catch(() => {}) })
+    assert('workflow: create input', async () => !!wfInput.id)
 
-      const updated = await prisma.shopManagerPerformanceInput.update({
-        where: { id: input.id },
-        data: { notes: 'Updated notes' },
-      })
-      assert('can update input when DRAFT', async () => updated.notes === 'Updated notes')
-    }
+    // Calculate
+    const calcResult = await calculateAllShopManagerIncentives(wfPeriod.id)
+    assert('workflow: calculate produces results', async () => calcResult.calculations.length > 0)
+    assert('workflow: calculate sets status to CALCULATED', async () => calcResult.status === 'CALCULATED')
+
+    const calcRecords = await prisma.shopManagerIncentiveCalculation.findMany({ where: { incentivePeriodId: wfPeriod.id } })
+    assert('workflow: calculation records exist', async () => calcRecords.length > 0)
+    cleanup.push(async () => { await prisma.shopManagerIncentiveCalculation.deleteMany({ where: { incentivePeriodId: wfPeriod.id } }).catch(() => {}) })
+
+    // Verify component values in calculation
+    const calc = calcRecords[0]
+    assert('workflow: qgaBonus stored correctly', async () => Number(calc.qgaBonus) === 5000)
+    assert('workflow: qgaSimCommission stored correctly', async () => Number(calc.qgaSimCommission) === 150)
+    assert('workflow: totalIncentive stored correctly', async () => Number(calc.totalIncentive) === 48150)
+
+    // Send to payroll
+    const payrollResult = await sendIncentivesToPayrollInputs(wfPeriod.id)
+    assert('workflow: sendToPayroll processes calculations', async () => payrollResult.calculationsProcessed > 0)
+
+    const payrollInputs = await prisma.payrollInput.findMany({
+      where: { payrollPeriodId: wfPayrollPeriod.id, employeeId: shopManagerEmp.id },
+    })
+    assert('workflow: payroll input records exist', async () => payrollInputs.length > 0)
+    cleanup.push(async () => { await prisma.payrollInput.deleteMany({ where: { payrollPeriodId: wfPayrollPeriod.id } }).catch(() => {}) })
+
+    // Cleanup workflow data
+    await prisma.shopManagerIncentiveCalculation.deleteMany({ where: { incentivePeriodId: wfPeriod.id } }).catch(() => {})
+    await prisma.payrollInput.deleteMany({ where: { payrollPeriodId: wfPayrollPeriod.id } }).catch(() => {})
+    await prisma.shopManagerIncentiveInput.deleteMany({ where: { incentivePeriodId: wfPeriod.id } }).catch(() => {})
+    await prisma.shopManagerIncentivePeriod.delete({ where: { id: wfPeriod.id } }).catch(() => {})
+    await prisma.payrollPeriod.delete({ where: { id: wfPayrollPeriod.id } }).catch(() => {})
   }
 
-  // ─── Input State Transitions ────────────────────────────────────────────
-  console.log('\n[Input State Transitions]')
-
-  if (testInputId) {
-    const s1 = await prisma.shopManagerPerformanceInput.update({
-      where: { id: testInputId },
-      data: { inputStatus: 'SUBMITTED', submittedAt: new Date(), submittedById: hrAdminUser?.id || null },
-    })
-    assert('can submit input DRAFT → SUBMITTED', async () => s1.inputStatus === 'SUBMITTED')
-
-    const s2 = await prisma.shopManagerPerformanceInput.update({
-      where: { id: testInputId },
-      data: { inputStatus: 'RETURNED', reviewedAt: new Date(), reviewedById: hrAdminUser?.id || null },
-    })
-    assert('can return input SUBMITTED → RETURNED', async () => s2.inputStatus === 'RETURNED')
-
-    const s3 = await prisma.shopManagerPerformanceInput.update({
-      where: { id: testInputId },
-      data: { inputStatus: 'SUBMITTED', submittedAt: new Date(), submittedById: hrAdminUser?.id || null },
-    })
-    assert('can resubmit RETURNED → SUBMITTED', async () => s3.inputStatus === 'SUBMITTED')
-
-    const s4 = await prisma.shopManagerPerformanceInput.update({
-      where: { id: testInputId },
-      data: { inputStatus: 'REJECTED', reviewedAt: new Date(), reviewedById: hrAdminUser?.id || null },
-    })
-    assert('can reject input SUBMITTED → REJECTED', async () => s4.inputStatus === 'REJECTED')
-
-    await prisma.shopManagerPerformanceInput.update({
-      where: { id: testInputId },
-      data: { inputStatus: 'SUBMITTED', submittedAt: new Date(), submittedById: hrAdminUser?.id || null },
-    })
-
-    const s5 = await prisma.shopManagerPerformanceInput.update({
-      where: { id: testInputId },
-      data: { inputStatus: 'ACCEPTED', reviewedAt: new Date(), reviewedById: hrAdminUser?.id || null },
-    })
-    assert('can accept input SUBMITTED → ACCEPTED', async () => s5.inputStatus === 'ACCEPTED')
-  }
-
-  // ─── Calculation Rules ──────────────────────────────────────────────────
-  console.log('\n[Calculation Rules: QGA Bonus]')
-
-  const qgaGold = await calculateShopManagerIncentive({
-    shopCriteria: 'GOLD', corridorType: 'CORRIDOR',
-    qgaAchievementPercent: 95, qgaCount: 50,
-    evdAchievementPercent: null, evdReconciled: null,
-    baSiteRequirementMet: null,
-    mpesaFloatSold: null, mpesaTargetAchieved: null, mpesaReconciled: null,
-    dsaAirtimeAchievementPercent: null,
-    mmQoTargetPercent: null,
-    ebuTargetAchieved: null, ebuRevenue: null, ebuAverageTopup: null, ebuFirstMonthLeapfrogRevenue: null,
-  })
-  const qgaGoldComp = qgaGold.components.find(c => c.componentCode === 'QGA_BONUS')
-  assert('QGA Bonus GOLD >90% = 5000', async () => qgaGoldComp?.amount === 5000)
-
-  const qgaSilver = await calculateShopManagerIncentive({
-    shopCriteria: 'SILVER', corridorType: 'CORRIDOR',
-    qgaAchievementPercent: 95, qgaCount: 50,
-    evdAchievementPercent: null, evdReconciled: null,
-    baSiteRequirementMet: null,
-    mpesaFloatSold: null, mpesaTargetAchieved: null, mpesaReconciled: null,
-    dsaAirtimeAchievementPercent: null,
-    mmQoTargetPercent: null,
-    ebuTargetAchieved: null, ebuRevenue: null, ebuAverageTopup: null, ebuFirstMonthLeapfrogRevenue: null,
-  })
-  const qgaSilverComp = qgaSilver.components.find(c => c.componentCode === 'QGA_BONUS')
-  assert('QGA Bonus SILVER >90% = 3000', async () => qgaSilverComp?.amount === 3000)
-
-  const qgaBronze = await calculateShopManagerIncentive({
-    shopCriteria: 'BRONZE', corridorType: 'CORRIDOR',
-    qgaAchievementPercent: 95, qgaCount: 50,
-    evdAchievementPercent: null, evdReconciled: null,
-    baSiteRequirementMet: null,
-    mpesaFloatSold: null, mpesaTargetAchieved: null, mpesaReconciled: null,
-    dsaAirtimeAchievementPercent: null,
-    mmQoTargetPercent: null,
-    ebuTargetAchieved: null, ebuRevenue: null, ebuAverageTopup: null, ebuFirstMonthLeapfrogRevenue: null,
-  })
-  const qgaBronzeComp = qgaBronze.components.find(c => c.componentCode === 'QGA_BONUS')
-  assert('QGA Bonus BRONZE >90% = 1500', async () => qgaBronzeComp?.amount === 1500)
-
-  const qgaNoBonus = await calculateShopManagerIncentive({
-    shopCriteria: 'GOLD', corridorType: 'CORRIDOR',
-    qgaAchievementPercent: 80, qgaCount: 50,
-    evdAchievementPercent: null, evdReconciled: null,
-    baSiteRequirementMet: null,
-    mpesaFloatSold: null, mpesaTargetAchieved: null, mpesaReconciled: null,
-    dsaAirtimeAchievementPercent: null,
-    mmQoTargetPercent: null,
-    ebuTargetAchieved: null, ebuRevenue: null, ebuAverageTopup: null, ebuFirstMonthLeapfrogRevenue: null,
-  })
-  assert('QGA Bonus ≤90% = 0', async () => qgaNoBonus.totalAmount === 0)
-
-  console.log('\n[Calculation Rules: QGA SIM Commission]')
-  const qgaSimGold = await calculateShopManagerIncentive({
-    shopCriteria: 'GOLD', corridorType: 'CORRIDOR',
-    qgaAchievementPercent: 95, qgaCount: 100,
-    evdAchievementPercent: null, evdReconciled: null,
-    baSiteRequirementMet: null,
-    mpesaFloatSold: null, mpesaTargetAchieved: null, mpesaReconciled: null,
-    dsaAirtimeAchievementPercent: null,
-    mmQoTargetPercent: null,
-    ebuTargetAchieved: null, ebuRevenue: null, ebuAverageTopup: null, ebuFirstMonthLeapfrogRevenue: null,
-  })
-  const qgaSimGoldComp = qgaSimGold.components.find(c => c.componentCode === 'QGA_SIM_COMMISSION')
-  assert('QGA SIM GOLD = 100×1.5 = 150', async () => qgaSimGoldComp?.amount === 150)
-
-  const qgaSimSilver = await calculateShopManagerIncentive({
-    shopCriteria: 'SILVER', corridorType: 'CORRIDOR',
-    qgaAchievementPercent: 95, qgaCount: 100,
-    evdAchievementPercent: null, evdReconciled: null,
-    baSiteRequirementMet: null,
-    mpesaFloatSold: null, mpesaTargetAchieved: null, mpesaReconciled: null,
-    dsaAirtimeAchievementPercent: null,
-    mmQoTargetPercent: null,
-    ebuTargetAchieved: null, ebuRevenue: null, ebuAverageTopup: null, ebuFirstMonthLeapfrogRevenue: null,
-  })
-  assert('QGA SIM SILVER = 100×1 = 100', async () => qgaSimSilver.components.find(c => c.componentCode === 'QGA_SIM_COMMISSION')?.amount === 100)
-
-  const qgaSimBronze = await calculateShopManagerIncentive({
-    shopCriteria: 'BRONZE', corridorType: 'CORRIDOR',
-    qgaAchievementPercent: 95, qgaCount: 100,
-    evdAchievementPercent: null, evdReconciled: null,
-    baSiteRequirementMet: null,
-    mpesaFloatSold: null, mpesaTargetAchieved: null, mpesaReconciled: null,
-    dsaAirtimeAchievementPercent: null,
-    mmQoTargetPercent: null,
-    ebuTargetAchieved: null, ebuRevenue: null, ebuAverageTopup: null, ebuFirstMonthLeapfrogRevenue: null,
-  })
-  assert('QGA SIM BRONZE = 0 (bronze excluded)', async () => qgaSimBronze.components.find(c => c.componentCode === 'QGA_SIM_COMMISSION')?.amount === 0)
-
-  console.log('\n[Calculation Rules: EVD Bonus]')
-  const evdGold = await calculateShopManagerIncentive({
-    shopCriteria: 'GOLD', corridorType: 'CORRIDOR',
-    qgaAchievementPercent: null, qgaCount: null,
-    evdAchievementPercent: 120, evdReconciled: true,
-    baSiteRequirementMet: null,
-    mpesaFloatSold: null, mpesaTargetAchieved: null, mpesaReconciled: null,
-    dsaAirtimeAchievementPercent: null,
-    mmQoTargetPercent: null,
-    ebuTargetAchieved: null, ebuRevenue: null, ebuAverageTopup: null, ebuFirstMonthLeapfrogRevenue: null,
-  })
-  assert('EVD Bonus GOLD >100%+reconciled = 3000', async () => evdGold.components.find(c => c.componentCode === 'EVD_BONUS')?.amount === 3000)
-
-  const evdSilver = await calculateShopManagerIncentive({
-    shopCriteria: 'SILVER', corridorType: 'CORRIDOR',
-    qgaAchievementPercent: null, qgaCount: null,
-    evdAchievementPercent: 120, evdReconciled: true,
-    baSiteRequirementMet: null,
-    mpesaFloatSold: null, mpesaTargetAchieved: null, mpesaReconciled: null,
-    dsaAirtimeAchievementPercent: null,
-    mmQoTargetPercent: null,
-    ebuTargetAchieved: null, ebuRevenue: null, ebuAverageTopup: null, ebuFirstMonthLeapfrogRevenue: null,
-  })
-  assert('EVD Bonus SILVER >100%+reconciled = 2000', async () => evdSilver.components.find(c => c.componentCode === 'EVD_BONUS')?.amount === 2000)
-
-  const evdBronze = await calculateShopManagerIncentive({
-    shopCriteria: 'BRONZE', corridorType: 'CORRIDOR',
-    qgaAchievementPercent: null, qgaCount: null,
-    evdAchievementPercent: 120, evdReconciled: true,
-    baSiteRequirementMet: null,
-    mpesaFloatSold: null, mpesaTargetAchieved: null, mpesaReconciled: null,
-    dsaAirtimeAchievementPercent: null,
-    mmQoTargetPercent: null,
-    ebuTargetAchieved: null, ebuRevenue: null, ebuAverageTopup: null, ebuFirstMonthLeapfrogRevenue: null,
-  })
-  assert('EVD Bonus BRONZE = 0 (bronze excluded)', async () => evdBronze.components.find(c => c.componentCode === 'EVD_BONUS')?.amount === 0)
-
-  const evdNotReconciled = await calculateShopManagerIncentive({
-    shopCriteria: 'GOLD', corridorType: 'CORRIDOR',
-    qgaAchievementPercent: null, qgaCount: null,
-    evdAchievementPercent: 120, evdReconciled: false,
-    baSiteRequirementMet: null,
-    mpesaFloatSold: null, mpesaTargetAchieved: null, mpesaReconciled: null,
-    dsaAirtimeAchievementPercent: null,
-    mmQoTargetPercent: null,
-    ebuTargetAchieved: null, ebuRevenue: null, ebuAverageTopup: null, ebuFirstMonthLeapfrogRevenue: null,
-  })
-  assert('EVD Bonus not reconciled = 0', async () => evdNotReconciled.components.find(c => c.componentCode === 'EVD_BONUS')?.amount === 0)
-
-  console.log('\n[Calculation Rules: BA/Site Bonus]')
-  const baGold = await calculateShopManagerIncentive({
-    shopCriteria: 'GOLD', corridorType: 'CORRIDOR',
-    qgaAchievementPercent: null, qgaCount: null,
-    evdAchievementPercent: null, evdReconciled: null,
-    baSiteRequirementMet: true,
-    mpesaFloatSold: null, mpesaTargetAchieved: null, mpesaReconciled: null,
-    dsaAirtimeAchievementPercent: null,
-    mmQoTargetPercent: null,
-    ebuTargetAchieved: null, ebuRevenue: null, ebuAverageTopup: null, ebuFirstMonthLeapfrogRevenue: null,
-  })
-  assert('BA/Site Bonus GOLD = 4000', async () => baGold.components.find(c => c.componentCode === 'BA_SITE_BONUS')?.amount === 4000)
-
-  const baSilver = await calculateShopManagerIncentive({
-    shopCriteria: 'SILVER', corridorType: 'CORRIDOR',
-    qgaAchievementPercent: null, qgaCount: null,
-    evdAchievementPercent: null, evdReconciled: null,
-    baSiteRequirementMet: true,
-    mpesaFloatSold: null, mpesaTargetAchieved: null, mpesaReconciled: null,
-    dsaAirtimeAchievementPercent: null,
-    mmQoTargetPercent: null,
-    ebuTargetAchieved: null, ebuRevenue: null, ebuAverageTopup: null, ebuFirstMonthLeapfrogRevenue: null,
-  })
-  assert('BA/Site Bonus SILVER = 2000', async () => baSilver.components.find(c => c.componentCode === 'BA_SITE_BONUS')?.amount === 2000)
-
-  const baBronze = await calculateShopManagerIncentive({
-    shopCriteria: 'BRONZE', corridorType: 'CORRIDOR',
-    qgaAchievementPercent: null, qgaCount: null,
-    evdAchievementPercent: null, evdReconciled: null,
-    baSiteRequirementMet: true,
-    mpesaFloatSold: null, mpesaTargetAchieved: null, mpesaReconciled: null,
-    dsaAirtimeAchievementPercent: null,
-    mmQoTargetPercent: null,
-    ebuTargetAchieved: null, ebuRevenue: null, ebuAverageTopup: null, ebuFirstMonthLeapfrogRevenue: null,
-  })
-  assert('BA/Site Bonus BRONZE = 0', async () => baBronze.components.find(c => c.componentCode === 'BA_SITE_BONUS')?.amount === 0)
-
-  const baNotMet = await calculateShopManagerIncentive({
-    shopCriteria: 'GOLD', corridorType: 'CORRIDOR',
-    qgaAchievementPercent: null, qgaCount: null,
-    evdAchievementPercent: null, evdReconciled: null,
-    baSiteRequirementMet: false,
-    mpesaFloatSold: null, mpesaTargetAchieved: null, mpesaReconciled: null,
-    dsaAirtimeAchievementPercent: null,
-    mmQoTargetPercent: null,
-    ebuTargetAchieved: null, ebuRevenue: null, ebuAverageTopup: null, ebuFirstMonthLeapfrogRevenue: null,
-  })
-  assert('BA/Site Bonus not met = 0', async () => baNotMet.components.find(c => c.componentCode === 'BA_SITE_BONUS')?.amount === 0)
-
-  console.log('\n[Calculation Rules: M-PESA Commission]')
-  const mpesaGold = await calculateShopManagerIncentive({
-    shopCriteria: 'GOLD', corridorType: 'CORRIDOR',
-    qgaAchievementPercent: null, qgaCount: null,
-    evdAchievementPercent: null, evdReconciled: null,
-    baSiteRequirementMet: null,
-    mpesaFloatSold: 100000, mpesaTargetAchieved: true, mpesaReconciled: true,
-    dsaAirtimeAchievementPercent: null,
-    mmQoTargetPercent: null,
-    ebuTargetAchieved: null, ebuRevenue: null, ebuAverageTopup: null, ebuFirstMonthLeapfrogRevenue: null,
-  })
-  assert('M-PESA GOLD = 100000×0.02 = 2000', async () => mpesaGold.components.find(c => c.componentCode === 'MPESA_COMMISSION')?.amount === 2000)
-
-  const mpesaBronze2 = await calculateShopManagerIncentive({
-    shopCriteria: 'BRONZE', corridorType: 'CORRIDOR',
-    qgaAchievementPercent: null, qgaCount: null,
-    evdAchievementPercent: null, evdReconciled: null,
-    baSiteRequirementMet: null,
-    mpesaFloatSold: 100000, mpesaTargetAchieved: true, mpesaReconciled: true,
-    dsaAirtimeAchievementPercent: null,
-    mmQoTargetPercent: null,
-    ebuTargetAchieved: null, ebuRevenue: null, ebuAverageTopup: null, ebuFirstMonthLeapfrogRevenue: null,
-  })
-  assert('M-PESA BRONZE = 0', async () => mpesaBronze2.components.find(c => c.componentCode === 'MPESA_COMMISSION')?.amount === 0)
-
-  console.log('\n[Calculation Rules: DSA Achievement Bonus]')
-  const dsaHigh = await calculateShopManagerIncentive({
-    shopCriteria: 'GOLD', corridorType: 'CORRIDOR',
-    qgaAchievementPercent: null, qgaCount: null,
-    evdAchievementPercent: null, evdReconciled: null,
-    baSiteRequirementMet: null,
-    mpesaFloatSold: null, mpesaTargetAchieved: null, mpesaReconciled: null,
-    dsaAirtimeAchievementPercent: 95,
-    mmQoTargetPercent: null,
-    ebuTargetAchieved: null, ebuRevenue: null, ebuAverageTopup: null, ebuFirstMonthLeapfrogRevenue: null,
-  })
-  assert('DSA >90% = 2000', async () => dsaHigh.components.find(c => c.componentCode === 'DSA_ACHIEVEMENT_BONUS')?.amount === 2000)
-
-  const dsaMid = await calculateShopManagerIncentive({
-    shopCriteria: 'GOLD', corridorType: 'CORRIDOR',
-    qgaAchievementPercent: null, qgaCount: null,
-    evdAchievementPercent: null, evdReconciled: null,
-    baSiteRequirementMet: null,
-    mpesaFloatSold: null, mpesaTargetAchieved: null, mpesaReconciled: null,
-    dsaAirtimeAchievementPercent: 75,
-    mmQoTargetPercent: null,
-    ebuTargetAchieved: null, ebuRevenue: null, ebuAverageTopup: null, ebuFirstMonthLeapfrogRevenue: null,
-  })
-  assert('DSA 60-89% = 1500', async () => dsaMid.components.find(c => c.componentCode === 'DSA_ACHIEVEMENT_BONUS')?.amount === 1500)
-
-  const dsaLow = await calculateShopManagerIncentive({
-    shopCriteria: 'GOLD', corridorType: 'CORRIDOR',
-    qgaAchievementPercent: null, qgaCount: null,
-    evdAchievementPercent: null, evdReconciled: null,
-    baSiteRequirementMet: null,
-    mpesaFloatSold: null, mpesaTargetAchieved: null, mpesaReconciled: null,
-    dsaAirtimeAchievementPercent: 55,
-    mmQoTargetPercent: null,
-    ebuTargetAchieved: null, ebuRevenue: null, ebuAverageTopup: null, ebuFirstMonthLeapfrogRevenue: null,
-  })
-  assert('DSA 50-59% = 1000', async () => dsaLow.components.find(c => c.componentCode === 'DSA_ACHIEVEMENT_BONUS')?.amount === 1000)
-
-  const dsaNone = await calculateShopManagerIncentive({
-    shopCriteria: 'GOLD', corridorType: 'CORRIDOR',
-    qgaAchievementPercent: null, qgaCount: null,
-    evdAchievementPercent: null, evdReconciled: null,
-    baSiteRequirementMet: null,
-    mpesaFloatSold: null, mpesaTargetAchieved: null, mpesaReconciled: null,
-    dsaAirtimeAchievementPercent: 30,
-    mmQoTargetPercent: null,
-    ebuTargetAchieved: null, ebuRevenue: null, ebuAverageTopup: null, ebuFirstMonthLeapfrogRevenue: null,
-  })
-  assert('DSA <50% = 0', async () => dsaNone.components.find(c => c.componentCode === 'DSA_ACHIEVEMENT_BONUS')?.amount === 0)
-
-  console.log('\n[Calculation Rules: QO Target Bonus]')
-  const qoMet = await calculateShopManagerIncentive({
-    shopCriteria: 'GOLD', corridorType: 'CORRIDOR',
-    qgaAchievementPercent: null, qgaCount: null,
-    evdAchievementPercent: null, evdReconciled: null,
-    baSiteRequirementMet: null,
-    mpesaFloatSold: null, mpesaTargetAchieved: null, mpesaReconciled: null,
-    dsaAirtimeAchievementPercent: null,
-    mmQoTargetPercent: 95,
-    ebuTargetAchieved: null, ebuRevenue: null, ebuAverageTopup: null, ebuFirstMonthLeapfrogRevenue: null,
-  })
-  assert('QO >90% = 4000', async () => qoMet.components.find(c => c.componentCode === 'QO_BONUS')?.amount === 4000)
-
-  const qoNotMet = await calculateShopManagerIncentive({
-    shopCriteria: 'GOLD', corridorType: 'CORRIDOR',
-    qgaAchievementPercent: null, qgaCount: null,
-    evdAchievementPercent: null, evdReconciled: null,
-    baSiteRequirementMet: null,
-    mpesaFloatSold: null, mpesaTargetAchieved: null, mpesaReconciled: null,
-    dsaAirtimeAchievementPercent: null,
-    mmQoTargetPercent: 80,
-    ebuTargetAchieved: null, ebuRevenue: null, ebuAverageTopup: null, ebuFirstMonthLeapfrogRevenue: null,
-  })
-  assert('QO ≤90% = 0', async () => qoNotMet.components.find(c => c.componentCode === 'QO_BONUS')?.amount === 0)
-
-  console.log('\n[Calculation Rules: EBU Activation Bonus]')
-  const ebuGold = await calculateShopManagerIncentive({
-    shopCriteria: 'GOLD', corridorType: 'CORRIDOR',
-    qgaAchievementPercent: null, qgaCount: null,
-    evdAchievementPercent: null, evdReconciled: null,
-    baSiteRequirementMet: null,
-    mpesaFloatSold: null, mpesaTargetAchieved: null, mpesaReconciled: null,
-    dsaAirtimeAchievementPercent: null,
-    mmQoTargetPercent: null,
-    ebuTargetAchieved: true, ebuRevenue: 50000, ebuAverageTopup: 600, ebuFirstMonthLeapfrogRevenue: null,
-  })
-  assert('EBU Activation GOLD met = 3000', async () => ebuGold.components.find(c => c.componentCode === 'EBU_ACTIVATION_BONUS')?.amount === 3000)
-
-  const ebuSilver = await calculateShopManagerIncentive({
-    shopCriteria: 'SILVER', corridorType: 'CORRIDOR',
-    qgaAchievementPercent: null, qgaCount: null,
-    evdAchievementPercent: null, evdReconciled: null,
-    baSiteRequirementMet: null,
-    mpesaFloatSold: null, mpesaTargetAchieved: null, mpesaReconciled: null,
-    dsaAirtimeAchievementPercent: null,
-    mmQoTargetPercent: null,
-    ebuTargetAchieved: true, ebuRevenue: 50000, ebuAverageTopup: 600, ebuFirstMonthLeapfrogRevenue: null,
-  })
-  assert('EBU Activation SILVER met = 1500', async () => ebuSilver.components.find(c => c.componentCode === 'EBU_ACTIVATION_BONUS')?.amount === 1500)
-
-  const ebuBronze = await calculateShopManagerIncentive({
-    shopCriteria: 'BRONZE', corridorType: 'CORRIDOR',
-    qgaAchievementPercent: null, qgaCount: null,
-    evdAchievementPercent: null, evdReconciled: null,
-    baSiteRequirementMet: null,
-    mpesaFloatSold: null, mpesaTargetAchieved: null, mpesaReconciled: null,
-    dsaAirtimeAchievementPercent: null,
-    mmQoTargetPercent: null,
-    ebuTargetAchieved: true, ebuRevenue: 50000, ebuAverageTopup: 600, ebuFirstMonthLeapfrogRevenue: null,
-  })
-  assert('EBU Activation BRONZE met = 500', async () => ebuBronze.components.find(c => c.componentCode === 'EBU_ACTIVATION_BONUS')?.amount === 500)
-
-  const ebuLowTopup = await calculateShopManagerIncentive({
-    shopCriteria: 'GOLD', corridorType: 'CORRIDOR',
-    qgaAchievementPercent: null, qgaCount: null,
-    evdAchievementPercent: null, evdReconciled: null,
-    baSiteRequirementMet: null,
-    mpesaFloatSold: null, mpesaTargetAchieved: null, mpesaReconciled: null,
-    dsaAirtimeAchievementPercent: null,
-    mmQoTargetPercent: null,
-    ebuTargetAchieved: true, ebuRevenue: 50000, ebuAverageTopup: 300, ebuFirstMonthLeapfrogRevenue: null,
-  })
-  assert('EBU Activation avg topup ≤500 = 0', async () => ebuLowTopup.components.find(c => c.componentCode === 'EBU_ACTIVATION_BONUS')?.amount === 0)
-
-  console.log('\n[Calculation Rules: EBU Revenue Share]')
-  const ebuRevGold = await calculateShopManagerIncentive({
-    shopCriteria: 'GOLD', corridorType: 'CORRIDOR',
-    qgaAchievementPercent: null, qgaCount: null,
-    evdAchievementPercent: null, evdReconciled: null,
-    baSiteRequirementMet: null,
-    mpesaFloatSold: null, mpesaTargetAchieved: null, mpesaReconciled: null,
-    dsaAirtimeAchievementPercent: null,
-    mmQoTargetPercent: null,
-    ebuTargetAchieved: null, ebuRevenue: null, ebuAverageTopup: null, ebuFirstMonthLeapfrogRevenue: 100000,
-  })
-  assert('EBU Rev Share GOLD = 100000×0.25 = 25000', async () => ebuRevGold.components.find(c => c.componentCode === 'EBU_REVENUE_SHARE')?.amount === 25000)
-
-  const ebuRevSilver = await calculateShopManagerIncentive({
-    shopCriteria: 'SILVER', corridorType: 'CORRIDOR',
-    qgaAchievementPercent: null, qgaCount: null,
-    evdAchievementPercent: null, evdReconciled: null,
-    baSiteRequirementMet: null,
-    mpesaFloatSold: null, mpesaTargetAchieved: null, mpesaReconciled: null,
-    dsaAirtimeAchievementPercent: null,
-    mmQoTargetPercent: null,
-    ebuTargetAchieved: null, ebuRevenue: null, ebuAverageTopup: null, ebuFirstMonthLeapfrogRevenue: 100000,
-  })
-  assert('EBU Rev Share SILVER = 100000×0.15 = 15000', async () => ebuRevSilver.components.find(c => c.componentCode === 'EBU_REVENUE_SHARE')?.amount === 15000)
-
-  const ebuRevBronze = await calculateShopManagerIncentive({
-    shopCriteria: 'BRONZE', corridorType: 'CORRIDOR',
-    qgaAchievementPercent: null, qgaCount: null,
-    evdAchievementPercent: null, evdReconciled: null,
-    baSiteRequirementMet: null,
-    mpesaFloatSold: null, mpesaTargetAchieved: null, mpesaReconciled: null,
-    dsaAirtimeAchievementPercent: null,
-    mmQoTargetPercent: null,
-    ebuTargetAchieved: null, ebuRevenue: null, ebuAverageTopup: null, ebuFirstMonthLeapfrogRevenue: 100000,
-  })
-  assert('EBU Rev Share BRONZE = 0', async () => ebuRevBronze.components.find(c => c.componentCode === 'EBU_REVENUE_SHARE')?.amount === 0)
-
-  console.log('\n[Calculation Rules: AT_RISK and UNASSIGNED]')
-  const atRisk = await calculateShopManagerIncentive({
-    shopCriteria: 'AT_RISK', corridorType: 'CORRIDOR',
-    qgaAchievementPercent: 95, qgaCount: 50,
-    evdAchievementPercent: 120, evdReconciled: true,
-    baSiteRequirementMet: true,
-    mpesaFloatSold: 100000, mpesaTargetAchieved: true, mpesaReconciled: true,
-    dsaAirtimeAchievementPercent: 95,
-    mmQoTargetPercent: 95,
-    ebuTargetAchieved: true, ebuRevenue: 50000, ebuAverageTopup: 600, ebuFirstMonthLeapfrogRevenue: 100000,
-  })
-  assert('AT_RISK total = 0', async () => atRisk.totalAmount === 0)
-  assert('AT_RISK has SHOP_AT_RISK_ZERO_INCENTIVE issue', async () => atRisk.issues.some(i => i.issueCode === 'SHOP_AT_RISK_ZERO_INCENTIVE'))
-
-  const unassigned = await calculateShopManagerIncentive({
-    shopCriteria: 'UNASSIGNED', corridorType: 'CORRIDOR',
-    qgaAchievementPercent: 95, qgaCount: 50,
-    evdAchievementPercent: 120, evdReconciled: true,
-    baSiteRequirementMet: true,
-    mpesaFloatSold: 100000, mpesaTargetAchieved: true, mpesaReconciled: true,
-    dsaAirtimeAchievementPercent: 95,
-    mmQoTargetPercent: 95,
-    ebuTargetAchieved: true, ebuRevenue: 50000, ebuAverageTopup: 600, ebuFirstMonthLeapfrogRevenue: 100000,
-  })
-  assert('UNASSIGNED total = 0', async () => unassigned.totalAmount === 0)
-  assert('UNASSIGNED has SHOP_CRITERIA_UNASSIGNED blocker', async () => unassigned.issues.some(i => i.issueCode === 'SHOP_CRITERIA_UNASSIGNED'))
-
-  console.log('\n[Calculation Rules: Total = sum of all components]')
-  const fullCalc = await calculateShopManagerIncentive({
-    shopCriteria: 'GOLD', corridorType: 'CORRIDOR',
-    qgaAchievementPercent: 95, qgaCount: 100,
-    evdAchievementPercent: 120, evdReconciled: true,
-    baSiteRequirementMet: true,
-    mpesaFloatSold: 100000, mpesaTargetAchieved: true, mpesaReconciled: true,
-    dsaAirtimeAchievementPercent: 95,
-    mmQoTargetPercent: 95,
-    ebuTargetAchieved: true, ebuRevenue: 50000, ebuAverageTopup: 600, ebuFirstMonthLeapfrogRevenue: 100000,
-  })
-  const expectedTotal = 5000 + 150 + 3000 + 4000 + 2000 + 2000 + 4000 + 3000 + 25000
-  assert('Total = sum of all components', async () => fullCalc.totalAmount === expectedTotal)
-
-  const totalComp = fullCalc.components.find(c => c.componentCode === 'TOTAL')
-  assert('TOTAL component exists with correct amount', async () => totalComp?.amount === expectedTotal)
-
-  const totalExcluding = fullCalc.components.filter(c => c.componentCode !== 'TOTAL').reduce((s, c) => s + c.amount, 0)
-  assert('Total matches sum of non-TOTAL components', async () => totalComp?.amount === totalExcluding)
-
-  // ─── Validation ──────────────────────────────────────────────────────────
-  console.log('\n[Validation Rules]')
-
-  const missingManager = await calculateShopManagerIncentive({
-    shopCriteria: 'GOLD', corridorType: 'CORRIDOR',
-    qgaAchievementPercent: null, qgaCount: null,
-    evdAchievementPercent: null, evdReconciled: null,
-    baSiteRequirementMet: null,
-    mpesaFloatSold: null, mpesaTargetAchieved: null, mpesaReconciled: null,
-    dsaAirtimeAchievementPercent: null,
-    mmQoTargetPercent: null,
-    ebuTargetAchieved: null, ebuRevenue: null, ebuAverageTopup: null, ebuFirstMonthLeapfrogRevenue: null,
-  })
-  assert('engine runs with null inputs (graceful)', async () => missingManager.totalAmount >= 0)
-
-  // ─── Scope ──────────────────────────────────────────────────────────────
-  console.log('\n[Scope]')
-
-  if (hrAdminUser) {
-    const allShops = await prisma.location.count({ where: { type: 'SHOP' } })
-    assert('shops exist in database', async () => allShops > 0)
-
-    const hrScope = await buildIncentiveScopeWhere(hrAdminUser.id)
-    assert('HR Admin sees all shops (empty incentive scope)', async () => Object.keys(hrScope).length === 0)
-
-    const auditorScope = auditorUser ? await buildIncentiveScopeWhere(auditorUser.id) : {}
-    assert('Auditor sees all shops (empty incentive scope)', async () => Object.keys(auditorScope).length === 0)
-
-    const financeScope = financeDirUser ? await buildIncentiveScopeWhere(financeDirUser.id) : {}
-    assert('Finance sees all shops (empty incentive scope)', async () => Object.keys(financeScope).length === 0)
-  }
-
-  if (shopManagerUser) {
-    const smScope = await buildIncentiveScopeWhere(shopManagerUser.id)
-    assert('Shop Manager incentive scope is not empty', async () => Object.keys(smScope).length > 0)
-  }
-
-  if (asmUser) {
-    const asmScope = await buildIncentiveScopeWhere(asmUser.id)
-    if ('parentId' in asmScope && typeof asmScope.parentId === 'string') {
-      const visible = await prisma.location.count({ where: { type: 'SHOP', parentId: asmScope.parentId as string } })
-      const totalShops = await prisma.location.count({ where: { type: 'SHOP' } })
-      assert('ASM sees only shops in assigned area (incentive scope)', async () => visible > 0 && visible <= totalShops)
-    } else {
-      assert('ASM incentive scope has area filter', async () => true)
-    }
-  }
-
-  // ─── Payroll Input Types (seeded) ───────────────────────────────────────
-  console.log('\n[Payroll Input Types]')
-
-  const expectedTypes = [
-    'SHOP_MANAGER_QGA_BONUS', 'SHOP_MANAGER_QGA_SIM_COMMISSION',
-    'SHOP_MANAGER_EVD_BONUS', 'SHOP_MANAGER_BA_SITE_BONUS',
-    'SHOP_MANAGER_MPESA_COMMISSION', 'SHOP_MANAGER_DSA_ACHIEVEMENT_BONUS',
-    'SHOP_MANAGER_QO_BONUS', 'SHOP_MANAGER_EBU_ACTIVATION_BONUS',
-    'SHOP_MANAGER_EBU_REVENUE_SHARE', 'SHOP_MANAGER_TOTAL_INCENTIVE',
-  ]
-  for (const code of expectedTypes) {
-    const inputType = await prisma.payrollInputType.findUnique({ where: { code } })
-    assert(`payroll input type ${code} is seeded`, async () => !!inputType)
-  }
-
-  // ─── Regression ─────────────────────────────────────────────────────────
+  // ─── Regression ──────────────────────────────────────────────────────────
   console.log('\n[Regression]')
 
   const employeesExist = await prisma.employee.count()
+  assert('Phase 4C.1 shop setup still works', async () => {
+    const shops = await prisma.location.count({ where: { type: 'SHOP' } })
+    return shops > 0
+  })
   assert('employee registration still works', async () => employeesExist > 0)
 
-  const shopsExist = await prisma.location.count({ where: { type: 'SHOP' } })
-  assert('shop master still works', async () => shopsExist > 0)
-
-  const payrollPeriods = await prisma.payrollPeriod.count()
-  assert('Phase 4A payroll periods still work', async () => payrollPeriods >= 0)
-
-  const payrollInputs = await prisma.payrollInput.count()
-  assert('Phase 4B payroll inputs still work', async () => payrollInputs >= 0)
-
-  assert('no HR-BP approval workflow is implemented', async () => true)
-  assert('no final payroll calculation is implemented', async () => true)
-  assert('no quarterly auto-calc is implemented', async () => true)
-
-  // ─── Cleanup ───────────────────────────────────────────────────────────
-  console.log('\n[Cleanup]')
-
-  if (testInputId && createdPeriodId) {
-    await prisma.shopManagerIncentiveIssue.deleteMany({ where: { incentivePeriodId: createdPeriodId } }).catch(() => {})
-    await prisma.shopManagerIncentiveComponent.deleteMany({
-      where: { calculation: { incentivePeriodId: createdPeriodId } },
-    }).catch(() => {})
-    await prisma.shopManagerIncentiveCalculation.deleteMany({ where: { incentivePeriodId: createdPeriodId } }).catch(() => {})
-    await prisma.shopManagerPerformanceInput.deleteMany({ where: { incentivePeriodId: createdPeriodId } }).catch(() => {})
-  }
-
-  if (createdPeriodId) {
-    await prisma.shopManagerIncentivePeriod.delete({ where: { id: createdPeriodId } }).catch(() => {})
-  }
-  if (secondPeriodId) {
-    await prisma.shopManagerIncentivePeriod.delete({ where: { id: secondPeriodId } }).catch(() => {})
-  }
-
-  if (testShopId) {
-    await prisma.shopCriteriaStatusHistory.deleteMany({ where: { shopLocationId: testShopId } }).catch(() => {})
-    await prisma.shopProfile.delete({ where: { shopLocationId: testShopId } }).catch(() => {})
-    await prisma.location.delete({ where: { id: testShopId } }).catch(() => {})
-  }
-
-  // ─── Results ───────────────────────────────────────────────────────────
+  // ─── Results ─────────────────────────────────────────────────────────────
   console.log(`\nResults: ${passed} passed, ${failed} failed`)
   if (errors.length > 0) {
     console.log(`Failed: ${errors.join(', ')}`)
@@ -839,4 +739,9 @@ async function main() {
 main().catch(err => {
   console.error('Test error:', err)
   process.exit(1)
-}).finally(() => prisma.$disconnect())
+}).finally(async () => {
+  for (const fn of cleanup.reverse()) {
+    try { await fn() } catch {}
+  }
+  await prisma.$disconnect()
+})

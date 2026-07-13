@@ -35,9 +35,8 @@ const ALL_PERMISSIONS = [
   'shop.view', 'shop.create', 'shop.update', 'shop.deactivate', 'shop.reactivate',
   'shop.assignManager', 'shop.updateCriteria', 'shop.viewCriteriaHistory',
   'shopManagerIncentive.view', 'shopManagerIncentive.createPeriod', 'shopManagerIncentive.updatePeriod',
-  'shopManagerIncentive.input', 'shopManagerIncentive.import',
-  'shopManagerIncentive.calculate', 'shopManagerIncentive.review',
-  'shopManagerIncentive.approve', 'shopManagerIncentive.lock',
+  'shopManagerIncentive.inputSales', 'shopManagerIncentive.inputDistribution', 'shopManagerIncentive.inputEbu', 'shopManagerIncentive.inputAll',
+  'shopManagerIncentive.calculate',
   'shopManagerIncentive.export', 'shopManagerIncentive.sendToPayroll',
 ] as const
 
@@ -72,9 +71,8 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
     'shop.view', 'shop.create', 'shop.update', 'shop.deactivate', 'shop.reactivate',
     'shop.assignManager', 'shop.updateCriteria', 'shop.viewCriteriaHistory',
     'shopManagerIncentive.view', 'shopManagerIncentive.createPeriod', 'shopManagerIncentive.updatePeriod',
-    'shopManagerIncentive.input', 'shopManagerIncentive.import',
-    'shopManagerIncentive.calculate', 'shopManagerIncentive.review',
-    'shopManagerIncentive.approve', 'shopManagerIncentive.lock',
+    'shopManagerIncentive.inputSales', 'shopManagerIncentive.inputDistribution', 'shopManagerIncentive.inputEbu', 'shopManagerIncentive.inputAll',
+    'shopManagerIncentive.calculate',
     'shopManagerIncentive.export', 'shopManagerIncentive.sendToPayroll',
   ],
   HR_OFFICER: [
@@ -119,8 +117,8 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
     'payrollPeriod.review', 'payrollPeriod.markReadyForCalculation',
     'payrollPreparationSummary.view', 'payrollPreparationSummary.export',
     'shop.view', 'shop.viewCriteriaHistory',
-    'shopManagerIncentive.view', 'shopManagerIncentive.review',
-    'shopManagerIncentive.approve', 'shopManagerIncentive.lock',
+    'shopManagerIncentive.view',
+    'shopManagerIncentive.calculate',
     'shopManagerIncentive.export', 'shopManagerIncentive.sendToPayroll',
   ],
   FINANCE_PAYROLL: [
@@ -140,7 +138,7 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
     'payrollPeriod.review',
     'payrollPreparationSummary.view', 'payrollPreparationSummary.export',
     'shop.view', 'shop.viewCriteriaHistory',
-    'shopManagerIncentive.view', 'shopManagerIncentive.review',
+    'shopManagerIncentive.view',
     'shopManagerIncentive.export', 'shopManagerIncentive.sendToPayroll',
   ],
   TREASURY_MANAGER: [
@@ -164,9 +162,8 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
     'shop.view', 'shop.create', 'shop.update',
     'shop.assignManager', 'shop.updateCriteria', 'shop.viewCriteriaHistory',
     'shopManagerIncentive.view', 'shopManagerIncentive.createPeriod', 'shopManagerIncentive.updatePeriod',
-    'shopManagerIncentive.input', 'shopManagerIncentive.import',
-    'shopManagerIncentive.calculate', 'shopManagerIncentive.review',
-    'shopManagerIncentive.approve', 'shopManagerIncentive.export', 'shopManagerIncentive.sendToPayroll',
+    'shopManagerIncentive.inputSales', 'shopManagerIncentive.inputAll',
+    'shopManagerIncentive.calculate', 'shopManagerIncentive.export', 'shopManagerIncentive.sendToPayroll',
   ],
   ASM: [
     'employee.view', 'reports.view',
@@ -175,7 +172,7 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
     'payrollInput.view', 'payrollInput.create', 'payrollInput.submit',
     'payrollPreparationSummary.view',
     'shop.view', 'shop.viewCriteriaHistory',
-    'shopManagerIncentive.view', 'shopManagerIncentive.input', 'shopManagerIncentive.review',
+    'shopManagerIncentive.view',
   ],
   SHOP_MANAGER: [
     'employee.view',
@@ -187,6 +184,16 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
     'payrollPreparationSummary.view',
     'shop.view', 'shop.viewCriteriaHistory',
     'shopManagerIncentive.view',
+  ],
+  DISTRIBUTION_HEAD: [
+    'shopManagerIncentive.view',
+    'shopManagerIncentive.inputDistribution',
+    'shopManagerIncentive.export',
+  ],
+  EBU_HEAD: [
+    'shopManagerIncentive.view',
+    'shopManagerIncentive.inputEbu',
+    'shopManagerIncentive.export',
   ],
   EMPLOYEE: [],
   AUDITOR: [
@@ -227,11 +234,10 @@ async function main() {
   await prisma.auditLog.deleteMany()
   await prisma.importRow.deleteMany()
   await prisma.importSession.deleteMany()
-  await prisma.shopManagerIncentiveComponent.deleteMany()
-  await prisma.shopManagerIncentiveIssue.deleteMany()
   await prisma.shopManagerIncentiveCalculation.deleteMany()
-  await prisma.shopManagerPerformanceInput.deleteMany()
+  await prisma.shopManagerIncentiveInput.deleteMany()
   await prisma.shopManagerIncentivePeriod.deleteMany()
+  await prisma.shopManagerIncentiveInputConfig.deleteMany()
   await prisma.payrollInputWaiver.deleteMany()
   await prisma.payrollInputRequirement.deleteMany()
   await prisma.payrollInput.deleteMany()
@@ -323,6 +329,8 @@ async function main() {
     { email: 'shopacct@leapfrog.com', name: 'Bezawit Assefa', roles: ['EMPLOYEE'] },
     { email: 'employee@leapfrog.com', name: 'Employee User', roles: ['EMPLOYEE'] },
     { email: 'auditor@leapfrog.com', name: 'Yonas Tadesse', roles: ['AUDITOR'] },
+    { email: 'distribution.head@leapfrog.com', name: 'Mulugeta Ayele', roles: ['DISTRIBUTION_HEAD'] },
+    { email: 'ebu.head@leapfrog.com', name: 'Tigist Wondimu', roles: ['EBU_HEAD'] },
   ]
   const userRecords = await Promise.all(
     ALL_USERS.map(async u => {
@@ -798,6 +806,29 @@ async function main() {
     }).catch(() => {})
   }
   console.log(`  Created ${incentiveInputTypes.length} shop manager incentive input types`)
+
+  // Seed ShopManagerIncentiveInputConfig
+  const inputConfigs = [
+    { inputCode: 'SHOP_CRITERIA', inputLabel: 'Shop Criteria', ownerDepartment: 'Management', ownerRole: 'Sales Head', inputType: 'SELECT', allowedValues: 'Gold,Silver,Bronze,At-risk', usedInComponent: 'All', displayOrder: 1, isActive: true },
+    { inputCode: 'QGA_ABOVE_90', inputLabel: 'QGA >90%?', ownerDepartment: 'Sales', ownerRole: 'Sales Head', inputType: 'YES_NO', allowedValues: 'Yes,No', usedInComponent: 'QGA Bonus, QGA SIM Commission', displayOrder: 2, isActive: true },
+    { inputCode: 'QGA_QUANTITY', inputLabel: 'QGA Quantity', ownerDepartment: 'Sales', ownerRole: 'Sales Head', inputType: 'NUMBER', allowedValues: null, usedInComponent: 'QGA SIM Commission', displayOrder: 3, isActive: true },
+    { inputCode: 'MM_QO_ABOVE_90', inputLabel: 'MM QO Targets >90%?', ownerDepartment: 'Sales', ownerRole: 'Sales Head', inputType: 'YES_NO', allowedValues: 'Yes,No', usedInComponent: 'QO Bonus', displayOrder: 4, isActive: true },
+    { inputCode: 'DSA_AIRTIME_PERCENT', inputLabel: 'Airtime target achieved by DSA (%)', ownerDepartment: 'Sales', ownerRole: 'Sales Head', inputType: 'PERCENTAGE', allowedValues: null, usedInComponent: 'DSA Achievement Bonus', displayOrder: 5, isActive: true },
+    { inputCode: 'CORRIDOR_STATUS', inputLabel: 'Corridor status', ownerDepartment: 'Distribution', ownerRole: 'Distribution Head', inputType: 'YES_NO', allowedValues: 'Yes,No', usedInComponent: 'BA/Site Bonus', displayOrder: 6, isActive: true },
+    { inputCode: 'EVD_ABOVE_100', inputLabel: 'EVD >100% performance and reconciliation', ownerDepartment: 'Distribution', ownerRole: 'Distribution Head', inputType: 'YES_NO', allowedValues: 'Yes,No', usedInComponent: 'EVD Bonus', displayOrder: 7, isActive: true },
+    { inputCode: 'MPESA_TARGET', inputLabel: 'M-PESA Target achieved and reconciliation', ownerDepartment: 'Distribution', ownerRole: 'Distribution Head', inputType: 'YES_NO', allowedValues: 'Yes,No', usedInComponent: 'M-PESA Commission', displayOrder: 8, isActive: true },
+    { inputCode: 'MPESA_FLOAT_SOLD', inputLabel: 'Actual M-PESA Float Sold', ownerDepartment: 'Distribution', ownerRole: 'Distribution Head', inputType: 'MONEY', allowedValues: null, usedInComponent: 'M-PESA Commission', displayOrder: 9, isActive: true },
+    { inputCode: 'BA_SITE', inputLabel: 'BA/Site', ownerDepartment: 'Distribution', ownerRole: 'Distribution Head', inputType: 'YES_NO', allowedValues: 'Yes,No', usedInComponent: 'BA/Site Bonus', displayOrder: 10, isActive: true },
+    { inputCode: 'EBU_TARGET_ACHIEVED', inputLabel: 'EBU Target Achieved', ownerDepartment: 'EBU', ownerRole: 'EBU Head', inputType: 'YES_NO', allowedValues: 'Yes,No', usedInComponent: 'EBU Activation Bonus', displayOrder: 11, isActive: true },
+    { inputCode: 'EBU_REVENUE_MADE', inputLabel: 'EBU Revenue Made', ownerDepartment: 'EBU', ownerRole: 'EBU Head', inputType: 'YES_NO', allowedValues: 'Yes,No', usedInComponent: 'EBU Activation Bonus, EBU Revenue Share', displayOrder: 12, isActive: true },
+    { inputCode: 'EBU_AVG_TOPUP_ABOVE_500', inputLabel: 'EBU Average Top-Up >500?', ownerDepartment: 'EBU', ownerRole: 'EBU Head', inputType: 'YES_NO', allowedValues: 'Yes,No', usedInComponent: 'EBU Activation Bonus', displayOrder: 13, isActive: true },
+    { inputCode: 'EBU_FIRST_MONTH_LF_REVENUE', inputLabel: 'EBU First Month LF Revenue', ownerDepartment: 'EBU', ownerRole: 'EBU Head', inputType: 'MONEY', allowedValues: null, usedInComponent: 'EBU Revenue Share', displayOrder: 14, isActive: true },
+    { inputCode: 'RESPONSIBLE_REMARKS', inputLabel: 'Responsible Remarks', ownerDepartment: 'Management', ownerRole: 'All', inputType: 'TEXT', allowedValues: null, usedInComponent: null, displayOrder: 15, isActive: true },
+  ]
+  for (const cfg of inputConfigs) {
+    await prisma.shopManagerIncentiveInputConfig.create({ data: cfg }).catch(() => {})
+  }
+  console.log(`  Created ${inputConfigs.length} incentive input configs`)
 
   // Seed default PayrollInputRequirements
   const transportType = await prisma.payrollInputType.findUnique({ where: { code: 'TRANSPORT_ALLOWANCE_INPUT' } })

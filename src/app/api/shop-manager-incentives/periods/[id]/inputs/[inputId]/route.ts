@@ -8,23 +8,28 @@ import { createAuditLog } from '@/lib/audit'
 import { shopInUserScope } from '@/lib/incentive-scope'
 
 const updateInputSchema = z.object({
-  shopLocationId: z.string().min(1).optional(),
-  qgaAchievementPercent: z.number().optional(),
-  qgaCount: z.number().int().optional(),
-  evdAchievementPercent: z.number().optional(),
-  evdReconciled: z.boolean().optional(),
-  baSiteRequirementMet: z.boolean().optional(),
-  mpesaFloatSold: z.number().optional(),
-  mpesaTargetAchieved: z.boolean().optional(),
-  mpesaReconciled: z.boolean().optional(),
+  shopManagerId: z.string().optional(),
+  shopCriteria: z.string().optional(),
+  corridorStatus: z.boolean().optional(),
+  qgaAbove90: z.boolean().optional(),
+  qgaQuantity: z.number().int().optional(),
+  mmQoAbove90: z.boolean().optional(),
   dsaAirtimeAchievementPercent: z.number().optional(),
-  mmQoTargetPercent: z.number().optional(),
+  evdAbove100AndReconciled: z.boolean().optional(),
+  mpesaTargetAndReconciled: z.boolean().optional(),
+  mpesaFloatSold: z.number().optional(),
+  baSite: z.boolean().optional(),
   ebuTargetAchieved: z.boolean().optional(),
-  ebuRevenue: z.number().optional(),
-  ebuAverageTopup: z.number().optional(),
-  ebuFirstMonthLeapfrogRevenue: z.number().optional(),
-  notes: z.string().optional(),
+  ebuRevenueMade: z.boolean().optional(),
+  ebuAverageTopupAbove500: z.boolean().optional(),
+  ebuFirstMonthLfRevenue: z.number().optional(),
+  responsibleRemarks: z.string().optional(),
 })
+
+const SALES_FIELDS = ['qgaAbove90', 'qgaQuantity', 'mmQoAbove90', 'dsaAirtimeAchievementPercent'] as const
+const DISTRIBUTION_FIELDS = ['corridorStatus', 'evdAbove100AndReconciled', 'mpesaTargetAndReconciled', 'mpesaFloatSold', 'baSite'] as const
+const EBU_FIELDS = ['ebuTargetAchieved', 'ebuRevenueMade', 'ebuAverageTopupAbove500', 'ebuFirstMonthLfRevenue'] as const
+const ANY_INPUT_FIELDS = ['shopCriteria', 'shopManagerId', 'responsibleRemarks'] as const
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string; inputId: string }> }) {
   try {
@@ -33,7 +38,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     if (!session) return unauthorized()
     if (!(await userHasPermission(session.userId, 'shopManagerIncentive.view'))) return forbidden()
 
-    const input = await prisma.shopManagerPerformanceInput.findUnique({
+    const input = await prisma.shopManagerIncentiveInput.findUnique({
       where: { id: inputId },
       include: {
         incentivePeriod: { select: { id: true, name: true, month: true, year: true, status: true } },
@@ -45,20 +50,12 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
         },
         createdBy: { select: { id: true, name: true, email: true } },
         updatedBy: { select: { id: true, name: true, email: true } },
-        submittedBy: { select: { id: true, name: true, email: true } },
-        reviewedBy: { select: { id: true, name: true, email: true } },
-        calculation: {
-          include: {
-            components: {
-              orderBy: { componentCode: 'asc' },
-            },
-          },
-        },
+        calculation: true,
       },
     })
 
-    if (!input) return notFound('Performance input not found')
-    if (input.incentivePeriodId !== id) return notFound('Performance input not found in this period')
+    if (!input) return notFound('Input not found')
+    if (input.incentivePeriodId !== id) return notFound('Input not found in this period')
 
     if (!(await shopInUserScope(session.userId, input.shopLocationId))) return forbidden()
 
@@ -71,17 +68,19 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     const { id, inputId } = await params
     const session = await getSession()
     if (!session) return unauthorized()
-    if (!(await userHasPermission(session.userId, 'shopManagerIncentive.input'))) return forbidden()
 
-    const input = await prisma.shopManagerPerformanceInput.findUnique({
+    const hasInputAll = await userHasPermission(session.userId, 'shopManagerIncentive.inputAll')
+    const hasInputSales = await userHasPermission(session.userId, 'shopManagerIncentive.inputSales')
+    const hasInputDistribution = await userHasPermission(session.userId, 'shopManagerIncentive.inputDistribution')
+    const hasInputEbu = await userHasPermission(session.userId, 'shopManagerIncentive.inputEbu')
+
+    if (!hasInputAll && !hasInputSales && !hasInputDistribution && !hasInputEbu) return forbidden()
+
+    const input = await prisma.shopManagerIncentiveInput.findUnique({
       where: { id: inputId },
     })
-    if (!input) return notFound('Performance input not found')
-    if (input.incentivePeriodId !== id) return notFound('Performance input not found in this period')
-
-    if (input.inputStatus !== 'DRAFT' && input.inputStatus !== 'RETURNED') {
-      return badRequest('Only inputs in DRAFT or RETURNED status can be updated')
-    }
+    if (!input) return notFound('Input not found')
+    if (input.incentivePeriodId !== id) return notFound('Input not found in this period')
 
     if (!(await shopInUserScope(session.userId, input.shopLocationId))) return forbidden()
 
@@ -89,47 +88,48 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     const parsed = updateInputSchema.safeParse(body)
     if (!parsed.success) return badRequest('Invalid input', parsed.error.flatten())
 
-    const { shopLocationId, notes, ...performanceData } = parsed.data
+    const { ...fieldValues } = parsed.data
+
+    const isAtRisk = input.shopCriteria === 'AT_RISK'
     const updateData: Record<string, unknown> = {}
+    const oldValues: Record<string, unknown> = {}
+    const newValues: Record<string, unknown> = {}
 
-    if (notes !== undefined) updateData.notes = notes
+    for (const [key, value] of Object.entries(fieldValues)) {
+      if (value === undefined) continue
 
-    const performanceFields = [
-      'qgaAchievementPercent', 'qgaCount', 'evdAchievementPercent', 'evdReconciled',
-      'baSiteRequirementMet', 'mpesaFloatSold', 'mpesaTargetAchieved', 'mpesaReconciled',
-      'dsaAirtimeAchievementPercent', 'mmQoTargetPercent', 'ebuTargetAchieved', 'ebuRevenue',
-      'ebuAverageTopup', 'ebuFirstMonthLeapfrogRevenue',
-    ] as const
-
-    for (const field of performanceFields) {
-      if ((performanceData as Record<string, unknown>)[field] !== undefined) {
-        (updateData as Record<string, unknown>)[field] = (performanceData as Record<string, unknown>)[field]
+      if (isAtRisk && !(ANY_INPUT_FIELDS as readonly string[]).includes(key as any)) {
+        return badRequest(`At-risk inputs can only update shopCriteria, shopManagerId, and responsibleRemarks`)
       }
+
+      if ((SALES_FIELDS as readonly string[]).includes(key as any) && !hasInputAll && !hasInputSales) {
+        return forbidden(`You do not have permission to update ${key}`)
+      }
+      if ((DISTRIBUTION_FIELDS as readonly string[]).includes(key as any) && !hasInputAll && !hasInputDistribution) {
+        return forbidden(`You do not have permission to update ${key}`)
+      }
+      if ((EBU_FIELDS as readonly string[]).includes(key as any) && !hasInputAll && !hasInputEbu) {
+        return forbidden(`You do not have permission to update ${key}`)
+      }
+
+      updateData[key] = value
+      oldValues[key] = (input as Record<string, unknown>)[key]
+      newValues[key] = value
     }
 
-    if (Object.keys(updateData).length === 0) {
-      return badRequest('No fields to update')
-    }
+    if (Object.keys(updateData).length === 0) return badRequest('No fields to update')
 
     updateData.updatedById = session.userId
 
-    const oldValues: Record<string, unknown> = {}
-    const newValues: Record<string, unknown> = {}
-    for (const key of Object.keys(updateData)) {
-      if (key === 'updatedById') continue
-      oldValues[key] = (input as Record<string, unknown>)[key]
-      newValues[key] = updateData[key]
-    }
-
-    const updated = await prisma.shopManagerPerformanceInput.update({
+    const updated = await prisma.shopManagerIncentiveInput.update({
       where: { id: inputId },
-      data: updateData,
+      data: updateData as any,
     })
 
     await createAuditLog({
       userId: session.userId,
       action: 'SHOP_MANAGER_INCENTIVE_INPUT_UPDATE',
-      entityType: 'ShopManagerPerformanceInput',
+      entityType: 'ShopManagerIncentiveInput',
       entityId: inputId,
       oldValue: Object.keys(oldValues).length > 0 ? oldValues : undefined,
       newValue: Object.keys(newValues).length > 0 ? newValues : undefined,
