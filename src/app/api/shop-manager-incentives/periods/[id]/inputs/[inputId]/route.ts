@@ -222,20 +222,27 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     } else {
       updateData.updatedById = session.userId
 
-      updated = await prisma.shopManagerIncentiveInput.update({
-        where: { id: inputId },
-        data: updateData as any,
-      })
-
       if (period.status === 'CALCULATED') {
-        await prisma.shopManagerIncentivePeriod.update({
-          where: { id },
-          data: { status: 'OPEN' },
-        })
-        await prisma.shopManagerIncentiveCalculation.deleteMany({
-          where: { incentivePeriodId: id },
+        updated = await prisma.$transaction(async (tx) => {
+          const u = await tx.shopManagerIncentiveInput.update({
+            where: { id: inputId },
+            data: updateData as any,
+          })
+          await tx.shopManagerIncentivePeriod.update({
+            where: { id },
+            data: { status: 'OPEN' },
+          })
+          await tx.shopManagerIncentiveCalculation.deleteMany({
+            where: { incentivePeriodId: id },
+          })
+          return u
         })
         statusReverted = true
+      } else {
+        updated = await prisma.shopManagerIncentiveInput.update({
+          where: { id: inputId },
+          data: updateData as any,
+        })
       }
     }
 

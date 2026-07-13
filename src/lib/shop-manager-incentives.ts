@@ -479,10 +479,6 @@ export async function calculateAllShopManagerIncentives(
     }
   }
 
-  await prisma.shopManagerIncentiveCalculation.deleteMany({
-    where: { incentivePeriodId: periodId },
-  })
-
   const totals = {
     qgaBonus: 0, qgaSimCommission: 0, evdBonus: 0, mpesaCommission: 0,
     baSiteBonus: 0, dsaAchievementBonus: 0, qoBonus: 0,
@@ -551,6 +547,7 @@ export async function calculateAllShopManagerIncentives(
   }
 
   await prisma.$transaction([
+    prisma.shopManagerIncentiveCalculation.deleteMany({ where: { incentivePeriodId: periodId } }),
     ...calcOperations,
     prisma.shopManagerIncentivePeriod.update({
       where: { id: periodId },
@@ -577,6 +574,19 @@ export async function getPayrollHandoffPreview(periodId: string, scopeWhere?: Re
     include: { payrollPeriod: true },
   })
   if (!period) throw new Error(`Incentive period not found: ${periodId}`)
+
+  if (period.status !== 'CALCULATED') {
+    return {
+      periodId,
+      periodStatus: period.status,
+      readyForHandoff: false,
+      globalBlockers: [`Period status must be CALCULATED (current: ${period.status})`],
+      totalCreate: 0,
+      totalUpdate: 0,
+      totalBlocked: 0,
+      items: [],
+    }
+  }
 
   const calculations = await prisma.shopManagerIncentiveCalculation.findMany({
     where: { incentivePeriodId: periodId, ...scopeWhere },

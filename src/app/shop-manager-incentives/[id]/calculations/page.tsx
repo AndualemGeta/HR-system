@@ -8,7 +8,7 @@ interface ShopManager { id: string; fullName: string; employeeId: string }
 
 interface Calculation {
   id: string; incentivePeriodId: string; shopLocationId: string
-  shopCriteria: string | null; calculationNote: string | null
+  shopCriteria: string | null; calculationNote: string | null; calculatedAt: string | null
   qgaBonus: number; qgaSimCommission: number; evdBonus: number
   mpesaCommission: number; baSiteBonus: number; dsaAchievementBonus: number
   qoBonus: number; ebuActivationBonus: number; ebuRevenueShare: number
@@ -30,17 +30,10 @@ export default function CalculationsPage() {
   async function fetchData() {
     setLoading(true); setError(null)
     try {
-      const res = await fetch(`/api/shop-manager-incentives/periods/${id}/inputs`)
+      const res = await fetch(`/api/shop-manager-incentives/periods/${id}/calculations`)
       const json = await res.json()
       if (!res.ok) { setError(json.error || 'Failed to load'); return }
-      const inputs = json.data || []
-      const calcs: Calculation[] = []
-      for (const inp of inputs) {
-        if (inp.calculation) {
-          calcs.push({ ...inp.calculation, shopLocation: inp.shopLocation, shopManager: inp.shopManager })
-        }
-      }
-      setCalculations(calcs)
+      setCalculations(json.data || [])
     } catch { setError('Network error') }
     finally { setLoading(false) }
   }
