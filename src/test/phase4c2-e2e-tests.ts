@@ -1,6 +1,6 @@
 import { prisma } from '../lib/prisma'
 import {
-  validateShopCriteria, calculateShopManagerIncentive, computeReadiness,
+  calculateShopManagerIncentive, computeReadiness,
   validateIncentiveInputValues, calculateAllShopManagerIncentives,
   sendIncentivesToPayrollInputs, getPayrollHandoffPreview,
 } from '../lib/shop-manager-incentives'
@@ -27,8 +27,6 @@ async function assert(label: string, fn: () => Promise<boolean | undefined | voi
 async function flushAsserts() {
   await Promise.all(pendingAsserts)
 }
-
-function newPayrollPeriodId(): string { return 'e2e-pp-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6) }
 
 async function makePayrollPeriod(createdById: string) {
   return prisma.payrollPeriod.create({
@@ -58,29 +56,32 @@ async function ensurePayrollInputType(code: string) {
 async function main() {
   console.log('\n=== Phase 4C.2 End-to-End Tests ===\n')
 
-  // ─── Lookup Users & Shops ────────────────────────────────────────────────
+  // ─── Lookup Users & Shops (each guarded so TS narrows types) ──────────
   const adminUser = await prisma.user.findUnique({ where: { email: 'admin@leapfrog.com' } })
+  if (!adminUser) { console.log('  Skipping — admin not found'); return }
   const salesHeadUser = await prisma.user.findUnique({ where: { email: 'sales.head@leapfrog.com' } })
+  if (!salesHeadUser) { console.log('  Skipping — sales head not found'); return }
   const distHeadUser = await prisma.user.findUnique({ where: { email: 'distribution.head@leapfrog.com' } })
+  if (!distHeadUser) { console.log('  Skipping — distribution head not found'); return }
   const ebuHeadUser = await prisma.user.findUnique({ where: { email: 'ebu.head@leapfrog.com' } })
+  if (!ebuHeadUser) { console.log('  Skipping — EBU head not found'); return }
   const shopManagerEmp = await prisma.employee.findFirst({ where: { email: 'shop.manager@leapfrog.com' } })
-  // Create second shop manager for tests if not exists
-  let shopManager2Emp = await prisma.employee.findFirst({ where: { email: 'shop.manager2@leapfrog.com' } })
-  if (!shopManager2Emp && adminUser) {
-    shopManager2Emp = await prisma.employee.create({
-      data: { employeeId: 'E2E-SM2', firstName: 'Second', lastName: 'Manager', fullName: 'Second Shop Manager', email: 'shop.manager2@leapfrog.com', employmentStatus: 'ACTIVE', currentRole: 'SHOP_MANAGER' },
-    })
-    cleanup.push(async () => { await prisma.employee.delete({ where: { id: shopManager2Emp!.id } }).catch(() => {}) })
-  }
+  if (!shopManagerEmp) { console.log('  Skipping — shop manager not found'); return }
   const shopThu = await prisma.location.findUnique({ where: { code: 'SHOP_THU' } })
+  if (!shopThu) { console.log('  Skipping — SHOP_THU not found'); return }
   const shopLio = await prisma.location.findUnique({ where: { code: 'SHOP_LIO' } })
+  if (!shopLio) { console.log('  Skipping — SHOP_LIO not found'); return }
   const shopWar = await prisma.location.findUnique({ where: { code: 'SHOP_WAR' } })
+  if (!shopWar) { console.log('  Skipping — SHOP_WAR not found'); return }
   const shopIron = await prisma.location.findUnique({ where: { code: 'SHOP_IRO' } })
-
-  const missingData = !adminUser || !salesHeadUser || !distHeadUser || !ebuHeadUser || !shopManagerEmp || !shopManager2Emp || !shopThu || !shopLio || !shopWar || !shopIron
-  if (missingData) {
-    console.log('  Skipping e2e tests — required seed data not found')
-    return
+  if (!shopIron) { console.log('  Skipping — SHOP_IRO not found'); return }
+  // Second shop manager: use const with fallback creation so TS narrows to non-null
+  const existingSM2 = await prisma.employee.findFirst({ where: { email: 'shop.manager2@leapfrog.com' } })
+  const shopManager2Emp = existingSM2 ?? await prisma.employee.create({
+    data: { employeeId: 'E2E-SM2', firstName: 'Second', lastName: 'Manager', fullName: 'Second Shop Manager', email: 'shop.manager2@leapfrog.com', employmentStatus: 'ACTIVE', currentRole: 'SHOP_MANAGER' },
+  })
+  if (!existingSM2) {
+    cleanup.push(async () => { await prisma.employee.delete({ where: { id: shopManager2Emp.id } }).catch(() => {}) })
   }
 
   const adminId = adminUser.id
@@ -88,11 +89,10 @@ async function main() {
   const distHeadId = distHeadUser.id
   const ebuHeadId = ebuHeadUser.id
   const shopMgr1Id = shopManagerEmp.id
-  const shopMgr2Id = shopManager2Emp!.id
+  const shopMgr2Id = shopManager2Emp.id
   const shopThuId = shopThu.id
   const shopLioId = shopLio.id
-  const shopWarId = shopWar.id
-  const shopIronId = shopIron.id
+  // shopWar and shopIron are available if needed
 
   // ─── 1. Full Gold Shop Flow (self-contained per assert) ────────────────
   console.log('\n[1. Full Gold Shop Flow]')
@@ -563,7 +563,7 @@ async function main() {
     const p = await prisma.shopManagerIncentivePeriod.create({
       data: { payrollPeriodId: pp.id, name: 'AtomicCalcE2E', month: 12, year: 2026, status: 'OPEN', createdById: adminId },
     })
-    const inp1 = await prisma.shopManagerIncentiveInput.create({
+    await prisma.shopManagerIncentiveInput.create({
       data: {
         incentivePeriodId: p.id, shopLocationId: shopThuId, shopManagerId: shopMgr1Id,
         shopCriteria: 'GOLD', qgaAbove90: true, qgaQuantity: 100, mmQoAbove90: true,
@@ -573,7 +573,7 @@ async function main() {
         ebuFirstMonthLfRevenue: 75000, createdById: adminId,
       },
     })
-    const inp2 = await prisma.shopManagerIncentiveInput.create({
+    await prisma.shopManagerIncentiveInput.create({
       data: {
         incentivePeriodId: p.id, shopLocationId: shopLioId, shopManagerId: shopMgr2Id,
         shopCriteria: 'GOLD', qgaAbove90: null, qgaQuantity: null, mmQoAbove90: null,
@@ -650,7 +650,6 @@ async function main() {
       },
     })
     try {
-      const preview = await getPayrollHandoffPreview(p.id)
       const result = await sendIncentivesToPayrollInputs(p.id, 'UPDATE_EXISTING_UNLOCKED')
       const payrollCount = await prisma.payrollInput.count({ where: { payrollPeriodId: pp.id } })
       return (
