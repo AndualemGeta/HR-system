@@ -795,20 +795,20 @@ async function main() {
   // Seed Shop Manager Incentive payroll input types
   const adminUserId = userMap['admin@leapfrog.com']
   const incentiveInputTypes = [
-    { code: 'SHOP_MANAGER_QGA_BONUS', name: 'Shop Manager QGA Bonus', category: 'ALLOWANCE' as const, valueType: 'AMOUNT' as const },
-    { code: 'SHOP_MANAGER_QGA_SIM_COMMISSION', name: 'Shop Manager QGA SIM Commission', category: 'COMMISSION' as const, valueType: 'AMOUNT' as const },
-    { code: 'SHOP_MANAGER_EVD_BONUS', name: 'Shop Manager EVD Bonus', category: 'ALLOWANCE' as const, valueType: 'AMOUNT' as const },
-    { code: 'SHOP_MANAGER_BA_SITE_BONUS', name: 'Shop Manager BA/Site Bonus', category: 'ALLOWANCE' as const, valueType: 'AMOUNT' as const },
-    { code: 'SHOP_MANAGER_MPESA_COMMISSION', name: 'Shop Manager M-PESA Commission', category: 'COMMISSION' as const, valueType: 'AMOUNT' as const },
-    { code: 'SHOP_MANAGER_DSA_ACHIEVEMENT_BONUS', name: 'Shop Manager DSA Achievement Bonus', category: 'ALLOWANCE' as const, valueType: 'AMOUNT' as const },
-    { code: 'SHOP_MANAGER_QO_BONUS', name: 'Shop Manager QO Bonus', category: 'ALLOWANCE' as const, valueType: 'AMOUNT' as const },
-    { code: 'SHOP_MANAGER_EBU_ACTIVATION_BONUS', name: 'Shop Manager EBU Activation Bonus', category: 'ALLOWANCE' as const, valueType: 'AMOUNT' as const },
-    { code: 'SHOP_MANAGER_EBU_REVENUE_SHARE', name: 'Shop Manager EBU Revenue Share', category: 'COMMISSION' as const, valueType: 'AMOUNT' as const },
-    { code: 'SHOP_MANAGER_TOTAL_INCENTIVE', name: 'Shop Manager Total Incentive', category: 'ALLOWANCE' as const, valueType: 'AMOUNT' as const },
+    { code: 'SHOP_MANAGER_QGA_BONUS', name: 'Shop Manager QGA Bonus', category: 'ALLOWANCE' as const, valueType: 'AMOUNT' as const, isActive: false },
+    { code: 'SHOP_MANAGER_QGA_SIM_COMMISSION', name: 'Shop Manager QGA SIM Commission', category: 'COMMISSION' as const, valueType: 'AMOUNT' as const, isActive: false },
+    { code: 'SHOP_MANAGER_EVD_BONUS', name: 'Shop Manager EVD Bonus', category: 'ALLOWANCE' as const, valueType: 'AMOUNT' as const, isActive: false },
+    { code: 'SHOP_MANAGER_BA_SITE_BONUS', name: 'Shop Manager BA/Site Bonus', category: 'ALLOWANCE' as const, valueType: 'AMOUNT' as const, isActive: false },
+    { code: 'SHOP_MANAGER_MPESA_COMMISSION', name: 'Shop Manager M-PESA Commission', category: 'COMMISSION' as const, valueType: 'AMOUNT' as const, isActive: false },
+    { code: 'SHOP_MANAGER_DSA_ACHIEVEMENT_BONUS', name: 'Shop Manager DSA Achievement Bonus', category: 'ALLOWANCE' as const, valueType: 'AMOUNT' as const, isActive: false },
+    { code: 'SHOP_MANAGER_QO_BONUS', name: 'Shop Manager QO Bonus', category: 'ALLOWANCE' as const, valueType: 'AMOUNT' as const, isActive: false },
+    { code: 'SHOP_MANAGER_EBU_ACTIVATION_BONUS', name: 'Shop Manager EBU Activation Bonus', category: 'ALLOWANCE' as const, valueType: 'AMOUNT' as const, isActive: false },
+    { code: 'SHOP_MANAGER_EBU_REVENUE_SHARE', name: 'Shop Manager EBU Revenue Share', category: 'COMMISSION' as const, valueType: 'AMOUNT' as const, isActive: false },
+    { code: 'SHOP_MANAGER_TOTAL_INCENTIVE', name: 'Shop Manager Total Incentive', category: 'ALLOWANCE' as const, valueType: 'AMOUNT' as const, isActive: true },
   ]
   for (const it of incentiveInputTypes) {
     await prisma.payrollInputType.create({
-      data: { ...it, description: `${it.name} - from incentive calculation`, isActive: true, createdById: adminUserId },
+      data: { ...it, description: `${it.name} - from incentive calculation`, createdById: adminUserId },
     }).catch(() => {})
   }
   console.log(`  Created ${incentiveInputTypes.length} shop manager incentive input types`)

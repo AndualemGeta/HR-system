@@ -42,7 +42,18 @@ Secure, role-based HR employee registration and management system for Leapfrog S
 - Input fields: qgaAbove90 (Boolean), qgaQuantity (Int), corridorStatus (Boolean), evdAbove100AndReconciled (Boolean), mpesaTargetAndReconciled (Boolean), baSite (Boolean), ebuRevenueMade (Boolean), ebuAverageTopupAbove500 (Boolean), ebuFirstMonthLfRevenue (Decimal), plus legacy numeric fields
 - 5 UI pages: Incentive Periods list, New Period, Period Dashboard, Inputs (Google Sheet-style), Calculations
 - No Review or Import pages
-- 180 tests
+- Only total incentive is payable (`SHOP_MANAGER_TOTAL_INCENTIVE` payroll input type); individual components are audit details only
+- Calculation is atomic (all-or-nothing transaction — entire batch succeeds or rolls back)
+- Payroll handoff is atomic (all-or-nothing transaction — all records created or none)
+- Department input ownership enforced on POST and PATCH
+- Scoped users (ASM, SHOP_MANAGER) see only their shops in all endpoints
+- Input changes after calculation trigger recalculation requirement (status reverts)
+- Legacy component payroll input types (`SHOP_MANAGER_QGA_BONUS`, etc.) marked inactive
+- DELETE input route added (`DELETE /periods/[id]/inputs/[inputId]`)
+- Calculations GET endpoint added (`GET /periods/[id]/calculations`)
+- 12 API end-to-end test suites covering full lifecycle, scope, ownership, at-risk, recalculation, delete, export, permissions, regression
+- GitHub CI pipeline added (`.github/workflows/ci.yml`)
+- 180 tests + 12 E2E suites
 
 **Phase 4C.2 does NOT build: approval/review workflow for incentives, final payroll calculation, income tax, pension, net salary, payslip, bank/M-PESA payment export, quarterly auto-calculation, general KPI engine, ASM/DSA commission engine, or attendance/leave management.**
 
@@ -175,7 +186,7 @@ Open `http://localhost:3000`.
 ## Tests
 
 ```powershell
-npm test                # Run all tests (42 Phase 1 + 41 Phase 2A + 27 Phase 2B + 38 Phase 3 + 78 Phase 3.5 + 35 Phase 4A + 35 Phase 4B + 91 Phase 4C.1 + 180 Phase 4C.2 = 567)
+npm test                # Run all tests (42 Phase 1 + 41 Phase 2A + 27 Phase 2B + 38 Phase 3 + 78 Phase 3.5 + 35 Phase 4A + 35 Phase 4B + 91 Phase 4C.1 + 180 Phase 4C.2 = 567) — includes 12 API E2E test suites
 npm run test:phase1     # Run baseline tests only (42)
 npm run test:phase2a    # Run Phase 2A tests only (41)
 npm run test:phase2b    # Run Phase 2B tests only (27)
@@ -190,7 +201,7 @@ npm run lint
 npm run build
 ```
 
-All pass clean — 567 tests covering authentication, RBAC, employee registration, salary visibility, assignments, audit logging, organization data, document upload/visibility/download/deactivation, required document rules, onboarding completion, import normalization/column mapping/validation/confirm, payroll readiness, pay component CRUD, pay rule CRUD, rule activation/deactivation, preview calculations, data quality scanning/resolution, change request workflow (create/approve/reject/cancel), salary rule approval workflow (request/approve/reject), phase control checklist, payroll period management, employee selection, input type setup, monthly input collection, department submission tracking, CSV import, shop master CRUD/criteria/permissions, and shop manager incentive lifecycle/calculation rules (all 9 components AT_RISK/permissions/department-scope).
+All pass clean — 567 tests covering authentication, RBAC, employee registration, salary visibility, assignments, audit logging, organization data, document upload/visibility/download/deactivation, required document rules, onboarding completion, import normalization/column mapping/validation/confirm, payroll readiness, pay component CRUD, pay rule CRUD, rule activation/deactivation, preview calculations, data quality scanning/resolution, change request workflow (create/approve/reject/cancel), salary rule approval workflow (request/approve/reject), phase control checklist, payroll period management, employee selection, input type setup, monthly input collection, department submission tracking, CSV import, shop master CRUD/criteria/permissions, and shop manager incentive lifecycle/calculation rules (all 9 components AT_RISK/permissions/department-scope/atomic-transaction/E2E).
 
 ## Key Design Decisions
 
@@ -219,6 +230,13 @@ All pass clean — 567 tests covering authentication, RBAC, employee registratio
 - Phase 3.5 change request auto-applies the field value on approval
 - Phase 3.5 rule activation validates scope and duplicate rules before submitting for approval
 - Phase 3.5 phase control checklist tracks go-live readiness across all phases
+- Phase 4C.2 lifecycle: DRAFT → OPEN → CALCULATED → CANCELLED (no review/approve/lock states)
+- Phase 4C.2 only total incentive (`SHOP_MANAGER_TOTAL_INCENTIVE`) is payable; all 9 component calculations exist for audit/transparency only
+- Phase 4C.2 calculation is atomic — all shops in a period are calculated in a single transaction; partial failure rolls back
+- Phase 4C.2 department input ownership enforced at API level: Sales Head writes QGA fields, Distribution Head writes corridor/EVD/M-PESA/BA fields, EBU Head writes EBU fields; inputAll overrides all
+- Phase 4C.2 scope rules: HR Admin/Sales Head/Finance/Auditor see all shops, ASM sees assigned area shops, Shop Manager sees own shop only, Employee sees none
+- Phase 4C.2 input changes after calculation invalidate the calculation (status reverts to OPEN, recalculation required)
+- Phase 4C.2 legacy component payroll input types (individual incentive components) marked inactive — only the total incentive is forwarded to payroll
 
 ## Known Limitations
 

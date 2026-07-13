@@ -2,11 +2,11 @@ import { NextRequest } from 'next/server'
 import { z } from 'zod'
 import { prisma } from '@/lib/prisma'
 import { getSession } from '@/lib/session'
-import { userHasPermission, userHasAnyPermission } from '@/lib/rbac'
+import { userHasPermission } from '@/lib/rbac'
 import { success, badRequest, unauthorized, forbidden, notFound, conflict, internalError } from '@/lib/api'
 import { createAuditLog } from '@/lib/audit'
 import { buildIncentiveScopeWhere, shopInUserScope } from '@/lib/incentive-scope'
-import { validateShopCriteria } from '@/lib/shop-manager-incentives'
+import { validateShopCriteria, validateIncentiveInputValues } from '@/lib/shop-manager-incentives'
 
 const createInputSchema = z.object({
   shopLocationId: z.string().min(1),
@@ -86,6 +86,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const period = await prisma.shopManagerIncentivePeriod.findUnique({ where: { id } })
     if (!period) return notFound('Incentive period not found')
 
+    if (period.status === 'CANCELLED') return badRequest('Cannot create inputs for a cancelled period')
+
     const body = await req.json().catch(() => ({}))
     const parsed = createInputSchema.safeParse(body)
     if (!parsed.success) return badRequest('Invalid input', parsed.error.flatten())
@@ -112,15 +114,19 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
     const isAtRisk = validatedCriteria === 'AT_RISK'
 
-    function hasSalesPermission(field: string): boolean {
-      return hasInputAll || (SALES_FIELDS as readonly string[]).includes(field)
+    const fieldValidation = validateIncentiveInputValues(fieldValues as Record<string, unknown>)
+    if (!fieldValidation.valid) return badRequest('Validation failed', fieldValidation.errors)
+
+    if (shopManagerId !== undefined) {
+      const manager = await prisma.employee.findUnique({ where: { id: shopManagerId } })
+      if (!manager) return badRequest('Shop manager not found')
+      if (manager.employmentStatus !== 'ACTIVE') return badRequest('Shop manager must be an active employee')
+      if (manager.currentRole !== 'SHOP_MANAGER') return badRequest('Employee must have role SHOP_MANAGER')
     }
-    function hasDistributionPermission(field: string): boolean {
-      return hasInputAll || (DISTRIBUTION_FIELDS as readonly string[]).includes(field)
-    }
-    function hasEbuPermission(field: string): boolean {
-      return hasInputAll || (EBU_FIELDS as readonly string[]).includes(field)
-    }
+
+    const hasSalesPermission = (): boolean => hasInputAll || hasInputSales
+    const hasDistributionPermission = (): boolean => hasInputAll || hasInputDistribution
+    const hasEbuPermission = (): boolean => hasInputAll || hasInputEbu
 
     const dataToSet: Record<string, unknown> = {
       incentivePeriodId: id,
@@ -138,22 +144,56 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         return badRequest('At-risk shops can only set shopCriteria and responsibleRemarks, not other field values')
       }
     } else {
+      if (period.status === 'DRAFT') {
+        const nonSharedFields = Object.keys(fieldValues)
+          .filter(k => (fieldValues as Record<string, unknown>)[k] !== undefined)
+          .filter(k => !(ANY_INPUT_FIELDS as readonly string[]).includes(k as any))
+        if (nonSharedFields.length > 0) {
+          return badRequest('Draft periods only allow setting shopCriteria, shopManagerId, and responsibleRemarks')
+        }
+      }
+
       for (const [key, value] of Object.entries(fieldValues)) {
         if (value === undefined) continue
-        if ((SALES_FIELDS as readonly string[]).includes(key) && !hasSalesPermission(key)) {
+        if ((SALES_FIELDS as readonly string[]).includes(key) && !hasSalesPermission()) {
           return forbidden(`You do not have permission to set ${key}`)
         }
-        if ((DISTRIBUTION_FIELDS as readonly string[]).includes(key) && !hasDistributionPermission(key)) {
+        if ((DISTRIBUTION_FIELDS as readonly string[]).includes(key) && !hasDistributionPermission()) {
           return forbidden(`You do not have permission to set ${key}`)
         }
-        if ((EBU_FIELDS as readonly string[]).includes(key) && !hasEbuPermission(key)) {
+        if ((EBU_FIELDS as readonly string[]).includes(key) && !hasEbuPermission()) {
           return forbidden(`You do not have permission to set ${key}`)
         }
         dataToSet[key] = value
       }
     }
 
-    const input = await prisma.shopManagerIncentiveInput.create({ data: dataToSet as any })
+    let input
+
+    if (period.status === 'CALCULATED') {
+      input = await prisma.$transaction(async (tx) => {
+        const result = await tx.shopManagerIncentiveInput.create({ data: dataToSet as any })
+        await tx.shopManagerIncentivePeriod.update({
+          where: { id },
+          data: { status: 'OPEN' },
+        })
+        await tx.shopManagerIncentiveCalculation.deleteMany({
+          where: { incentivePeriodId: id },
+        })
+        return result
+      })
+
+      await createAuditLog({
+        userId: session.userId,
+        action: 'SHOP_MANAGER_INCENTIVE_RECALCULATION_REQUIRED',
+        entityType: 'ShopManagerIncentivePeriod',
+        entityId: id,
+        oldValue: { status: 'CALCULATED' },
+        newValue: { status: 'OPEN' },
+      })
+    } else {
+      input = await prisma.shopManagerIncentiveInput.create({ data: dataToSet as any })
+    }
 
     await createAuditLog({
       userId: session.userId,

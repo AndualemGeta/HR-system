@@ -4,6 +4,7 @@ import { getSession } from '@/lib/session'
 import { userHasPermission } from '@/lib/rbac'
 import { success, unauthorized, forbidden, notFound, internalError } from '@/lib/api'
 import { computeReadiness } from '@/lib/shop-manager-incentives'
+import { buildIncentiveScopeWhere } from '@/lib/incentive-scope'
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -18,8 +19,9 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     })
     if (!period) return notFound('Incentive period not found')
 
+    const scopeWhere = await buildIncentiveScopeWhere(session.userId)
     const inputs = await prisma.shopManagerIncentiveInput.findMany({
-      where: { incentivePeriodId: id },
+      where: { incentivePeriodId: id, ...scopeWhere },
       include: {
         shopLocation: {
           select: { id: true, name: true, code: true },

@@ -20,6 +20,7 @@ export type BlockerCode =
   | 'INVALID_PERCENTAGE'
   | 'INVALID_NEGATIVE_AMOUNT'
   | 'STALE_CALCULATION'
+  | 'DUPLICATE_SHOP_MANAGER_IN_PERIOD'
 
 export function validateShopCriteria(criteria: string): string {
   const upper = criteria.toUpperCase().replace('-', '_')
@@ -81,31 +82,25 @@ export function calculateShopManagerIncentive(input: {
     return bronze
   }
 
-  // QGA Bonus
   let qgaBonus = 0
   if (input.qgaAbove90 === true) qgaBonus = criteriaAmount(5000, 3000, 1500)
 
-  // QGA SIM Commission
   let qgaSimCommission = 0
   if (input.qgaAbove90 === true && input.qgaQuantity !== null) {
     qgaSimCommission = criteriaAmount(input.qgaQuantity * 1.5, input.qgaQuantity * 1, 0)
   }
 
-  // EVD Bonus
   let evdBonus = 0
   if (input.evdAbove100AndReconciled === true) evdBonus = criteriaAmount(3000, 2000, 0)
 
-  // M-PESA Commission
   let mpesaCommission = 0
   if (input.mpesaTargetAndReconciled === true && input.mpesaFloatSold !== null) {
     mpesaCommission = criteriaAmount(input.mpesaFloatSold * 0.02, input.mpesaFloatSold * 0.02, 0)
   }
 
-  // BA/Site Bonus
   let baSiteBonus = 0
   if (input.baSite === true) baSiteBonus = criteriaAmount(4000, 2000, 0)
 
-  // DSA Achievement Bonus — confirmed boundaries: >90 = 2000, 60-90 = 1500, 50-59.99 = 1000, <50 = 0
   let dsaAchievementBonus = 0
   if (input.dsaAirtimeAchievementPercent !== null) {
     const pct = input.dsaAirtimeAchievementPercent
@@ -114,17 +109,14 @@ export function calculateShopManagerIncentive(input: {
     else if (pct >= 50) dsaAchievementBonus = 1000
   }
 
-  // QO Bonus — independent of QGA, uses mmQoAbove90
   let qoBonus = 0
   if (input.mmQoAbove90 === true) qoBonus = 4000
 
-  // EBU Activation Bonus
   let ebuActivationBonus = 0
   if (input.ebuTargetAchieved === true && input.ebuRevenueMade === true && input.ebuAverageTopupAbove500 === true) {
     ebuActivationBonus = criteriaAmount(3000, 1500, 500)
   }
 
-  // EBU Revenue Share — no unconfirmed thresholds, just percentage of revenue
   let ebuRevenueShare = 0
   if (input.ebuRevenueMade === true && input.ebuFirstMonthLfRevenue !== null) {
     ebuRevenueShare = criteriaAmount(input.ebuFirstMonthLfRevenue * 0.25, input.ebuFirstMonthLfRevenue * 0.15, 0)
@@ -184,7 +176,6 @@ export function computeReadiness(input: {
   const criteria = (input.shopCriteria || '').toUpperCase().replace('-', '_')
   const isAtRisk = criteria === 'AT_RISK'
 
-  // At-risk shops are always AT_RISK_ZERO — no missing-field blockers
   if (isAtRisk) {
     return {
       readinessStatus: 'AT_RISK_ZERO',
@@ -220,13 +211,11 @@ export function computeReadiness(input: {
   const blockers: BlockerCode[] = []
   const warnings: string[] = []
 
-  // Shop setup requirements
   if (!input.shopManagerId) {
     missingFields.push('shopManagerId')
     blockers.push('MISSING_SHOP_MANAGER')
   }
 
-  // Sales Head fields
   if (input.qgaAbove90 === null || input.qgaAbove90 === undefined) {
     missingFields.push('qgaAbove90')
     missingSalesFields.push('qgaAbove90')
@@ -243,14 +232,12 @@ export function computeReadiness(input: {
     blockers.push('MISSING_SALES_INPUTS')
   }
 
-  // Conditional: qgaQuantity required when qgaAbove90 = true
   if (input.qgaAbove90 === true && (input.qgaQuantity === null || input.qgaQuantity === undefined)) {
     missingFields.push('qgaQuantity')
     missingSalesFields.push('qgaQuantity')
     blockers.push('MISSING_QGA_QUANTITY')
   }
 
-  // Distribution Head fields
   if (input.corridorStatus === null || input.corridorStatus === undefined) {
     missingFields.push('corridorStatus')
     missingDistributionFields.push('corridorStatus')
@@ -272,14 +259,12 @@ export function computeReadiness(input: {
     blockers.push('MISSING_DISTRIBUTION_INPUTS')
   }
 
-  // Conditional: mpesaFloatSold required when mpesaTargetAndReconciled = true
   if (input.mpesaTargetAndReconciled === true && (input.mpesaFloatSold === null || input.mpesaFloatSold === undefined)) {
     missingFields.push('mpesaFloatSold')
     missingDistributionFields.push('mpesaFloatSold')
     blockers.push('MISSING_MPESA_FLOAT_SOLD')
   }
 
-  // EBU Head fields
   if (input.ebuTargetAchieved === null || input.ebuTargetAchieved === undefined) {
     missingFields.push('ebuTargetAchieved')
     missingEbuFields.push('ebuTargetAchieved')
@@ -296,14 +281,12 @@ export function computeReadiness(input: {
     blockers.push('MISSING_EBU_INPUTS')
   }
 
-  // Conditional: ebuFirstMonthLfRevenue required when ebuRevenueMade = true
   if (input.ebuRevenueMade === true && (input.ebuFirstMonthLfRevenue === null || input.ebuFirstMonthLfRevenue === undefined)) {
     missingFields.push('ebuFirstMonthLfRevenue')
     missingEbuFields.push('ebuFirstMonthLfRevenue')
     blockers.push('MISSING_EBU_FIRST_MONTH_REVENUE')
   }
 
-  // Validation checks
   if (input.dsaAirtimeAchievementPercent !== null && input.dsaAirtimeAchievementPercent !== undefined) {
     if (input.dsaAirtimeAchievementPercent < 0 || input.dsaAirtimeAchievementPercent > 200) {
       blockers.push('INVALID_PERCENTAGE')
@@ -323,16 +306,14 @@ export function computeReadiness(input: {
     warnings.push('EBU first month LF revenue must not be negative')
   }
 
-  // Calculation staleness
   if (input.calculationStale) {
     blockers.push('STALE_CALCULATION')
     warnings.push('Inputs have changed since last calculation — recalculation required')
   }
 
   const hasBlockers = blockers.length > 0 && !(blockers.length === 1 && blockers[0] === 'STALE_CALCULATION' && missingFields.length === 0)
-  // Only STALE with no missing fields means "recalculate needed"
   const isOnlyStale = blockers.length === 1 && blockers[0] === 'STALE_CALCULATION' && missingFields.length === 0
-  // All missing fields filled but stale
+
   if (input.calculationExists && !input.calculationStale && missingFields.length === 0 && blockers.filter(b => b !== 'STALE_CALCULATION').length === 0) {
     return {
       readinessStatus: 'CALCULATED',
@@ -385,11 +366,15 @@ export function validateIncentiveInputValues(values: Record<string, unknown>): {
   return { valid: errors.length === 0, errors }
 }
 
-export async function calculateAllShopManagerIncentives(periodId: string): Promise<any> {
+export async function calculateAllShopManagerIncentives(
+  periodId: string,
+  scopeWhere?: Record<string, unknown>
+): Promise<any> {
   const period = await prisma.shopManagerIncentivePeriod.findUnique({
     where: { id: periodId },
     include: {
       inputs: {
+        where: scopeWhere as any,
         include: {
           shopLocation: { include: { shopProfile: true } },
           shopManager: true,
@@ -401,69 +386,30 @@ export async function calculateAllShopManagerIncentives(periodId: string): Promi
 
   if (!period) throw new Error(`Incentive period not found: ${periodId}`)
 
-  const results: any[] = []
-  const blockers: any[] = []
-  let incompleteCount = 0
+  const blockerList: any[] = []
   let readyCount = 0
   let atRiskCount = 0
 
+  const readinessByInput = new Map<string, { input: typeof period.inputs[0]; readiness: ReadinessResult }>()
+
   for (const input of period.inputs) {
     if (!input.shopCriteria) {
-      incompleteCount++
-      blockers.push({ shopLocationId: input.shopLocationId, reason: 'MISSING_SHOP_CRITERIA' })
+      blockerList.push({ shopLocationId: input.shopLocationId, shopName: input.shopLocation?.name, reason: 'MISSING_SHOP_CRITERIA' })
       continue
     }
-    const criteria = input.shopCriteria
-
+    const criteria = input.shopCriteria.toUpperCase().replace('-', '_')
     if (criteria === 'AT_RISK') {
       atRiskCount++
-      const calcInput = {
-        shopCriteria: criteria,
-        qgaAbove90: input.qgaAbove90,
-        qgaQuantity: input.qgaQuantity,
-        mmQoAbove90: input.mmQoAbove90,
-        dsaAirtimeAchievementPercent: input.dsaAirtimeAchievementPercent ? Number(input.dsaAirtimeAchievementPercent) : null,
-        corridorStatus: input.corridorStatus,
-        evdAbove100AndReconciled: input.evdAbove100AndReconciled,
-        mpesaTargetAndReconciled: input.mpesaTargetAndReconciled,
-        mpesaFloatSold: input.mpesaFloatSold ? Number(input.mpesaFloatSold) : null,
-        baSite: input.baSite,
-        ebuTargetAchieved: input.ebuTargetAchieved,
-        ebuRevenueMade: input.ebuRevenueMade,
-        ebuAverageTopupAbove500: input.ebuAverageTopupAbove500,
-        ebuFirstMonthLfRevenue: input.ebuFirstMonthLfRevenue ? Number(input.ebuFirstMonthLfRevenue) : null,
-      }
-      const result = calculateShopManagerIncentive(calcInput)
-      const calcData = {
-        incentivePeriodId: periodId,
-        inputId: input.id,
-        shopLocationId: input.shopLocationId,
-        shopManagerId: input.shopManagerId,
-        shopCriteria: criteria,
-        qgaBonus: result.qgaBonus,
-        qgaSimCommission: result.qgaSimCommission,
-        evdBonus: result.evdBonus,
-        mpesaCommission: result.mpesaCommission,
-        baSiteBonus: result.baSiteBonus,
-        dsaAchievementBonus: result.dsaAchievementBonus,
-        qoBonus: result.qoBonus,
-        ebuActivationBonus: result.ebuActivationBonus,
-        ebuRevenueShare: result.ebuRevenueShare,
-        totalIncentive: result.totalIncentive,
-        calculationNote: result.calculationNote,
-        calculatedAt: new Date(),
-      }
-      const existing = input.calculation
-      if (existing) {
-        await prisma.shopManagerIncentiveCalculation.update({ where: { id: existing.id }, data: calcData })
-      } else {
-        await prisma.shopManagerIncentiveCalculation.create({ data: calcData })
-      }
-      results.push({ shopId: input.shopLocationId, totalIncentive: 0, atRisk: true })
+      readinessByInput.set(input.id, {
+        input,
+        readiness: {
+          readinessStatus: 'AT_RISK_ZERO',
+          missingFields: [], missingSalesFields: [], missingDistributionFields: [], missingEbuFields: [],
+          blockerCount: 0, warningCount: 0, blockers: [], warnings: [],
+        },
+      })
       continue
     }
-
-    // Check readiness for non-At-risk shops
     const readiness = computeReadiness({
       shopCriteria: input.shopCriteria,
       shopManagerId: input.shopManagerId,
@@ -481,15 +427,73 @@ export async function calculateAllShopManagerIncentives(periodId: string): Promi
       ebuAverageTopupAbove500: input.ebuAverageTopupAbove500,
       ebuFirstMonthLfRevenue: input.ebuFirstMonthLfRevenue ? Number(input.ebuFirstMonthLfRevenue) : null,
     })
-
+    readinessByInput.set(input.id, { input, readiness })
     if (readiness.blockers.length > 0) {
-      incompleteCount++
-      blockers.push({ shopLocationId: input.shopLocationId, shopName: input.shopLocation?.name, readiness })
-      continue
+      blockerList.push({ shopLocationId: input.shopLocationId, shopName: input.shopLocation?.name, readiness })
+    } else {
+      readyCount++
     }
+  }
 
-    readyCount++
+  const managerCounts = new Map<string, { shopLocationId: string; shopName: string }[]>()
+  for (const input of period.inputs) {
+    if (input.shopManagerId) {
+      if (!managerCounts.has(input.shopManagerId)) {
+        managerCounts.set(input.shopManagerId, [])
+      }
+      managerCounts.get(input.shopManagerId)!.push({
+        shopLocationId: input.shopLocationId,
+        shopName: input.shopLocation?.name || '',
+      })
+    }
+  }
+  managerCounts.forEach((entries, mgrId) => {
+    if (entries.length > 1) {
+      blockerList.push({
+        shopManagerId: mgrId,
+        reason: 'DUPLICATE_SHOP_MANAGER_IN_PERIOD' as BlockerCode,
+        message: `Shop manager ${mgrId} is assigned to ${entries.length} shops: ${entries.map(e => e.shopName).join(', ')}`,
+        shops: entries,
+      })
+    }
+  })
 
+  const zeroTotals = {
+    qgaBonus: 0, qgaSimCommission: 0, evdBonus: 0, mpesaCommission: 0,
+    baSiteBonus: 0, dsaAchievementBonus: 0, qoBonus: 0,
+    ebuActivationBonus: 0, ebuRevenueShare: 0, totalIncentive: 0,
+  }
+
+  if (blockerList.length > 0) {
+    return {
+      periodId,
+      status: 'BLOCKED',
+      totalShops: period.inputs.length,
+      readyShops: readyCount,
+      atRiskShops: atRiskCount,
+      calculatedShops: readyCount + atRiskCount,
+      totalIncentive: 0,
+      componentTotals: { ...zeroTotals },
+      blockers: blockerList,
+      message: `${blockerList.length} shop(s) blocked calculation due to incomplete inputs or duplicate manager assignments`,
+    }
+  }
+
+  await prisma.shopManagerIncentiveCalculation.deleteMany({
+    where: { incentivePeriodId: periodId },
+  })
+
+  const totals = {
+    qgaBonus: 0, qgaSimCommission: 0, evdBonus: 0, mpesaCommission: 0,
+    baSiteBonus: 0, dsaAchievementBonus: 0, qoBonus: 0,
+    ebuActivationBonus: 0, ebuRevenueShare: 0, totalIncentive: 0,
+  }
+
+  const calcOperations: any[] = []
+  const results: any[] = []
+
+  for (const input of period.inputs) {
+    const criteria = (input.shopCriteria || 'UNASSIGNED').toUpperCase().replace('-', '_')
     const calcInput = {
       shopCriteria: criteria,
       qgaAbove90: input.qgaAbove90,
@@ -506,58 +510,53 @@ export async function calculateAllShopManagerIncentives(periodId: string): Promi
       ebuAverageTopupAbove500: input.ebuAverageTopupAbove500,
       ebuFirstMonthLfRevenue: input.ebuFirstMonthLfRevenue ? Number(input.ebuFirstMonthLfRevenue) : null,
     }
-
     const result = calculateShopManagerIncentive(calcInput)
 
-    const calcData = {
-      incentivePeriodId: periodId,
-      inputId: input.id,
-      shopLocationId: input.shopLocationId,
-      shopManagerId: input.shopManagerId,
-      shopCriteria: criteria,
-      qgaBonus: result.qgaBonus,
-      qgaSimCommission: result.qgaSimCommission,
-      evdBonus: result.evdBonus,
-      mpesaCommission: result.mpesaCommission,
-      baSiteBonus: result.baSiteBonus,
-      dsaAchievementBonus: result.dsaAchievementBonus,
-      qoBonus: result.qoBonus,
-      ebuActivationBonus: result.ebuActivationBonus,
-      ebuRevenueShare: result.ebuRevenueShare,
-      totalIncentive: result.totalIncentive,
-      calculationNote: result.calculationNote,
-      calculatedAt: new Date(),
-    }
+    totals.qgaBonus = round2(totals.qgaBonus + result.qgaBonus)
+    totals.qgaSimCommission = round2(totals.qgaSimCommission + result.qgaSimCommission)
+    totals.evdBonus = round2(totals.evdBonus + result.evdBonus)
+    totals.mpesaCommission = round2(totals.mpesaCommission + result.mpesaCommission)
+    totals.baSiteBonus = round2(totals.baSiteBonus + result.baSiteBonus)
+    totals.dsaAchievementBonus = round2(totals.dsaAchievementBonus + result.dsaAchievementBonus)
+    totals.qoBonus = round2(totals.qoBonus + result.qoBonus)
+    totals.ebuActivationBonus = round2(totals.ebuActivationBonus + result.ebuActivationBonus)
+    totals.ebuRevenueShare = round2(totals.ebuRevenueShare + result.ebuRevenueShare)
+    totals.totalIncentive = round2(totals.totalIncentive + result.totalIncentive)
 
-    const existing = input.calculation
-    if (existing) {
-      await prisma.shopManagerIncentiveCalculation.update({ where: { id: existing.id }, data: calcData })
-    } else {
-      await prisma.shopManagerIncentiveCalculation.create({ data: calcData })
-    }
+    calcOperations.push(
+      prisma.shopManagerIncentiveCalculation.create({
+        data: {
+          incentivePeriodId: periodId,
+          inputId: input.id,
+          shopLocationId: input.shopLocationId,
+          shopManagerId: input.shopManagerId,
+          shopCriteria: criteria as any,
+          qgaBonus: result.qgaBonus,
+          qgaSimCommission: result.qgaSimCommission,
+          evdBonus: result.evdBonus,
+          mpesaCommission: result.mpesaCommission,
+          baSiteBonus: result.baSiteBonus,
+          dsaAchievementBonus: result.dsaAchievementBonus,
+          qoBonus: result.qoBonus,
+          ebuActivationBonus: result.ebuActivationBonus,
+          ebuRevenueShare: result.ebuRevenueShare,
+          totalIncentive: result.totalIncentive,
+          calculationNote: result.calculationNote,
+          calculatedAt: new Date(),
+        },
+      })
+    )
 
-    results.push({ shopId: input.shopLocationId, totalIncentive: result.totalIncentive })
+    results.push({ shopId: input.shopLocationId, totalIncentive: result.totalIncentive, atRisk: criteria === 'AT_RISK' })
   }
 
-  // Only set period to CALCULATED if no non-At-risk shops have blockers
-  if (blockers.length > 0) {
-    return {
-      periodId,
-      status: 'BLOCKED',
-      totalShops: period.inputs.length,
-      readyShops: readyCount,
-      atRiskShops: atRiskCount,
-      incompleteShops: incompleteCount,
-      calculatedShops: readyCount + atRiskCount,
-      blockers,
-      message: `${blockers.length} shop(s) blocked calculation due to incomplete inputs`,
-    }
-  }
-
-  await prisma.shopManagerIncentivePeriod.update({
-    where: { id: periodId },
-    data: { status: 'CALCULATED' as any },
-  })
+  await prisma.$transaction([
+    ...calcOperations,
+    prisma.shopManagerIncentivePeriod.update({
+      where: { id: periodId },
+      data: { status: 'CALCULATED' as any },
+    }),
+  ])
 
   return {
     periodId,
@@ -565,13 +564,14 @@ export async function calculateAllShopManagerIncentives(periodId: string): Promi
     totalShops: period.inputs.length,
     readyShops: readyCount,
     atRiskShops: atRiskCount,
-    incompleteShops: incompleteCount,
-    calculatedShops: readyCount + atRiskCount,
-    calculations: results,
+    calculatedShops: period.inputs.length,
+    totalIncentive: totals.totalIncentive,
+    componentTotals: { ...totals },
+    blockers: [],
   }
 }
 
-export async function getPayrollHandoffPreview(periodId: string): Promise<any> {
+export async function getPayrollHandoffPreview(periodId: string, scopeWhere?: Record<string, unknown>): Promise<any> {
   const period = await prisma.shopManagerIncentivePeriod.findUnique({
     where: { id: periodId },
     include: { payrollPeriod: true },
@@ -579,7 +579,7 @@ export async function getPayrollHandoffPreview(periodId: string): Promise<any> {
   if (!period) throw new Error(`Incentive period not found: ${periodId}`)
 
   const calculations = await prisma.shopManagerIncentiveCalculation.findMany({
-    where: { incentivePeriodId: periodId },
+    where: { incentivePeriodId: periodId, ...scopeWhere },
     include: {
       shopManager: true,
       shopLocation: { select: { name: true, code: true } },
@@ -590,7 +590,55 @@ export async function getPayrollHandoffPreview(periodId: string): Promise<any> {
   const totalType = await prisma.payrollInputType.findUnique({
     where: { code: 'SHOP_MANAGER_TOTAL_INCENTIVE' },
   })
-  if (!totalType) throw new Error('SHOP_MANAGER_TOTAL_INCENTIVE payroll input type not found')
+
+  const globalBlockers: string[] = []
+
+  if (!totalType) {
+    globalBlockers.push('SHOP_MANAGER_TOTAL_INCENTIVE payroll input type not found')
+  } else if (!totalType.isActive) {
+    globalBlockers.push('SHOP_MANAGER_TOTAL_INCENTIVE payroll input type is inactive')
+  }
+
+  if (period.payrollPeriod && (period.payrollPeriod.status === 'INPUT_COLLECTION_CLOSED' || period.payrollPeriod.status === 'CANCELLED')) {
+    globalBlockers.push(`Linked payroll period is ${period.payrollPeriod.status}`)
+  }
+
+  const managerCounts = new Map<string, { shopLocationId: string; shopName: string }[]>()
+  for (const calc of calculations) {
+    if (calc.shopManagerId) {
+      if (!managerCounts.has(calc.shopManagerId)) {
+        managerCounts.set(calc.shopManagerId, [])
+      }
+      managerCounts.get(calc.shopManagerId)!.push({
+        shopLocationId: calc.shopLocationId,
+        shopName: calc.shopLocation?.name || '',
+      })
+    }
+  }
+  const duplicateManagerIds = new Set<string>()
+  managerCounts.forEach((entries, mgrId) => {
+    if (entries.length > 1) {
+      duplicateManagerIds.add(mgrId)
+    }
+  })
+  if (duplicateManagerIds.size > 0) {
+    globalBlockers.push(`Duplicate shop manager assignments found for ${duplicateManagerIds.size} manager(s)`)
+  }
+
+  const staleCalcIds = new Set<string>()
+  for (const calc of calculations) {
+    if (calc.input && calc.calculatedAt) {
+      if (calc.input.updatedAt > calc.calculatedAt) {
+        staleCalcIds.add(calc.id)
+      }
+    }
+    if (calc.input && !calc.calculatedAt) {
+      staleCalcIds.add(calc.id)
+    }
+  }
+  if (staleCalcIds.size > 0) {
+    globalBlockers.push(`${staleCalcIds.size} calculation(s) are stale — inputs updated after calculation`)
+  }
 
   const items: any[] = []
   for (const calc of calculations) {
@@ -606,6 +654,13 @@ export async function getPayrollHandoffPreview(periodId: string): Promise<any> {
       blocker: null,
     }
 
+    if (globalBlockers.length > 0) {
+      item.proposedAction = 'BLOCKED'
+      item.blocker = globalBlockers.join('; ')
+      items.push(item)
+      continue
+    }
+
     if (!calc.shopManagerId) {
       item.proposedAction = 'BLOCKED'
       item.blocker = 'MISSING_SHOP_MANAGER'
@@ -613,7 +668,20 @@ export async function getPayrollHandoffPreview(periodId: string): Promise<any> {
       continue
     }
 
-    // Check payroll period
+    if (duplicateManagerIds.has(calc.shopManagerId)) {
+      item.proposedAction = 'BLOCKED'
+      item.blocker = 'DUPLICATE_SHOP_MANAGER_IN_PERIOD'
+      items.push(item)
+      continue
+    }
+
+    if (staleCalcIds.has(calc.id)) {
+      item.proposedAction = 'BLOCKED'
+      item.blocker = 'STALE_CALCULATION'
+      items.push(item)
+      continue
+    }
+
     if (period.payrollPeriod && (period.payrollPeriod.status === 'INPUT_COLLECTION_CLOSED' || period.payrollPeriod.status === 'CANCELLED')) {
       item.proposedAction = 'BLOCKED'
       item.blocker = 'PAYROLL_PERIOD_CLOSED_OR_CANCELLED'
@@ -621,44 +689,44 @@ export async function getPayrollHandoffPreview(periodId: string): Promise<any> {
       continue
     }
 
-    // Skip zero total
     if (Number(calc.totalIncentive || 0) <= 0) {
       item.proposedAction = 'SKIPPED_ZERO'
       items.push(item)
       continue
     }
 
-    // Check existing payroll input
-    const existing = await prisma.payrollInput.findUnique({
-      where: {
-        payrollPeriodId_employeeId_inputTypeId: {
-          payrollPeriodId: period.payrollPeriodId,
-          employeeId: calc.shopManagerId,
-          inputTypeId: totalType.id,
+    if (totalType) {
+      const existing = await prisma.payrollInput.findUnique({
+        where: {
+          payrollPeriodId_employeeId_inputTypeId: {
+            payrollPeriodId: period.payrollPeriodId,
+            employeeId: calc.shopManagerId,
+            inputTypeId: totalType.id,
+          },
         },
-      },
-    })
+      })
 
-    if (existing) {
-      if (existing.isLocked) {
-        item.proposedAction = 'BLOCKED_LOCKED'
-        item.blocker = 'LOCKED_EXISTING'
-        item.existingAmount = Number(existing.amount)
+      if (existing) {
+        if (existing.isLocked) {
+          item.proposedAction = 'BLOCKED_LOCKED'
+          item.blocker = 'LOCKED_EXISTING'
+          item.existingAmount = Number(existing.amount)
+        } else {
+          item.proposedAction = 'UPDATE_EXISTING_UNLOCKED'
+          item.existingAmount = Number(existing.amount)
+          item.newAmount = Number(calc.totalIncentive)
+        }
       } else {
-        item.proposedAction = 'UPDATE_EXISTING_UNLOCKED'
-        item.existingAmount = Number(existing.amount)
+        item.proposedAction = 'CREATE'
         item.newAmount = Number(calc.totalIncentive)
       }
-    } else {
-      item.proposedAction = 'CREATE'
-      item.newAmount = Number(calc.totalIncentive)
     }
 
     items.push(item)
   }
 
   const totalBlockers = items.filter(i => i.proposedAction === 'BLOCKED' || i.proposedAction === 'BLOCKED_LOCKED').length
-  const readyForHandoff = totalBlockers === 0
+  const readyForHandoff = totalBlockers === 0 && globalBlockers.length === 0
 
   return {
     periodId,
@@ -670,6 +738,7 @@ export async function getPayrollHandoffPreview(periodId: string): Promise<any> {
     totalCreate: items.filter(i => i.proposedAction === 'CREATE').length,
     totalUpdate: items.filter(i => i.proposedAction === 'UPDATE_EXISTING_UNLOCKED').length,
     totalBlocked: totalBlockers,
+    globalBlockers,
     readyForHandoff,
     items,
   }
@@ -677,40 +746,122 @@ export async function getPayrollHandoffPreview(periodId: string): Promise<any> {
 
 export async function sendIncentivesToPayrollInputs(
   periodId: string,
-  mode: 'SKIP_EXISTING' | 'UPDATE_EXISTING_UNLOCKED' = 'UPDATE_EXISTING_UNLOCKED'
+  mode: 'SKIP_EXISTING' | 'UPDATE_EXISTING_UNLOCKED' = 'UPDATE_EXISTING_UNLOCKED',
+  scopeWhere?: Record<string, unknown>
 ): Promise<any> {
   const period = await prisma.shopManagerIncentivePeriod.findUnique({
     where: { id: periodId },
-    include: { payrollPeriod: true },
+    include: {
+      payrollPeriod: true,
+      calculations: {
+        where: scopeWhere as any,
+        include: {
+          shopManager: true,
+          shopLocation: { select: { name: true, code: true } },
+          input: true,
+        },
+      },
+    },
   })
   if (!period) throw new Error(`Incentive period not found: ${periodId}`)
 
+  const blockers: { code: string; message: string }[] = []
+
   if (period.status !== 'CALCULATED') {
-    throw new Error(`Period status must be CALCULATED (current: ${period.status})`)
+    blockers.push({ code: 'PERIOD_NOT_CALCULATED', message: `Period status must be CALCULATED (current: ${period.status})` })
   }
 
   if (period.payrollPeriod && (period.payrollPeriod.status === 'INPUT_COLLECTION_CLOSED' || period.payrollPeriod.status === 'CANCELLED')) {
-    throw new Error(`Linked payroll period is ${period.payrollPeriod.status} — cannot handoff`)
+    blockers.push({ code: 'PAYROLL_PERIOD_CLOSED', message: `Linked payroll period is ${period.payrollPeriod.status} — cannot handoff` })
   }
 
-  const calculations = await prisma.shopManagerIncentiveCalculation.findMany({
-    where: { incentivePeriodId: periodId },
-    include: {
-      shopManager: true,
-      shopLocation: { select: { name: true, code: true } },
-    },
-  })
+  const missingManagerCalcs = period.calculations.filter(c => !c.shopManagerId)
+  if (missingManagerCalcs.length > 0) {
+    blockers.push({ code: 'MISSING_SHOP_MANAGER', message: `${missingManagerCalcs.length} calculation(s) have no shop manager assigned` })
+  }
 
   const totalType = await prisma.payrollInputType.findUnique({
     where: { code: 'SHOP_MANAGER_TOTAL_INCENTIVE' },
   })
-  if (!totalType) throw new Error('SHOP_MANAGER_TOTAL_INCENTIVE payroll input type not found')
-  if (!totalType.isActive) throw new Error('SHOP_MANAGER_TOTAL_INCENTIVE payroll input type is inactive')
+  if (!totalType) {
+    blockers.push({ code: 'INPUT_TYPE_NOT_FOUND', message: 'SHOP_MANAGER_TOTAL_INCENTIVE payroll input type not found' })
+  } else if (!totalType.isActive) {
+    blockers.push({ code: 'INPUT_TYPE_INACTIVE', message: 'SHOP_MANAGER_TOTAL_INCENTIVE payroll input type is inactive' })
+  }
 
-  const payrollPeriodId = period.payrollPeriodId
+  const managerCounts = new Map<string, number>()
+  for (const calc of period.calculations) {
+    if (calc.shopManagerId) {
+      managerCounts.set(calc.shopManagerId, (managerCounts.get(calc.shopManagerId) || 0) + 1)
+    }
+  }
+  const duplicateManagerIds = new Set<string>()
+  managerCounts.forEach((count, mgrId) => {
+    if (count > 1) {
+      duplicateManagerIds.add(mgrId)
+      blockers.push({ code: 'DUPLICATE_SHOP_MANAGER_IN_PERIOD', message: `Manager ${mgrId} assigned to ${count} shops` })
+    }
+  })
+
+  let staleCount = 0
+  for (const calc of period.calculations) {
+    if (calc.input && calc.calculatedAt && calc.input.updatedAt > calc.calculatedAt) {
+      staleCount++
+    } else if (calc.input && !calc.calculatedAt) {
+      staleCount++
+    }
+  }
+  if (staleCount > 0) {
+    blockers.push({ code: 'STALE_CALCULATION', message: `${staleCount} calculation(s) are stale — inputs updated after calculation` })
+  }
+
+  if (period.payrollPeriodId && totalType) {
+    const calcManagerIds = period.calculations.map(c => c.shopManagerId).filter(Boolean) as string[]
+    if (calcManagerIds.length > 0) {
+      const lockedInputs = await prisma.payrollInput.findMany({
+        where: {
+          payrollPeriodId: period.payrollPeriodId,
+          inputTypeId: totalType.id,
+          employeeId: { in: calcManagerIds },
+          isLocked: true,
+        },
+      })
+      if (lockedInputs.length > 0) {
+        blockers.push({ code: 'LOCKED_EXISTING', message: `${lockedInputs.length} locked payroll input(s) found` })
+      }
+    }
+  }
+
+  if (blockers.length > 0) {
+    return {
+      periodId,
+      payrollPeriodId: period.payrollPeriodId,
+      mode,
+      blocked: true,
+      blockers,
+      totalCalculations: period.calculations.length,
+      created: 0,
+      updated: 0,
+      skippedZero: 0,
+      skippedUnchanged: 0,
+      blockedLocked: blockers.filter(b => b.code === 'LOCKED_EXISTING').length,
+      missingManager: missingManagerCalcs.length,
+      details: [],
+    }
+  }
+
   const details: any[] = []
+  const operations: any[] = []
 
-  for (const calc of calculations) {
+  const existingInputs = await prisma.payrollInput.findMany({
+    where: {
+      payrollPeriodId: period.payrollPeriodId,
+      inputTypeId: totalType!.id,
+    },
+  })
+  const existingByEmployee = new Map(existingInputs.map(i => [i.employeeId, i]))
+
+  for (const calc of period.calculations) {
     const item: any = {
       employeeId: calc.shopManagerId,
       employeeName: calc.shopManager?.fullName,
@@ -747,15 +898,7 @@ export async function sendIncentivesToPayrollInputs(
 
     const payrollNote = `Shop Manager incentive for ${period.name}. Shop: ${calc.shopLocation?.name || ''}. Criteria: ${calc.shopCriteria || ''}. Calculation ID: ${calc.id}. Components: ${componentSummary}.`
 
-    const existing = await prisma.payrollInput.findUnique({
-      where: {
-        payrollPeriodId_employeeId_inputTypeId: {
-          payrollPeriodId,
-          employeeId: calc.shopManagerId,
-          inputTypeId: totalType.id,
-        },
-      },
-    })
+    const existing = existingByEmployee.get(calc.shopManagerId)
 
     if (existing) {
       if (existing.isLocked) {
@@ -772,32 +915,35 @@ export async function sendIncentivesToPayrollInputs(
         continue
       }
 
-      // UPDATE_EXISTING_UNLOCKED
-      await prisma.payrollInput.update({
-        where: { id: existing.id },
-        data: {
-          value: Number(calc.totalIncentive),
-          amount: Number(calc.totalIncentive),
-          note: payrollNote,
-        },
-      })
+      operations.push(
+        prisma.payrollInput.update({
+          where: { id: existing.id },
+          data: {
+            value: Number(calc.totalIncentive),
+            amount: Number(calc.totalIncentive),
+            note: payrollNote,
+          },
+        })
+      )
       item.action = 'UPDATED_UNLOCKED'
       item.oldAmount = Number(existing.amount)
       item.newAmount = Number(calc.totalIncentive)
     } else {
-      await prisma.payrollInput.create({
-        data: {
-          payrollPeriodId,
-          employeeId: calc.shopManagerId,
-          inputTypeId: totalType.id,
-          value: Number(calc.totalIncentive),
-          amount: Number(calc.totalIncentive),
-          note: payrollNote,
-          source: 'SYSTEM',
-          status: 'ACCEPTED',
-          isLocked: false,
-        },
-      })
+      operations.push(
+        prisma.payrollInput.create({
+          data: {
+            payrollPeriodId: period.payrollPeriodId,
+            employeeId: calc.shopManagerId,
+            inputTypeId: totalType!.id,
+            value: Number(calc.totalIncentive),
+            amount: Number(calc.totalIncentive),
+            note: payrollNote,
+            source: 'SYSTEM' as any,
+            status: 'ACCEPTED' as any,
+            isLocked: false,
+          },
+        })
+      )
       item.action = 'CREATED'
       item.newAmount = Number(calc.totalIncentive)
     }
@@ -805,11 +951,16 @@ export async function sendIncentivesToPayrollInputs(
     details.push(item)
   }
 
+  if (operations.length > 0) {
+    await prisma.$transaction(operations)
+  }
+
   return {
     periodId,
-    payrollPeriodId,
+    payrollPeriodId: period.payrollPeriodId,
     mode,
-    totalCalculations: calculations.length,
+    blocked: false,
+    totalCalculations: period.calculations.length,
     created: details.filter(d => d.action === 'CREATED').length,
     updated: details.filter(d => d.action === 'UPDATED_UNLOCKED').length,
     skippedZero: details.filter(d => d.action === 'SKIPPED_ZERO').length,
@@ -818,4 +969,86 @@ export async function sendIncentivesToPayrollInputs(
     missingManager: details.filter(d => d.action === 'MISSING_MANAGER').length,
     details,
   }
+}
+
+export async function deactivateLegacyComponentTypes(): Promise<{ count: number }> {
+  const legacyCodes = [
+    'SHOP_MANAGER_QGA_BONUS',
+    'SHOP_MANAGER_QGA_SIM_COMMISSION',
+    'SHOP_MANAGER_EVD_BONUS',
+    'SHOP_MANAGER_MPESA_COMMISSION',
+    'SHOP_MANAGER_BA_SITE_BONUS',
+    'SHOP_MANAGER_DSA_ACHIEVEMENT_BONUS',
+    'SHOP_MANAGER_QO_BONUS',
+    'SHOP_MANAGER_EBU_ACTIVATION_BONUS',
+    'SHOP_MANAGER_EBU_REVENUE_SHARE',
+  ]
+
+  const deactivateResult = await prisma.payrollInputType.updateMany({
+    where: { code: { in: legacyCodes } },
+    data: { isActive: false },
+  })
+
+  const activateResult = await prisma.payrollInputType.updateMany({
+    where: { code: 'SHOP_MANAGER_TOTAL_INCENTIVE' },
+    data: { isActive: true },
+  })
+
+  return { count: deactivateResult.count + activateResult.count }
+}
+
+export async function getLegacyComponentReport(): Promise<any[]> {
+  const legacyCodes = [
+    'SHOP_MANAGER_QGA_BONUS',
+    'SHOP_MANAGER_QGA_SIM_COMMISSION',
+    'SHOP_MANAGER_EVD_BONUS',
+    'SHOP_MANAGER_MPESA_COMMISSION',
+    'SHOP_MANAGER_BA_SITE_BONUS',
+    'SHOP_MANAGER_DSA_ACHIEVEMENT_BONUS',
+    'SHOP_MANAGER_QO_BONUS',
+    'SHOP_MANAGER_EBU_ACTIVATION_BONUS',
+    'SHOP_MANAGER_EBU_REVENUE_SHARE',
+  ]
+
+  const legacyTypes = await prisma.payrollInputType.findMany({
+    where: { code: { in: legacyCodes } },
+    select: { id: true, code: true, name: true },
+  })
+
+  if (legacyTypes.length === 0) return []
+
+  const typeIds = legacyTypes.map(t => t.id)
+
+  const records = await prisma.payrollInput.findMany({
+    where: { inputTypeId: { in: typeIds } },
+    include: {
+      inputType: { select: { code: true, name: true } },
+      employee: { select: { id: true, employeeId: true, fullName: true } },
+      payrollPeriod: { select: { id: true, periodName: true } },
+    },
+    orderBy: { createdAt: 'desc' },
+  })
+
+  return records
+}
+
+export async function validateManagerAssignment(employeeId: string): Promise<{ valid: boolean; errors: string[] }> {
+  const errors: string[] = []
+
+  const employee = await prisma.employee.findUnique({ where: { id: employeeId } })
+
+  if (!employee) {
+    errors.push(`Employee not found: ${employeeId}`)
+    return { valid: false, errors }
+  }
+
+  if (employee.employmentStatus !== 'ACTIVE') {
+    errors.push(`Employee status is ${employee.employmentStatus}, expected ACTIVE`)
+  }
+
+  if (employee.currentRole !== 'SHOP_MANAGER') {
+    errors.push(`Employee role is ${employee.currentRole}, expected SHOP_MANAGER`)
+  }
+
+  return { valid: errors.length === 0, errors }
 }

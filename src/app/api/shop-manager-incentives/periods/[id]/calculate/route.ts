@@ -5,6 +5,7 @@ import { userHasPermission } from '@/lib/rbac'
 import { success, badRequest, unauthorized, forbidden, notFound, internalError } from '@/lib/api'
 import { createAuditLog } from '@/lib/audit'
 import { calculateAllShopManagerIncentives } from '@/lib/shop-manager-incentives'
+import { buildIncentiveScopeWhere } from '@/lib/incentive-scope'
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -15,11 +16,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
     const period = await prisma.shopManagerIncentivePeriod.findUnique({ where: { id } })
     if (!period) return notFound('Incentive period not found')
-    if (period.status !== 'OPEN' && period.status !== 'OPEN_FOR_INPUT') {
+    if (period.status !== 'OPEN') {
       return badRequest('Period must be in OPEN status to calculate')
     }
 
-    const result = await calculateAllShopManagerIncentives(id)
+    const scopeWhere = await buildIncentiveScopeWhere(session.userId)
+    const result = await calculateAllShopManagerIncentives(id, scopeWhere)
 
     if (result.status === 'BLOCKED') {
       return badRequest('Calculation blocked: some shops have incomplete inputs', result.blockers)
@@ -31,7 +33,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       entityType: 'ShopManagerIncentivePeriod',
       entityId: id,
       oldValue: { status: period.status },
-      newValue: { status: 'CALCULATED' },
+      newValue: { status: result.status },
     })
 
     return success(result)

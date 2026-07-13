@@ -156,7 +156,7 @@ These models exist in the Prisma schema but have no implementation:
 | UI Pages | DONE | /shops, /shops/new, /shops/[id], /shops/[id]/edit, /shops/[id]/criteria |
 | Tests | DONE | 85 tests passing |
 
-## Phase 4C.2 — Shop Manager Incentive (Management Input Form — Updated Design)
+## Phase 4C.2 — Shop Manager Incentive (Management Input Form — Updated Design with Critical Fixes)
 
 | Module | Status | Details |
 |---|---|---|
@@ -164,13 +164,22 @@ These models exist in the Prisma schema but have no implementation:
 | No approval models | DONE | No ShopManagerIncentiveComponent, ShopManagerIncentiveIssue, PerformanceInputStatus, CalculationStatus |
 | Period lifecycle | DONE | DRAFT → OPEN → CALCULATED → CANCELLED (no UNDER_REVIEW/APPROVED/LOCKED/READY_FOR_CALCULATION) |
 | Calculation engine | DONE | 9 pure-sync components + TOTAL; AT_RISK=all zero; batch orchestrator; payroll handoff (SKIP_EXISTING) |
-| Department input ownership | DONE | Sales Head (QGA), Distribution Head (corridor/EVD/M-PESA/BA), EBU Head (EBU); inputAll overrides |
+| Department input ownership | DONE | Sales Head (QGA), Distribution Head (corridor/EVD/M-PESA/BA), EBU Head (EBU); inputAll overrides; enforced on both POST and PATCH |
 | At-risk lock | DONE | PATCH only allows shopCriteria/responsibleRemarks when AT_RISK; calculation all zero |
-| API routes (10) | DONE | Periods CRUD, open/cancel, inputs CRUD, calculate, export, send-to-payroll-inputs, dashboard |
+| API routes (12) | DONE | Periods CRUD, open/cancel, inputs CRUD + DELETE, calculate, export, send-to-payroll-inputs, dashboard, calculations GET |
 | UI pages (5) | DONE | List, New, Dashboard, Inputs (Google Sheet-style), Calculations |
 | RBAC (10 perms + 2 new roles) | DONE | 96 permissions, 14 roles including DISTRIBUTION_HEAD, EBU_HEAD |
-| Tests | DONE | 180+ covering permissions (110), criteria (4), CRUD (10), calculation rules (49), workflow (8), regression (2) |
-| Quality gates | DONE | tsc ✓, lint ✓, build (68 routes) ✓, Phase 4C.2 tests (180/180) ✓ |
+| Tests | DONE | 180+ covering permissions (110), criteria (4), CRUD (10), calculation rules (49), workflow (8), regression (2) + 12 API E2E test suites |
+| Quality gates | DONE | tsc ✓, lint ✓, build (68 routes) ✓, Phase 4C.2 tests (180/180) ✓, GitHub CI ✓ |
+| Only total incentive payable | DONE | `SHOP_MANAGER_TOTAL_INCENTIVE` is the sole payroll input type; component calculations are audit details only |
+| Atomic calculation | DONE | All shops calculated in a single transaction (all-or-nothing) |
+| Atomic payroll handoff | DONE | All shops sent to payroll in a single transaction (all-or-nothing, SKIP_EXISTING) |
+| Scope enforcement | DONE | ASM sees assigned area, SHOP_MANAGER sees own shop only; enforced across all endpoints |
+| Recalculation on input change | DONE | Editing inputs after calculation reverts status to OPEN, requiring recalculation |
+| Legacy payroll types inactive | DONE | 9 individual component payroll input types marked inactive; only `SHOP_MANAGER_TOTAL_INCENTIVE` active |
+| DELETE input route | DONE | `DELETE /periods/[id]/inputs/[inputId]` with permission checks |
+| Calculations GET endpoint | DONE | `GET /periods/[id]/calculations` returns breakdown with scope filtering |
+| GitHub CI | DONE | `.github/workflows/ci.yml` — lint, typecheck, build, test on push/PR |
 
 ## Known Limitations
 
@@ -187,5 +196,8 @@ These models exist in the Prisma schema but have no implementation:
 
 ## Next Steps
 
-1. User review of Phase 4C.2 (follow USER_REVIEW_GUIDE.md)
-2. Phase 5 — Full Payroll Calculation with Ethiopian PAYE/pension
+1. Phase 5 — Full Payroll Calculation with Ethiopian PAYE/pension
+2. Approval/review workflow for incentive inputs and calculations
+3. Automated KPI-based criteria calculation from sales data
+4. Shop performance dashboard with historical trends
+5. Bulk shop import from CSV

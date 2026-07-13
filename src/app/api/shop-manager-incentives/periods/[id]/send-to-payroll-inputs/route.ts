@@ -5,6 +5,7 @@ import { userHasPermission } from '@/lib/rbac'
 import { success, badRequest, unauthorized, forbidden, notFound, internalError } from '@/lib/api'
 import { createAuditLog } from '@/lib/audit'
 import { sendIncentivesToPayrollInputs } from '@/lib/shop-manager-incentives'
+import { buildIncentiveScopeWhere } from '@/lib/incentive-scope'
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -27,10 +28,19 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       return badRequest(`Linked payroll period is ${period.payrollPeriod.status} — cannot handoff`)
     }
 
+    const user = await prisma.user.findUnique({
+      where: { id: session.userId },
+      include: { roles: { include: { role: true } } },
+    })
+    const roleNames = user?.roles.map(r => r.role.name) || []
+    const canHandoff = roleNames.some(r => ['SUPER_ADMIN', 'HR_ADMIN', 'SALES_HEAD', 'FINANCE_DIRECTOR', 'FINANCE_PAYROLL'].includes(r))
+    if (!canHandoff) return forbidden()
+
     const body = await req.json().catch(() => ({}))
     const mode = body.mode === 'SKIP_EXISTING' ? 'SKIP_EXISTING' : 'UPDATE_EXISTING_UNLOCKED'
 
-    const result = await sendIncentivesToPayrollInputs(id, mode)
+    const scopeWhere = await buildIncentiveScopeWhere(session.userId)
+    const result = await sendIncentivesToPayrollInputs(id, mode, scopeWhere)
 
     const blockedCount = (result.blockedLocked || 0) + (result.missingManager || 0)
 

@@ -17,6 +17,7 @@
     "test:phase4b": "tsx src/test/phase4b-tests.ts",
     "test:phase4c1": "tsx src/test/phase4c1-tests.ts",
     "test:phase4c2": "tsx src/test/phase4c2-tests.ts",
+    "test:phase4c2-e2e": "tsx src/test/phase4c2-e2e-tests.ts",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:seed": "tsx prisma/seed.ts"

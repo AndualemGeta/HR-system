@@ -2,7 +2,7 @@ import { NextRequest } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getSession } from '@/lib/session'
 import { userHasPermission } from '@/lib/rbac'
-import { success, unauthorized, forbidden, notFound, internalError } from '@/lib/api'
+import { success, badRequest, unauthorized, forbidden, notFound, internalError } from '@/lib/api'
 import { createAuditLog } from '@/lib/audit'
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -14,6 +14,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
     const period = await prisma.shopManagerIncentivePeriod.findUnique({ where: { id } })
     if (!period) return notFound('Incentive period not found')
+    if (period.status === 'CANCELLED') return badRequest('Period is already cancelled')
+    if (!['DRAFT', 'OPEN', 'CALCULATED'].includes(period.status)) {
+      return badRequest(`Period cannot be cancelled from status ${period.status}`)
+    }
 
     const updated = await prisma.shopManagerIncentivePeriod.update({
       where: { id },

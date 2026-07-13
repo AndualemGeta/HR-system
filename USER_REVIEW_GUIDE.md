@@ -366,7 +366,7 @@ This review covers Phase 4A: Payroll Period Setup and Monthly Input Collection. 
 ## Test Commands
 
 ```powershell
-npm test              # Run all tests (42 Phase 1 + 41 Phase 2A + 27 Phase 2B + 38 Phase 3 + 78 Phase 3.5 + 35 Phase 4A + 35 Phase 4B + 91 Phase 4C.1 + 180 Phase 4C.2 = 567)
+npm test              # Run all tests (42 Phase 1 + 41 Phase 2A + 27 Phase 2B + 38 Phase 3 + 78 Phase 3.5 + 35 Phase 4A + 35 Phase 4B + 91 Phase 4C.1 + 180 Phase 4C.2 = 567) — includes 12 API E2E test suites
 npm run test:phase1   # Run baseline tests only (42)
 npm run test:phase2a  # Run Phase 2A tests only (41)
 npm run test:phase2b  # Run Phase 2B tests only (27)
@@ -476,6 +476,8 @@ These will be handled in Phase 4C.2 and Phase 5.
 ### What was built
 
 Phase 4C.2 is a redesigned Management Input Form for Shop Manager Incentive calculation. No approval/review workflow. Department-owned input fields (Sales/Distribution/EBU heads each own their sections). At-risk shops have all incentive components zeroed.
+
+**Critical Fixes (Phase 4C.2):** The incentive lifecycle is strictly enforced (DRAFT → OPEN → CALCULATED → CANCELLED). Only the total incentive (`SHOP_MANAGER_TOTAL_INCENTIVE`) is payable to payroll — individual component calculations are audit/transparency details only. Both calculation and payroll handoff are atomic (all-or-nothing transactions). Input changes after calculation revert the status to OPEN, requiring recalculation. Legacy component payroll input types (individual per-component types) are inactive. A DELETE input route and a dedicated Calculations GET endpoint were added. 12 API end-to-end test suites and GitHub CI pipeline are in place.
 
 ### Prerequisites
 
@@ -591,6 +593,75 @@ Log in as one of:
 - Log in as `auditor@leapfrog.com` — verify view-only (no create/edit/calculate)
 - Log in as `finance.director@leapfrog.com` — verify view + calculate + export + sendToPayroll
 - Log in as `finance.payroll@leapfrog.com` — verify view + export + sendToPayroll (no calculate)
+
+### 15. What Users See Differently (Critical Fixes)
+
+#### Department Heads See Only Their Fields
+- Log in as `sales.head@leapfrog.com` — Sales Head fields (QGA Above 90%, QGA Quantity, MM QO Targets, DSA Airtime %) are editable; Distribution/EBU fields are visible but greyed out (read-only) on both POST and PATCH
+- Log in as `distribution.head@leapfrog.com` — Distribution fields (corridor, EVD, M-PESA, BA/Site) editable; Sales/EBU fields read-only
+- Log in as `ebu.head@leapfrog.com` — EBU fields (EBU Target, Revenue, Top-Up, LF Revenue) editable; Sales/Distribution read-only
+- Log in as `hr.admin@leapfrog.com` (inputAll) — all fields editable across all departments
+
+#### Period Lifecycle Is Enforced
+- DRAFT period: inputs cannot be created yet; period name/date can be edited
+- OPEN period: inputs can be created and updated; period name/date locked
+- After calculation: inputs cannot be changed without triggering recalculation
+- CALCULATED status: calculation results visible; export and send-to-payroll available
+- CANCELLED status: no further actions allowed on the period
+- Verify: attempting to create inputs on a DRAFT or CANCELLED period returns an error
+- Verify: attempting to recalculate an already-CALCULATED period without input changes returns an error (or succeeds as no-op)
+
+#### Scoped Viewing Is Enforced Everywhere
+- `asm@leapfrog.com`: sees only shops in assigned area in period list, inputs, and calculations
+- `shop.manager@leapfrog.com`: sees only own shop in inputs and calculations
+- Verify: ASM cannot see shops outside their area in any Phase 4C.2 endpoint
+- Verify: Shop Manager cannot see other shops' inputs or calculations
+
+#### Only Total Incentive Goes to Payroll
+- After "Send to Payroll Inputs", verify that exactly ONE payroll input record is created per shop: `SHOP_MANAGER_TOTAL_INCENTIVE`
+- Verify that individual component records (`SHOP_MANAGER_QGA_BONUS`, `SHOP_MANAGER_EVD_BONUS`, etc.) do NOT appear in payroll inputs
+- Verify the `SHOP_MANAGER_TOTAL_INCENTIVE` amount equals the sum of all 9 components for that shop
+- Verify that re-running "Send to Payroll Inputs" does NOT create duplicate records (SKIP_EXISTING mode)
+
+#### Input Changes After Calculation Require Recalculation
+- After a period is CALCULATED, edit any input field on any shop
+- Verify the period status reverts to OPEN (or a recalculation-required flag is raised)
+- Verify calculation results must be regenerated before re-exporting or re-sending to payroll
+- Verify the recalculation button is available again
+
+#### Legacy Component Payroll Input Types Are Inactive
+- Navigate to Payroll Input Types (Phase 4A area)
+- Verify types `SHOP_MANAGER_QGA_BONUS`, `SHOP_MANAGER_QGA_SIM_COMMISSION`, `SHOP_MANAGER_EVD_BONUS`, `SHOP_MANAGER_BA_SITE_BONUS`, `SHOP_MANAGER_MPESA_COMMISSION`, `SHOP_MANAGER_DSA_ACHIEVEMENT_BONUS`, `SHOP_MANAGER_QO_TARGET_BONUS`, `SHOP_MANAGER_EBU_ACTIVATION_BONUS`, `SHOP_MANAGER_EBU_REVENUE_SHARE` are all **inactive**
+- Verify only `SHOP_MANAGER_TOTAL_INCENTIVE` is active for payroll input collection
+
+### 16. Atomic Transaction Testing
+
+#### Calculation Is Atomic
+- The calculation engine processes all shops in a single transaction
+- If any shop's calculation fails, NO shops are updated (all-or-nothing)
+- Verify: no partial calculation state exists
+
+#### Payroll Handoff Is Atomic
+- The send-to-payroll operation creates records for all shops in a single transaction
+- If any record creation fails, NO payroll input records are created (all-or-nothing)
+- Verify: no partial payroll handoff state exists
+
+### 17. DELETE Input Route
+- Navigate to inputs tab, delete an input record
+- Verify the input is removed from the period
+- Verify appropriate permission checks apply (only users with input permission for that department can delete)
+
+### 18. Calculations GET Endpoint
+- Navigate to the Calculations tab
+- Verify GET `/periods/[id]/calculations` returns the calculation breakdown for all shops
+- Verify the response includes all 9 component amounts and the total for each shop
+- Verify scope filtering applies: ASM sees only area shops, Shop Manager sees only own shop
+
+### 19. API End-to-End Tests
+- Run `npm run test:phase4c2` and verify 180+ unit/integration tests pass
+- Verify 12 E2E test suites exist covering: period lifecycle, input CRUD, calculation, payroll handoff, scope enforcement, department ownership, at-risk lock, recalculation, delete, export, permissions, regression
+- Run `npm test` and verify all 567 tests pass
+- Verify GitHub CI pipeline passes (`.github/workflows/ci.yml`)
 
 ### What is NOT implemented
 

@@ -4,6 +4,7 @@ import { getSession } from '@/lib/session'
 import { userHasPermission } from '@/lib/rbac'
 import { success, unauthorized, forbidden, notFound, internalError } from '@/lib/api'
 import { computeReadiness } from '@/lib/shop-manager-incentives'
+import { buildIncentiveScopeWhere } from '@/lib/incentive-scope'
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -18,16 +19,17 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     })
     if (!period) return notFound('Incentive period not found')
 
+    const scopeWhere = await buildIncentiveScopeWhere(session.userId)
     const [inputs, calculationAgg, staleCount] = await Promise.all([
       prisma.shopManagerIncentiveInput.findMany({
-        where: { incentivePeriodId: id },
+        where: { incentivePeriodId: id, ...scopeWhere },
         include: {
           calculation: { select: { calculatedAt: true } },
           shopManager: { select: { id: true } },
         },
       }),
       prisma.shopManagerIncentiveCalculation.aggregate({
-        where: { incentivePeriodId: id },
+        where: { incentivePeriodId: id, ...scopeWhere },
         _sum: {
           totalIncentive: true,
           qgaBonus: true, qgaSimCommission: true, evdBonus: true,
@@ -39,7 +41,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
         _count: true,
       }),
       prisma.shopManagerIncentiveCalculation.count({
-        where: { incentivePeriodId: id },
+        where: { incentivePeriodId: id, ...scopeWhere },
       }),
     ])
 
@@ -55,7 +57,6 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 
     for (const input of inputs) {
       const isStale = !!(input.calculation && input.calculation.calculatedAt && input.updatedAt > input.calculation.calculatedAt)
-      if (isStale) staleCalculations++
 
       const readiness = computeReadiness({
         shopCriteria: input.shopCriteria,
@@ -82,6 +83,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       else if (readiness.readinessStatus === 'READY') readyShops++
       else if (readiness.readinessStatus === 'CALCULATED') calculatedShops++
       else if (readiness.readinessStatus === 'STALE_CALCULATION') { staleCalculations++; calculatedShops++ }
+
+      if (isStale && readiness.readinessStatus !== 'STALE_CALCULATION') staleCalculations++
 
       if (readiness.missingSalesFields.length === 0 && input.shopCriteria && input.shopCriteria !== 'AT_RISK') salesComplete++
       if (readiness.missingDistributionFields.length === 0 && input.shopCriteria && input.shopCriteria !== 'AT_RISK') distributionComplete++
