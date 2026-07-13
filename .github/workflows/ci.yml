@@ -7,16 +7,16 @@ on:
     branches: [main]
 
 jobs:
-  build:
+  test:
     runs-on: ubuntu-latest
 
     services:
       postgres:
-        image: postgres:15
+        image: postgres:16
         env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: hr_system_test
+          POSTGRES_USER: leapfrog
+          POSTGRES_PASSWORD: leapfrog
+          POSTGRES_DB: leapfrog_hr
         ports:
           - 5432:5432
         options: >-
@@ -25,69 +25,35 @@ jobs:
           --health-timeout 5s
           --health-retries 5
 
-    env:
-      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/hr_system_test
-
     steps:
       - uses: actions/checkout@v4
 
-      - name: Use Node.js 20
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: 'npm'
+          cache: npm
 
-      - name: Install dependencies
-        run: npm ci
+      - run: npm ci
 
-      - name: Generate Prisma client
-        run: npm run prisma:generate
+      - run: npm run prisma:generate
 
-      - name: Push schema
-        run: npx prisma db push
+      - run: npm run typecheck
+
+      - run: npm run lint
+
+      - run: npm run build
+
+      - name: Setup database
+        run: npx prisma db push --force-reset && npx tsx prisma/seed.ts
         env:
-          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/hr_system_test
+          DATABASE_URL: postgresql://leapfrog:leapfrog@localhost:5432/leapfrog_hr
 
-      - name: Seed database
-        run: npm run prisma:seed
+      - name: Run Phase 4C.2 unit tests
+        run: npx tsx src/test/phase4c2-tests.ts
         env:
-          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/hr_system_test
+          DATABASE_URL: postgresql://leapfrog:leapfrog@localhost:5432/leapfrog_hr
 
-      - name: Type check
-        run: npm run typecheck
-
-      - name: Lint
-        run: npm run lint
-
-      - name: Build
-        run: npm run build
+      - name: Run Phase 4C.2 e2e tests
+        run: npx tsx src/test/phase4c2-e2e-tests.ts
         env:
-          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/hr_system_test
-
-      - name: Run tests
-        run: npm test
-        env:
-          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/hr_system_test
-
-      - name: Run Phase 4C.2 tests
-        run: npm run test:phase4c2
-        continue-on-error: true
-        env:
-          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/hr_system_test
-
-      - name: Start app for E2E tests
-        run: npm run start &
-        env:
-          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/hr_system_test
-
-      - name: Wait for app to be ready
-        run: npx wait-on http://localhost:3000 --timeout 60000
-
-      - name: Run API tests
-        run: npm run test:api
-        continue-on-error: true
-        env:
-          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/hr_system_test
-
-      - name: Stop app
-        run: kill $(lsof -t -i:3000) || true
+          DATABASE_URL: postgresql://leapfrog:leapfrog@localhost:5432/leapfrog_hr
