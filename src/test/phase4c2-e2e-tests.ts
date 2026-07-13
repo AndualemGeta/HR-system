@@ -43,8 +43,11 @@ async function makePayrollPeriod(createdById: string) {
 async function ensurePayrollInputType(code: string) {
   let t = await prisma.payrollInputType.findUnique({ where: { code } })
   if (!t) {
+    const { category, valueType } = code === 'SHOP_MANAGER_TOTAL_INCENTIVE'
+      ? { category: 'ALLOWANCE' as const, valueType: 'AMOUNT' as const }
+      : { category: 'DEDUCTION' as const, valueType: 'AMOUNT' as const }
     t = await prisma.payrollInputType.create({
-      data: { code, name: code, category: 'DEDUCTION', valueType: 'AMOUNT', isActive: true },
+      data: { code, name: code, category, valueType, isActive: true },
     })
   } else if (!t.isActive) {
     await prisma.payrollInputType.update({ where: { code }, data: { isActive: true } })

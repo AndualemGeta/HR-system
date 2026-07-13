@@ -807,11 +807,13 @@ async function main() {
     { code: 'SHOP_MANAGER_TOTAL_INCENTIVE', name: 'Shop Manager Total Incentive', category: 'ALLOWANCE' as const, valueType: 'AMOUNT' as const, isActive: true },
   ]
   for (const it of incentiveInputTypes) {
-    await prisma.payrollInputType.create({
-      data: { ...it, description: `${it.name} - from incentive calculation`, createdById: adminUserId },
-    }).catch(() => {})
+    await prisma.payrollInputType.upsert({
+      where: { code: it.code },
+      update: { isActive: it.isActive, category: it.category, valueType: it.valueType },
+      create: { ...it, description: `${it.name} - from incentive calculation`, createdById: adminUserId },
+    })
   }
-  console.log(`  Created ${incentiveInputTypes.length} shop manager incentive input types`)
+  console.log(`  Upserted ${incentiveInputTypes.length} shop manager incentive input types`)
 
   // Seed ShopManagerIncentiveInputConfig
   const inputConfigs = [

@@ -490,6 +490,13 @@ async function main() {
     })
     cleanup.push(async () => { await prisma.payrollPeriod.delete({ where: { id: pp.id } }).catch(() => {}) })
 
+    // Guarantee the total incentive input type exists before handoff
+    await prisma.payrollInputType.upsert({
+      where: { code: 'SHOP_MANAGER_TOTAL_INCENTIVE' },
+      update: { isActive: true },
+      create: { code: 'SHOP_MANAGER_TOTAL_INCENTIVE', name: 'Shop Manager Total Incentive', category: 'ALLOWANCE', valueType: 'AMOUNT', isActive: true, description: 'Total incentive from shop manager calculation', createdById: adminUser.id },
+    })
+
     const period = await prisma.shopManagerIncentivePeriod.create({
       data: { payrollPeriodId: pp.id, name: 'Handoff Test', month: 11, year: 2026, status: 'CALCULATED', createdById: adminUser.id },
     })
@@ -523,45 +530,49 @@ async function main() {
     // Run handoff
     const result = await sendIncentivesToPayrollInputs(period.id, 'UPDATE_EXISTING_UNLOCKED')
 
-    assert('handoff creates total incentive payroll input', async () => {
-      return result.created === 1 && result.skippedZero === 1
-    })
+    // Inline sync checks (not deferred asserts) to avoid scope/cleanup races
+    async function ok(label: string, fn: () => Promise<boolean>) {
+      try { if (await fn()) { passed++; console.log(`  \u2713 ${label}`) } else { failed++; errors.push(label); console.log(`  \u2717 ${label}`) } }
+      catch (e: unknown) { failed++; errors.push(label); console.log(`  \u2717 ${label} \u2014 ${e instanceof Error ? e.message : String(e)}`) }
+    }
 
-    assert('payroll input exists for TOTAL_INCENTIVE', async () => {
+    await ok('handoff creates total incentive payroll input', async () => result.created === 1 && result.skippedZero === 1)
+
+    await ok('payroll input exists for TOTAL_INCENTIVE', async () => {
       const totalType = await prisma.payrollInputType.findUnique({ where: { code: 'SHOP_MANAGER_TOTAL_INCENTIVE' } })
       if (!totalType) return false
-      const pi = await prisma.payrollInput.findFirst({
-        where: { payrollPeriodId: pp.id, inputTypeId: totalType.id },
-      })
+      const pi = await prisma.payrollInput.findFirst({ where: { payrollPeriodId: pp.id, inputTypeId: totalType.id } })
       return pi !== null && Number(pi.amount) === 40400
     })
 
-    assert('no component payroll input records were created (count === 0)', async () => {
+    await ok('no component payroll input records were created (count === 0)', async () => {
       const componentIds = componentTypes.map(t => t.id)
-      const componentPayrollInputCount = await prisma.payrollInput.count({
-        where: { payrollPeriodId: pp.id, inputTypeId: { in: componentIds } },
-      })
-      return componentPayrollInputCount === 0
+      const count = await prisma.payrollInput.count({ where: { payrollPeriodId: pp.id, inputTypeId: { in: componentIds } } })
+      return count === 0
     })
 
-    assert('second unchanged handoff does not create duplicate (update mode)', async () => {
-      const result2 = await sendIncentivesToPayrollInputs(period.id, 'UPDATE_EXISTING_UNLOCKED')
-      return result2.created === 0 && result2.updated === 1 && result2.skippedZero === 1
-    })
+    const result2 = await sendIncentivesToPayrollInputs(period.id, 'UPDATE_EXISTING_UNLOCKED')
+    await ok('second unchanged handoff does not create duplicate (update mode)', async () => result2.created === 0 && result2.updated === 1 && result2.skippedZero === 1)
 
-    assert('blockers: missing manager is counted', async () => {
-      return result.missingManager === 0 // both have managers
-    })
-
-    // Clean up
-    await prisma.payrollInput.deleteMany({ where: { payrollPeriodId: pp.id } }).catch(() => {})
-    await prisma.shopManagerIncentiveCalculation.deleteMany({ where: { incentivePeriodId: period.id } }).catch(() => {})
-    await prisma.shopManagerIncentiveInput.deleteMany({ where: { incentivePeriodId: period.id } }).catch(() => {})
-    await prisma.shopManagerIncentivePeriod.delete({ where: { id: period.id } }).catch(() => {})
-    await prisma.payrollPeriod.delete({ where: { id: pp.id } }).catch(() => {})
+    await ok('blockers: missing manager is counted', async () => result.missingManager === 0)
   }
 
-  // ─── 9. Regression Tests ────────────────────────────────────────────────
+  // ─── 9. Payroll Input Type Configuration ────────────────────────────────
+  console.log('\n[Payroll Input Type Config]')
+  assert('SHOP_MANAGER_TOTAL_INCENTIVE is active', async () => {
+    const t = await prisma.payrollInputType.findUnique({ where: { code: 'SHOP_MANAGER_TOTAL_INCENTIVE' } })
+    return t !== null && t.isActive && t.category === 'ALLOWANCE'
+  })
+
+  assert('all 9 legacy component types are inactive', async () => {
+    const codes = ['SHOP_MANAGER_QGA_BONUS', 'SHOP_MANAGER_QGA_SIM_COMMISSION', 'SHOP_MANAGER_EVD_BONUS',
+      'SHOP_MANAGER_MPESA_COMMISSION', 'SHOP_MANAGER_BA_SITE_BONUS', 'SHOP_MANAGER_DSA_ACHIEVEMENT_BONUS',
+      'SHOP_MANAGER_QO_BONUS', 'SHOP_MANAGER_EBU_ACTIVATION_BONUS', 'SHOP_MANAGER_EBU_REVENUE_SHARE']
+    const types = await prisma.payrollInputType.findMany({ where: { code: { in: codes } } })
+    return types.length === 9 && types.every(t => !t.isActive)
+  })
+
+  // ─── 10. Regression Tests ────────────────────────────────────────────────
   console.log('\n[Regression]')
   assert('employee registration still works', async () => {
     const count = await prisma.employee.count()
