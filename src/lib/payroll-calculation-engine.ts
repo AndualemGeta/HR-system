@@ -438,7 +438,7 @@ export async function checkEmployeeReadiness(
     const matchShop = !req.shopId || req.shopId === (employee.currentShopId ?? null)
     const matchEmpType = !req.employmentType || (req.employmentType as string) === (employee.employmentType ?? null)
 
-    if (!matchCategory && !matchRole && !matchDept && !matchRegion && !matchArea && !matchShop && !matchEmpType) continue
+    if (!matchCategory || !matchRole || !matchDept || !matchRegion || !matchArea || !matchShop || !matchEmpType) continue
 
     const hasInput = await prisma.payrollInput.findFirst({
       where: { payrollPeriodId, employeeId, inputTypeId: req.inputTypeId, status: 'ACCEPTED' },

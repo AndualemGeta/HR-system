@@ -10,7 +10,7 @@ export const GET = withAuth(async () => {
 
 export const POST = withAuth(async (req: NextRequest, ctx) => {
   const body = await req.json()
-  const { code, name, description, componentType, taxTreatment, isEarning, isDeduction, isStatutory, isVariable } = body
+  const { code, name, description, componentType, taxTreatment, isEarning, isDeduction, isStatutory, isVariable, isPensionable, taxablePercent, pensionablePercent, affectsGross, affectsNet, affectsEmployerCost, calculationOrder } = body
 
   if (!code || !name) return badRequest('Code and name are required')
 
@@ -27,6 +27,13 @@ export const POST = withAuth(async (req: NextRequest, ctx) => {
       isDeduction: isDeduction ?? false,
       isStatutory: isStatutory ?? false,
       isVariable: isVariable ?? false,
+      isPensionable: isPensionable ?? false,
+      taxablePercent: taxablePercent ?? 0,
+      pensionablePercent: pensionablePercent ?? 0,
+      affectsGross: affectsGross ?? true,
+      affectsNet: affectsNet ?? true,
+      affectsEmployerCost: affectsEmployerCost ?? false,
+      calculationOrder: calculationOrder ?? 0,
       createdById: ctx.userId,
     },
   })

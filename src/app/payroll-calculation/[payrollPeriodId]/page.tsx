@@ -14,7 +14,6 @@ export default function PayrollCalculationDetailPage() {
   const [summary, setSummary] = useState<any>(null)
   const [perms, setPerms] = useState<string[]>([])
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState('')
   const [activeTab, setActiveTab] = useState('overview')
 
   const has = (p: string) => perms.includes(p)

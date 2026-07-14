@@ -14,8 +14,6 @@ export default function ResultsPage() {
   const [summary, setSummary] = useState<any>(null)
   const [perms, setPerms] = useState<string[]>([])
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState('')
-
   const has = (p: string) => perms.includes(p)
 
   const fetchData = () => {

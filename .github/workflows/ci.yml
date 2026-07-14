@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, develop]
   pull_request:
     branches: [main]
 
@@ -15,10 +15,10 @@ jobs:
         image: postgres:16
         env:
           POSTGRES_USER: leapfrog
-          POSTGRES_PASSWORD: leapfrog
+          POSTGRES_PASSWORD: leapfrog123
           POSTGRES_DB: leapfrog_hr
         ports:
-          - 5432:5432
+          - 5433:5432
         options: >-
           --health-cmd pg_isready
           --health-interval 10s
@@ -30,30 +30,55 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
-          cache: npm
+          node-version: '20'
+          cache: 'npm'
 
-      - run: npm ci
+      - name: Install dependencies
+        run: npm ci
 
-      - run: npm run prisma:generate
-
-      - run: npm run typecheck
-
-      - run: npm run lint
-
-      - run: npm run build
-
-      - name: Setup database
-        run: npx prisma db push --force-reset && npx tsx prisma/seed.ts
+      - name: Generate Prisma client
+        run: npm run prisma:generate
         env:
-          DATABASE_URL: postgresql://leapfrog:leapfrog@localhost:5432/leapfrog_hr
+          DATABASE_URL: postgresql://leapfrog:leapfrog123@localhost:5433/leapfrog_hr
 
-      - name: Run Phase 4C.2 unit tests
-        run: npx tsx src/test/phase4c2-tests.ts
-        env:
-          DATABASE_URL: postgresql://leapfrog:leapfrog@localhost:5432/leapfrog_hr
+      - name: TypeScript type check
+        run: npm run typecheck
 
-      - name: Run Phase 4C.2 e2e tests
-        run: npx tsx src/test/phase4c2-e2e-tests.ts
+      - name: Lint
+        run: npm run lint
+
+      - name: Build
+        run: npm run build
         env:
-          DATABASE_URL: postgresql://leapfrog:leapfrog@localhost:5432/leapfrog_hr
+          DATABASE_URL: postgresql://leapfrog:leapfrog123@localhost:5433/leapfrog_hr
+
+      - name: Push database schema
+        run: npx prisma db push --force-reset
+        env:
+          DATABASE_URL: postgresql://leapfrog:leapfrog123@localhost:5433/leapfrog_hr
+
+      - name: Seed database
+        run: npm run prisma:seed
+        env:
+          DATABASE_URL: postgresql://leapfrog:leapfrog123@localhost:5433/leapfrog_hr
+
+      - name: Run all tests
+        run: npm test
+        env:
+          DATABASE_URL: postgresql://leapfrog:leapfrog123@localhost:5433/leapfrog_hr
+
+      - name: Run Phase 4C.2 E2E tests
+        run: npm run test:phase4c2-e2e
+        env:
+          DATABASE_URL: postgresql://leapfrog:leapfrog123@localhost:5433/leapfrog_hr
+
+      - name: Run Phase 5A tests
+        run: npm run test:phase5a
+        env:
+          DATABASE_URL: postgresql://leapfrog:leapfrog123@localhost:5433/leapfrog_hr
+
+      - name: Run Phase 5A E2E tests
+        run: npm run test:phase5a-e2e
+        env:
+          DATABASE_URL: postgresql://leapfrog:leapfrog123@localhost:5433/leapfrog_hr
+          TEST_PORT: 3001

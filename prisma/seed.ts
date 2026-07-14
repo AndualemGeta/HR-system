@@ -934,6 +934,7 @@ async function main() {
     { name: 'Bracket 7 - 10,901 to 15,000', minIncome: 10900, maxIncome: 15000, taxRate: 35, deductionAmount: 1500 },
     { name: 'Bracket 8 - Over 15,000', minIncome: 15000, maxIncome: null, taxRate: 40, deductionAmount: 2250 },
   ]
+  const scheduleCode = 'SCHEDULE_2024'
   for (const b of payeBrackets) {
     const existing = await prisma.payeTaxBracket.findFirst({
       where: { name: b.name, isSample: true, effectiveStartDate: new Date('2024-01-01') },
@@ -942,6 +943,7 @@ async function main() {
       await prisma.payeTaxBracket.create({
         data: {
           ...b,
+          scheduleCode,
           effectiveStartDate: new Date('2024-01-01'),
           effectiveEndDate: null,
           isActive: false,
@@ -952,7 +954,7 @@ async function main() {
       })
     }
   }
-  console.log(`  Created ${payeBrackets.length} sample PAYE brackets (DRAFT/sample)`)
+  console.log(`  Created ${payeBrackets.length} sample PAYE brackets (DRAFT/sample) in ${scheduleCode}`)
 
   // Phase 5A: Seed sample PensionRule (DRAFT/sample)
   const existingPensionRule = await prisma.pensionRule.findFirst({

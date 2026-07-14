@@ -6,6 +6,8 @@ interface PayComponent {
   id: string; code: string; name: string; description: string | null
   componentType: string; taxTreatment: string; isEarning: boolean
   isDeduction: boolean; isStatutory: boolean; isVariable: boolean; isActive: boolean
+  isPensionable: boolean; taxablePercent: number; pensionablePercent: number
+  affectsGross: boolean; affectsNet: boolean; affectsEmployerCost: boolean; calculationOrder: number
   createdAt: string
 }
 
@@ -14,9 +16,9 @@ export default function ComponentsPage() {
   const [perms, setPerms] = useState<string[]>([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
-  const [form, setForm] = useState({ code: '', name: '', description: '', componentType: 'ALLOWANCE', taxTreatment: 'TAXABLE', isEarning: 'true', isDeduction: 'false', isStatutory: 'false', isVariable: 'false' })
+  const [form, setForm] = useState({ code: '', name: '', description: '', componentType: 'ALLOWANCE', taxTreatment: 'TAXABLE', isEarning: 'true', isDeduction: 'false', isStatutory: 'false', isVariable: 'false', isPensionable: 'false', taxablePercent: '100', pensionablePercent: '100', affectsGross: 'true', affectsNet: 'true', affectsEmployerCost: 'false', calculationOrder: '0' })
   const [editingId, setEditingId] = useState<string | null>(null)
-  const [editForm, setEditForm] = useState({ name: '', description: '', componentType: '', taxTreatment: '', isEarning: 'false', isDeduction: 'false', isStatutory: 'false', isVariable: 'false' })
+  const [editForm, setEditForm] = useState({ name: '', description: '', componentType: '', taxTreatment: '', isEarning: 'false', isDeduction: 'false', isStatutory: 'false', isVariable: 'false', isPensionable: 'false', taxablePercent: '0', pensionablePercent: '0', affectsGross: 'true', affectsNet: 'true', affectsEmployerCost: 'false', calculationOrder: '0' })
   const [error, setError] = useState('')
 
   const fetchData = () => {
@@ -36,12 +38,12 @@ export default function ComponentsPage() {
     const res = await fetch('/api/salary-structure/components', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...form, isEarning: form.isEarning === 'true', isDeduction: form.isDeduction === 'true', isStatutory: form.isStatutory === 'true', isVariable: form.isVariable === 'true' }),
+      body: JSON.stringify({ ...form, isEarning: form.isEarning === 'true', isDeduction: form.isDeduction === 'true', isStatutory: form.isStatutory === 'true', isVariable: form.isVariable === 'true', isPensionable: form.isPensionable === 'true', taxablePercent: parseFloat(form.taxablePercent) || 0, pensionablePercent: parseFloat(form.pensionablePercent) || 0, affectsGross: form.affectsGross === 'true', affectsNet: form.affectsNet === 'true', affectsEmployerCost: form.affectsEmployerCost === 'true', calculationOrder: parseInt(form.calculationOrder) || 0 }),
     })
     const json = await res.json()
     if (!res.ok) { setError(json.error || 'Failed to create'); return }
     setShowForm(false)
-    setForm({ code: '', name: '', description: '', componentType: 'ALLOWANCE', taxTreatment: 'TAXABLE', isEarning: 'true', isDeduction: 'false', isStatutory: 'false', isVariable: 'false' })
+    setForm({ code: '', name: '', description: '', componentType: 'ALLOWANCE', taxTreatment: 'TAXABLE', isEarning: 'true', isDeduction: 'false', isStatutory: 'false', isVariable: 'false', isPensionable: 'false', taxablePercent: '100', pensionablePercent: '100', affectsGross: 'true', affectsNet: 'true', affectsEmployerCost: 'false', calculationOrder: '0' })
     fetchData()
   }
 
@@ -54,6 +56,13 @@ export default function ComponentsPage() {
       isDeduction: c.isDeduction ? 'true' : 'false',
       isStatutory: c.isStatutory ? 'true' : 'false',
       isVariable: c.isVariable ? 'true' : 'false',
+      isPensionable: c.isPensionable ? 'true' : 'false',
+      taxablePercent: String(c.taxablePercent ?? 0),
+      pensionablePercent: String(c.pensionablePercent ?? 0),
+      affectsGross: c.affectsGross ? 'true' : 'false',
+      affectsNet: c.affectsNet ? 'true' : 'false',
+      affectsEmployerCost: c.affectsEmployerCost ? 'true' : 'false',
+      calculationOrder: String(c.calculationOrder ?? 0),
     })
   }
 
@@ -71,6 +80,13 @@ export default function ComponentsPage() {
         isDeduction: editForm.isDeduction === 'true',
         isStatutory: editForm.isStatutory === 'true',
         isVariable: editForm.isVariable === 'true',
+        isPensionable: editForm.isPensionable === 'true',
+        taxablePercent: parseFloat(editForm.taxablePercent) || 0,
+        pensionablePercent: parseFloat(editForm.pensionablePercent) || 0,
+        affectsGross: editForm.affectsGross === 'true',
+        affectsNet: editForm.affectsNet === 'true',
+        affectsEmployerCost: editForm.affectsEmployerCost === 'true',
+        calculationOrder: parseInt(editForm.calculationOrder) || 0,
       }),
     })
     const json = await res.json()
@@ -136,6 +152,13 @@ export default function ComponentsPage() {
           <label style={{ fontSize: '0.9rem' }}><input type="checkbox" checked={form.isDeduction === 'true'} onChange={e => setForm(f => ({ ...f, isDeduction: e.target.checked ? 'true' : 'false' }))} /> Is Deduction</label>
           <label style={{ fontSize: '0.9rem' }}><input type="checkbox" checked={form.isStatutory === 'true'} onChange={e => setForm(f => ({ ...f, isStatutory: e.target.checked ? 'true' : 'false' }))} /> Is Statutory</label>
           <label style={{ fontSize: '0.9rem' }}><input type="checkbox" checked={form.isVariable === 'true'} onChange={e => setForm(f => ({ ...f, isVariable: e.target.checked ? 'true' : 'false' }))} /> Is Variable</label>
+          <label style={{ fontSize: '0.9rem' }}><input type="checkbox" checked={form.isPensionable === 'true'} onChange={e => setForm(f => ({ ...f, isPensionable: e.target.checked ? 'true' : 'false' }))} /> Is Pensionable</label>
+          <label style={{ fontSize: '0.9rem' }}><input type="checkbox" checked={form.affectsGross === 'true'} onChange={e => setForm(f => ({ ...f, affectsGross: e.target.checked ? 'true' : 'false' }))} /> Affects Gross</label>
+          <label style={{ fontSize: '0.9rem' }}><input type="checkbox" checked={form.affectsNet === 'true'} onChange={e => setForm(f => ({ ...f, affectsNet: e.target.checked ? 'true' : 'false' }))} /> Affects Net</label>
+          <label style={{ fontSize: '0.9rem' }}><input type="checkbox" checked={form.affectsEmployerCost === 'true'} onChange={e => setForm(f => ({ ...f, affectsEmployerCost: e.target.checked ? 'true' : 'false' }))} /> Affects Employer Cost</label>
+          <input placeholder="Taxable %" type="number" min="0" max="100" value={form.taxablePercent} onChange={e => setForm(f => ({ ...f, taxablePercent: e.target.value }))} style={{ padding: '0.4rem', border: '1px solid #ccc', borderRadius: 4 }} />
+          <input placeholder="Pensionable %" type="number" min="0" max="100" value={form.pensionablePercent} onChange={e => setForm(f => ({ ...f, pensionablePercent: e.target.value }))} style={{ padding: '0.4rem', border: '1px solid #ccc', borderRadius: 4 }} />
+          <input placeholder="Calc Order" type="number" min="0" value={form.calculationOrder} onChange={e => setForm(f => ({ ...f, calculationOrder: e.target.value }))} style={{ padding: '0.4rem', border: '1px solid #ccc', borderRadius: 4 }} />
           <button type="submit" style={{ gridColumn: '1/-1', background: '#059669', color: '#fff', padding: '0.4rem', border: 'none', borderRadius: 4, cursor: 'pointer' }}>Create Component</button>
         </form>
       )}
@@ -196,9 +219,16 @@ export default function ComponentsPage() {
                     <label style={{ fontSize: '0.75rem' }}><input type="checkbox" checked={editForm.isDeduction === 'true'} onChange={() => setEditForm(f => ({ ...f, isDeduction: toggleBool(f.isDeduction) }))} /> Ded</label>
                     <label style={{ fontSize: '0.75rem' }}><input type="checkbox" checked={editForm.isStatutory === 'true'} onChange={() => setEditForm(f => ({ ...f, isStatutory: toggleBool(f.isStatutory) }))} /> Stat</label>
                     <label style={{ fontSize: '0.75rem' }}><input type="checkbox" checked={editForm.isVariable === 'true'} onChange={() => setEditForm(f => ({ ...f, isVariable: toggleBool(f.isVariable) }))} /> Var</label>
+                    <label style={{ fontSize: '0.75rem' }}><input type="checkbox" checked={editForm.isPensionable === 'true'} onChange={() => setEditForm(f => ({ ...f, isPensionable: toggleBool(f.isPensionable) }))} /> Pen</label>
+                    <label style={{ fontSize: '0.75rem' }}><input type="checkbox" checked={editForm.affectsGross === 'true'} onChange={() => setEditForm(f => ({ ...f, affectsGross: toggleBool(f.affectsGross) }))} /> Grs</label>
+                    <label style={{ fontSize: '0.75rem' }}><input type="checkbox" checked={editForm.affectsNet === 'true'} onChange={() => setEditForm(f => ({ ...f, affectsNet: toggleBool(f.affectsNet) }))} /> Net</label>
+                    <label style={{ fontSize: '0.75rem' }}><input type="checkbox" checked={editForm.affectsEmployerCost === 'true'} onChange={() => setEditForm(f => ({ ...f, affectsEmployerCost: toggleBool(f.affectsEmployerCost) }))} /> EC</label>
+                    <input style={{ ...inputSx, fontSize: '0.75rem', width: 'auto' }} type="number" min="0" max="100" placeholder="Tx%" value={editForm.taxablePercent} onChange={e => setEditForm(f => ({ ...f, taxablePercent: e.target.value }))} />
+                    <input style={{ ...inputSx, fontSize: '0.75rem', width: 'auto' }} type="number" min="0" max="100" placeholder="Pen%" value={editForm.pensionablePercent} onChange={e => setEditForm(f => ({ ...f, pensionablePercent: e.target.value }))} />
+                    <input style={{ ...inputSx, fontSize: '0.75rem', width: 'auto' }} type="number" min="0" placeholder="Ord" value={editForm.calculationOrder} onChange={e => setEditForm(f => ({ ...f, calculationOrder: e.target.value }))} />
                   </div>
                 ) : (
-                  <span>{c.isEarning ? 'E' : '-'}/{c.isDeduction ? 'D' : '-'}/{c.isStatutory ? 'S' : '-'}/{c.isVariable ? 'V' : '-'}</span>
+                  <span>{c.isEarning ? 'E' : '-'}/{c.isDeduction ? 'D' : '-'}/{c.isStatutory ? 'S' : '-'}/{c.isVariable ? 'V' : '-'}/{c.isPensionable ? 'P' : '-'}/{c.affectsGross ? 'G' : '-'}/{c.affectsNet ? 'N' : '-'}/{c.affectsEmployerCost ? 'EC' : '--'}:Tx{c.taxablePercent}%:Pen{c.pensionablePercent}%:O{c.calculationOrder}</span>
                 )}
               </td>
               <td style={{ padding: '0.5rem', fontSize: '0.9rem' }}>

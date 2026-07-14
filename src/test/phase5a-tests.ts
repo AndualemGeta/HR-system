@@ -312,6 +312,76 @@ async function main() {
     assert.strictEqual(line.lineType, 'DEDUCTION')
   })
 
+  // ── Requirement Applicability ─────────────────────────────────────
+  console.log('\n[Requirement Applicability]')
+  test('Requirement with role=DSA does not match non-DSA employee', () => {
+    const req = { employeeCategory: null, role: 'DSA' as any, departmentId: null, regionId: null, areaId: null, shopId: null, employmentType: null }
+    const emp = { employeeCategory: null, currentRole: 'DSP' as any, currentDepartmentId: null, currentRegionId: null, currentAreaId: null, currentShopId: null, employmentType: null }
+    const matches = (
+      (!req.employeeCategory || req.employeeCategory === emp.employeeCategory) &&
+      (!req.role || req.role === emp.currentRole) &&
+      (!req.departmentId || req.departmentId === emp.currentDepartmentId) &&
+      (!req.regionId || req.regionId === emp.currentRegionId) &&
+      (!req.areaId || req.areaId === emp.currentAreaId) &&
+      (!req.shopId || req.shopId === emp.currentShopId) &&
+      (!req.employmentType || req.employmentType === emp.employmentType)
+    )
+    assert.strictEqual(matches, false)
+  })
+  test('Requirement with role=DSA matches DSA employee', () => {
+    const req = { employeeCategory: null, role: 'DSA' as any, departmentId: null, regionId: null, areaId: null, shopId: null, employmentType: null }
+    const emp = { employeeCategory: null, currentRole: 'DSA' as any, currentDepartmentId: null, currentRegionId: null, currentAreaId: null, currentShopId: null, employmentType: null }
+    const matches = (
+      (!req.employeeCategory || req.employeeCategory === emp.employeeCategory) &&
+      (!req.role || req.role === emp.currentRole) &&
+      (!req.departmentId || req.departmentId === emp.currentDepartmentId) &&
+      (!req.regionId || req.regionId === emp.currentRegionId) &&
+      (!req.areaId || req.areaId === emp.currentAreaId) &&
+      (!req.shopId || req.shopId === emp.currentShopId) &&
+      (!req.employmentType || req.employmentType === emp.employmentType)
+    )
+    assert.strictEqual(matches, true)
+  })
+  test('Requirement with role=DSA + dept=X matches only DSA employees in dept X', () => {
+    const req = { employeeCategory: null, role: 'DSA' as any, departmentId: 'deptX', regionId: null, areaId: null, shopId: null, employmentType: null }
+    const empDsaWrongDept = { employeeCategory: null, currentRole: 'DSA' as any, currentDepartmentId: 'deptY', currentRegionId: null, currentAreaId: null, currentShopId: null, employmentType: null }
+    const empDsaRightDept = { employeeCategory: null, currentRole: 'DSA' as any, currentDepartmentId: 'deptX', currentRegionId: null, currentAreaId: null, currentShopId: null, employmentType: null }
+    const matchesWrong = (
+      (!req.employeeCategory || req.employeeCategory === empDsaWrongDept.employeeCategory) &&
+      (!req.role || req.role === empDsaWrongDept.currentRole) &&
+      (!req.departmentId || req.departmentId === empDsaWrongDept.currentDepartmentId) &&
+      (!req.regionId || req.regionId === empDsaWrongDept.currentRegionId) &&
+      (!req.areaId || req.areaId === empDsaWrongDept.currentAreaId) &&
+      (!req.shopId || req.shopId === empDsaWrongDept.currentShopId) &&
+      (!req.employmentType || req.employmentType === empDsaWrongDept.employmentType)
+    )
+    const matchesRight = (
+      (!req.employeeCategory || req.employeeCategory === empDsaRightDept.employeeCategory) &&
+      (!req.role || req.role === empDsaRightDept.currentRole) &&
+      (!req.departmentId || req.departmentId === empDsaRightDept.currentDepartmentId) &&
+      (!req.regionId || req.regionId === empDsaRightDept.currentRegionId) &&
+      (!req.areaId || req.areaId === empDsaRightDept.currentAreaId) &&
+      (!req.shopId || req.shopId === empDsaRightDept.currentShopId) &&
+      (!req.employmentType || req.employmentType === empDsaRightDept.employmentType)
+    )
+    assert.strictEqual(matchesWrong, false)
+    assert.strictEqual(matchesRight, true)
+  })
+  test('Requirement with no filters matches any employee', () => {
+    const req = { employeeCategory: null, role: null, departmentId: null, regionId: null, areaId: null, shopId: null, employmentType: null }
+    const emp = { employeeCategory: null, currentRole: 'DSA' as any, currentDepartmentId: 'deptX', currentRegionId: null, currentAreaId: null, currentShopId: null, employmentType: null }
+    const matches = (
+      (!req.employeeCategory || req.employeeCategory === emp.employeeCategory) &&
+      (!req.role || req.role === emp.currentRole) &&
+      (!req.departmentId || req.departmentId === emp.currentDepartmentId) &&
+      (!req.regionId || req.regionId === emp.currentRegionId) &&
+      (!req.areaId || req.areaId === emp.currentAreaId) &&
+      (!req.shopId || req.shopId === emp.currentShopId) &&
+      (!req.employmentType || req.employmentType === emp.employmentType)
+    )
+    assert.strictEqual(matches, true)
+  })
+
   // ── Statutory Data ────────────────────────────────────────────────
   console.log('\n[Statutory Data]')
   try {

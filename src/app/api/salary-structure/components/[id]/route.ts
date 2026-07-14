@@ -29,7 +29,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     if (!component) return notFound('Component not found')
 
     const body = await req.json()
-    const { name, description, componentType, taxTreatment, isEarning, isDeduction, isStatutory, isVariable } = body
+    const { name, description, componentType, taxTreatment, isEarning, isDeduction, isStatutory, isVariable, isPensionable, taxablePercent, pensionablePercent, affectsGross, affectsNet, affectsEmployerCost, calculationOrder } = body
 
     const updated = await prisma.payComponent.update({
       where: { id },
@@ -42,6 +42,13 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         ...(isDeduction !== undefined && { isDeduction }),
         ...(isStatutory !== undefined && { isStatutory }),
         ...(isVariable !== undefined && { isVariable }),
+        ...(isPensionable !== undefined && { isPensionable }),
+        ...(taxablePercent !== undefined && { taxablePercent }),
+        ...(pensionablePercent !== undefined && { pensionablePercent }),
+        ...(affectsGross !== undefined && { affectsGross }),
+        ...(affectsNet !== undefined && { affectsNet }),
+        ...(affectsEmployerCost !== undefined && { affectsEmployerCost }),
+        ...(calculationOrder !== undefined && { calculationOrder }),
         updatedById: session.userId,
       },
     })
