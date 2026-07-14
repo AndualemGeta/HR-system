@@ -16,7 +16,6 @@ export default function EditEmployeePage() {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
-  const [isHO, setIsHO] = useState(false)
   const [empIdStr, setEmpIdStr] = useState('')
   const [assignments, setAssignments] = useState<Assign[]>([])
   const [editingAssignId, setEditingAssignId] = useState<string | null>(null)
@@ -32,6 +31,7 @@ export default function EditEmployeePage() {
     currentAreaId: '', currentShopId: '', currentClusterId: '',
     directManagerId: '', accountingReportingManagerId: '', basicSalary: '', salaryEffectiveDate: '',
   })
+  const isHO = form.employeeCategory === 'HEAD_OFFICE'
 
   useEffect(() => {
     const id = params.id as string
@@ -50,8 +50,6 @@ export default function EditEmployeePage() {
       setAssignments(assignJson.data || [])
       const allManagers = empJson.data?.items || []
       setManagers(allManagers.filter((m: Emp) => m.id !== id))
-      const isHo = employee.employeeCategory === 'HEAD_OFFICE'
-      setIsHO(isHo)
       setEmpIdStr(employee.employeeId || '')
       setForm({
         firstName: employee.firstName || '',
@@ -224,9 +222,37 @@ export default function EditEmployeePage() {
             <Select label="Status" value={form.employmentStatus} onChange={v => set('employmentStatus', v)} options={[
               { value: 'DRAFT', label: 'Draft' }, { value: 'ONBOARDING', label: 'Onboarding' },
               { value: 'ACTIVE', label: 'Active' }, { value: 'ON_PROBATION', label: 'On Probation' },
+              { value: 'SUSPENDED', label: 'Suspended' },
+              { value: 'RESIGNED', label: 'Resigned' }, { value: 'TERMINATED', label: 'Terminated' },
+              { value: 'ON_LEAVE', label: 'On Leave' },
             ]} />
             <Field label="Hire Date" value={form.hireDate} onChange={v => set('hireDate', v)} type="date" />
             <Field label="Notes" value={form.notes} onChange={v => set('notes', v)} />
+          </div>
+          <div style={{ marginTop: '0.75rem', borderTop: '1px solid #e5e7eb', paddingTop: '0.75rem' }}>
+            <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.85rem', fontWeight: 500 }}>Employee Category *</label>
+            <div style={{ display: 'flex', gap: '1.5rem' }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.9rem', cursor: 'pointer' }}>
+                <input type="radio" name="employeeCategory" value="HEAD_OFFICE" checked={form.employeeCategory === 'HEAD_OFFICE'}
+                  onChange={() => {
+                    set('employeeCategory', 'HEAD_OFFICE')
+                    set('currentDepartmentId', form.currentDepartmentId)
+                    set('currentRegionId', '')
+                    set('currentAreaId', '')
+                    set('currentShopId', '')
+                    set('currentClusterId', '')
+                  }} />
+                Head Office
+              </label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.9rem', cursor: 'pointer' }}>
+                <input type="radio" name="employeeCategory" value="SHOP_FIELD" checked={form.employeeCategory === 'SHOP_FIELD'}
+                  onChange={() => {
+                    set('employeeCategory', 'SHOP_FIELD')
+                    set('currentDepartmentId', '')
+                  }} />
+                Shop / Field
+              </label>
+            </div>
           </div>
         </fieldset>
 
@@ -237,6 +263,18 @@ export default function EditEmployeePage() {
               <Select label="Department" value={form.currentDepartmentId} onChange={v => set('currentDepartmentId', v)} options={[
                 { value: '', label: '-- Select --' },
                 ...departments.map(d => ({ value: d.id, label: d.name })),
+              ]} />
+              <Select label="Role" value={form.currentRole} onChange={v => set('currentRole', v)} options={[
+                { value: '', label: '-- Select --' }, { value: 'CEO', label: 'CEO' },
+                { value: 'SALES_HEAD', label: 'Sales Head' }, { value: 'HR_OFFICER', label: 'HR Officer' },
+                { value: 'HR_MANAGER', label: 'HR Manager' }, { value: 'FINANCE_DIRECTOR', label: 'Finance Director' },
+                { value: 'TREASURY_MANAGER', label: 'Treasury Manager' }, { value: 'ACCOUNTANT', label: 'Accountant' },
+                { value: 'DISTRIBUTION_MANAGER', label: 'Distribution Manager' },
+                { value: 'TECHNOLOGY_MANAGER', label: 'Technology Manager' },
+                { value: 'BUSINESS_DEVELOPMENT_MANAGER', label: 'Business Development Manager' },
+                { value: 'EBU_FTTH_SUPERVISOR', label: 'FTTH Supervisor' },
+                { value: 'CLEANING_STAFF', label: 'Cleaning Staff' },
+                { value: 'EMPLOYEE', label: 'Employee' }, { value: 'OTHER', label: 'Other' },
               ]} />
               <Select label="Level" value={form.currentLevel} onChange={v => set('currentLevel', v)} options={[
                 { value: '', label: '-- Select --' }, { value: 'JUNIOR', label: 'Junior' },
@@ -256,6 +294,15 @@ export default function EditEmployeePage() {
           <fieldset style={{ border: '1px solid #d1d5db', borderRadius: 6, padding: '1rem' }}>
             <legend style={{ fontWeight: 600 }}>Shop / Field Assignment</legend>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+              <Select label="Role" value={form.currentRole} onChange={v => set('currentRole', v)} options={[
+                { value: '', label: '-- Select --' },
+                { value: 'SHOP_MANAGER', label: 'Shop Manager' }, { value: 'DSP', label: 'DSP (Indoor Sales)' },
+                { value: 'DSA', label: 'DSA (Outdoor Sales)' }, { value: 'SHOP_ACCOUNTANT', label: 'Shop Accountant' },
+                { value: 'ASM', label: 'Area Sales Manager' },
+                { value: 'CLEANING_STAFF', label: 'Cleaning Staff' }, { value: 'SECURITY_STAFF', label: 'Security Staff' },
+                { value: 'EBU_SUPERVISOR', label: 'EBU Supervisor' }, { value: 'BA_COORDINATOR', label: 'BA Coordinator' },
+                { value: 'EMPLOYEE', label: 'Employee' }, { value: 'OTHER', label: 'Other' },
+              ]} />
               <Select label="Level" value={form.currentLevel} onChange={v => set('currentLevel', v)} options={[
                 { value: '', label: '-- Select --' }, { value: 'JUNIOR', label: 'Junior' },
                 { value: 'MID', label: 'Mid' }, { value: 'SENIOR', label: 'Senior' },

@@ -217,6 +217,7 @@ const ROLE_MAP: Record<string, EmployeeRole> = {
   'hr manager': 'HR_MANAGER', 'finance director': 'FINANCE_DIRECTOR',
   'treasury manager': 'TREASURY_MANAGER', accountant: 'ACCOUNTANT',
   'distribution manager': 'DISTRIBUTION_MANAGER', 'technology manager': 'TECHNOLOGY_MANAGER',
+  'business development manager': 'BUSINESS_DEVELOPMENT_MANAGER', 'bdm': 'BUSINESS_DEVELOPMENT_MANAGER',
   employee: 'EMPLOYEE', 'ebu supervisor': 'EBU_SUPERVISOR',
   'ba coordinator': 'BA_COORDINATOR', 'cleaning staff': 'CLEANING_STAFF',
   'security staff': 'SECURITY_STAFF', other: 'OTHER',

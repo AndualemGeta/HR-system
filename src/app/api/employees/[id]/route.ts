@@ -134,6 +134,8 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
             updateData[field] = 'DRAFT'
           } else if (field === 'currentRole') {
             updateData[field] = 'OTHER'
+          } else if (field === 'email' || field === 'phoneNumber') {
+            updateData[field] = null
           } else {
             updateData[field] = val
           }

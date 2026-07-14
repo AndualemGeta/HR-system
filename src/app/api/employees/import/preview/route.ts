@@ -30,7 +30,7 @@ export async function POST(req: NextRequest) {
       return badRequest('Invalid import mode. Use CREATE_ONLY, UPDATE_ONLY, or CREATE_OR_UPDATE')
     }
 
-    const allowedTypes = ['.csv', '.xlsx', '.xls']
+    const allowedTypes = ['.csv', '.xlsx']
     const ext = fileName.substring(fileName.lastIndexOf('.')).toLowerCase()
     if (!allowedTypes.includes(ext)) {
       return badRequest(`Unsupported file type: ${ext}. Accepted: CSV, XLSX, XLS`)
@@ -52,10 +52,10 @@ export async function POST(req: NextRequest) {
     } else {
       try {
         const ExcelJS = await import('exceljs')
-        const fileBytes = new Uint8Array(await file.arrayBuffer())
-        if (fileBytes.length === 0) return badRequest('Excel file is empty')
+        const buf = new Uint8Array(await file.arrayBuffer())
+        if (buf.length === 0) return badRequest('Excel file is empty')
         const workbook = new ExcelJS.Workbook()
-        await workbook.xlsx.load(fileBytes as never)
+        await workbook.xlsx.load(buf as never)
         const sheet = workbook.worksheets[0]
         if (!sheet || sheet.rowCount < 2) return badRequest('Excel file has no data rows after header')
 
@@ -84,7 +84,8 @@ export async function POST(req: NextRequest) {
         if (dataRowCount === 0) return badRequest('Excel file has no data rows')
       } catch (err) {
         console.error('Excel parse error:', err)
-        return badRequest('Failed to parse Excel file')
+        const msg = err instanceof Error ? err.message : 'unknown error'
+        return badRequest(`Failed to parse Excel file: ${msg}`)
       }
     }
 
