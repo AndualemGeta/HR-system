@@ -190,8 +190,15 @@ enum PayrollBatchStatus {
   DRAFT
   VALIDATED
   APPROVED
-  EXPORTED
   CANCELLED
+}
+
+enum PayrollCalculationStatus {
+  PENDING
+  RUNNING
+  COMPLETED
+  FAILED
+  SUPERSEDED
 }
 
 enum PayrollReadiness {
@@ -204,6 +211,37 @@ enum PayrollLockStatus {
   UNLOCKED
   LOCKED
   UNLOCK_REQUESTED
+}
+
+enum CalculationLineType {
+  BASIC_SALARY
+  EARNING
+  ALLOWANCE
+  COMMISSION
+  BONUS
+  OVERTIME
+  ADJUSTMENT
+  EMPLOYEE_PENSION
+  EMPLOYER_PENSION
+  PAYE_TAX
+  DEDUCTION
+  EMPLOYER_CONTRIBUTION
+}
+
+enum CalculationSourceType {
+  EMPLOYEE_SALARY
+  PAYROLL_INPUT
+  PAY_RULE
+  PAYROLL_ADJUSTMENT
+  ATTENDANCE
+  STATUTORY_RULE
+  SYSTEM
+}
+
+enum PensionBaseType {
+  BASIC_SALARY
+  PENSIONABLE_EARNINGS
+  CUSTOM_COMPONENTS
 }
 
 enum CommissionCalculationType {
@@ -507,6 +545,24 @@ enum AuditAction {
   SHOP_MANAGER_INCENTIVE_PAYROLL_TOTAL_CREATE
   SHOP_MANAGER_INCENTIVE_PAYROLL_TOTAL_UPDATE
   SHOP_MANAGER_INCENTIVE_PAYROLL_HANDOFF_BLOCKED
+  PAYROLL_STATUTORY_PAYE_CREATE
+  PAYROLL_STATUTORY_PAYE_UPDATE
+  PAYROLL_STATUTORY_PAYE_APPROVE
+  PAYROLL_STATUTORY_PAYE_DEACTIVATE
+  PAYROLL_STATUTORY_PENSION_CREATE
+  PAYROLL_STATUTORY_PENSION_UPDATE
+  PAYROLL_STATUTORY_PENSION_APPROVE
+  PAYROLL_STATUTORY_PENSION_DEACTIVATE
+  PAYROLL_CALCULATION_READINESS_RUN
+  PAYROLL_CALCULATION_PREVIEW
+  PAYROLL_CALCULATION_START
+  PAYROLL_CALCULATION_COMPLETE
+  PAYROLL_CALCULATION_BLOCKED
+  PAYROLL_CALCULATION_REVIEW_START
+  PAYROLL_CALCULATION_APPROVE
+  PAYROLL_CALCULATION_RETURN
+  PAYROLL_CALCULATION_REOPEN
+  PAYROLL_CALCULATION_EXPORT
   OTHER
 }
 
@@ -726,6 +782,7 @@ model Employee {
   promotionRequests            PromotionRequest[]
   commissionCalculations       CommissionCalculation[]
   payrollRows                  PayrollPreparationRow[]
+  payrollCalculationLines      PayrollCalculationLine[]
   payrollAttendance            PayrollAttendanceInput[]
   payrollAllowances            PayrollAllowance[]
   payrollDeductions            PayrollDeduction[]
@@ -1241,6 +1298,10 @@ model PensionRule {
   name                     String
   employeeRate             Decimal         @db.Decimal(10, 4)
   employerRate             Decimal         @db.Decimal(10, 4)
+  pensionBaseType          PensionBaseType @default(BASIC_SALARY)
+  minimumBase              Decimal?        @db.Decimal(12, 2)
+  maximumBase              Decimal?        @db.Decimal(12, 2)
+  priority                 Int             @default(0)
   applicableEmploymentType EmploymentType?
   applicableRole           EmployeeRole?
   effectiveStartDate       DateTime
@@ -1315,67 +1376,140 @@ model PayrollDeduction {
 }
 
 model PayrollPreparationBatch {
-  id                 String                  @id @default(uuid())
-  batchName          String
-  payrollPeriodStart DateTime
-  payrollPeriodEnd   DateTime
-  status             PayrollBatchStatus      @default(DRAFT)
-  totalEmployees     Int                     @default(0)
-  readyCount         Int                     @default(0)
-  blockedCount       Int                     @default(0)
-  warningCount       Int                     @default(0)
-  notes              String?
-  createdById        String?
-  approvedById       String?
-  createdAt          DateTime                @default(now())
-  updatedAt          DateTime                @updatedAt
-  rows               PayrollPreparationRow[]
+  id                    String                    @id @default(uuid())
+  payrollPeriodId       String
+  version               Int                       @default(1)
+  batchName             String
+  payrollPeriodStart    DateTime
+  payrollPeriodEnd      DateTime
+  calculationStatus     PayrollCalculationStatus? @default(PENDING)
+  status                PayrollBatchStatus        @default(DRAFT)
+  calculationStartedAt  DateTime?
+  calculationCompletedAt DateTime?
+  calculatedById        String?
+  reviewedById          String?
+  reviewedAt            DateTime?
+  approvedById          String?
+  approvedAt            DateTime?
+  lockedById            String?
+  lockedAt              DateTime?
+  calculationHash       String?
+  employeeCount         Int                       @default(0)
+  blockerCount          Int                       @default(0)
+  warningCount          Int                       @default(0)
+  grossEarningsTotal    Decimal?                  @db.Decimal(14, 2)
+  taxableIncomeTotal    Decimal?                  @db.Decimal(14, 2)
+  employeePensionTotal  Decimal?                  @db.Decimal(14, 2)
+  employerPensionTotal  Decimal?                  @db.Decimal(14, 2)
+  payeTaxTotal          Decimal?                  @db.Decimal(14, 2)
+  otherDeductionTotal   Decimal?                  @db.Decimal(14, 2)
+  netSalaryTotal        Decimal?                  @db.Decimal(14, 2)
+  employerTotalCost     Decimal?                  @db.Decimal(14, 2)
+  notes                 String?
+  createdById           String?
+  createdAt             DateTime                  @default(now())
+  updatedAt             DateTime                  @updatedAt
+  payrollPeriod         PayrollPeriod             @relation(fields: [payrollPeriodId], references: [id])
+  rows                  PayrollPreparationRow[]
+  calculationLines      PayrollCalculationLine[]
 
+  @@unique([payrollPeriodId, version])
+  @@index([payrollPeriodId])
   @@index([status])
 }
 
 model PayrollPreparationRow {
-  id                   String                  @id @default(uuid())
-  batchId              String
-  employeeId           String
-  employeeCode         String
-  fullName             String
-  employmentType       String?
-  division             String?
-  department           String?
-  region               String?
-  shop                 String?
-  role                 String
-  level                String
-  basicSalary          Decimal?                @db.Decimal(12, 2)
-  workingDays          Decimal?                @db.Decimal(8, 2)
-  daysPresent          Decimal?                @db.Decimal(8, 2)
-  paidLeaveDays        Decimal?                @db.Decimal(8, 2)
-  unpaidLeaveDays      Decimal?                @db.Decimal(8, 2)
-  proratedBasicSalary  Decimal?                @db.Decimal(12, 2)
-  approvedAllowances   Decimal?                @db.Decimal(12, 2)
-  approvedCommission   Decimal?                @db.Decimal(12, 2)
-  approvedDeductions   Decimal?                @db.Decimal(12, 2)
-  overtimeAmount       Decimal?                @db.Decimal(12, 2)
-  grossSalary          Decimal?                @db.Decimal(12, 2)
-  employeePension      Decimal?                @db.Decimal(12, 2)
-  employerPension      Decimal?                @db.Decimal(12, 2)
-  taxableIncome        Decimal?                @db.Decimal(12, 2)
-  payeTax              Decimal?                @db.Decimal(12, 2)
-  netSalary            Decimal?                @db.Decimal(12, 2)
-  employerTotalCost    Decimal?                @db.Decimal(12, 2)
-  manualAdjustments    Decimal?                @db.Decimal(12, 2)
-  readinessStatus      PayrollReadiness
-  blockers             Json?
-  warnings             Json?
-  calculationBreakdown Json?
-  includedInExport     Boolean                 @default(true)
-  createdAt            DateTime                @default(now())
-  updatedAt            DateTime                @updatedAt
-  batch                PayrollPreparationBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
-  employee             Employee                @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  id                        String                  @id @default(uuid())
+  batchId                   String
+  payrollPeriodId           String
+  employeeId                String
+  employeeCode              String
+  fullName                  String
+  employmentType            String?
+  division                  String?
+  department                String?
+  region                    String?
+  shop                      String?
+  role                      String
+  level                     String
+  basicSalary               Decimal?                @db.Decimal(12, 2)
+  salarySource              String?
+  salaryEffectiveDate       DateTime?
+  proratedBasicSalary       Decimal?                @db.Decimal(12, 2)
+  workingDays               Decimal?                @db.Decimal(8, 2)
+  daysPresent               Decimal?                @db.Decimal(8, 2)
+  paidLeaveDays             Decimal?                @db.Decimal(8, 2)
+  unpaidLeaveDays           Decimal?                @db.Decimal(8, 2)
+  grossTaxableEarnings      Decimal?                @db.Decimal(12, 2)
+  grossNonTaxableEarnings   Decimal?                @db.Decimal(12, 2)
+  pensionableIncome         Decimal?                @db.Decimal(12, 2)
+  approvedAllowances        Decimal?                @db.Decimal(12, 2)
+  approvedCommission        Decimal?                @db.Decimal(12, 2)
+  overtimeAmount            Decimal?                @db.Decimal(12, 2)
+  preTaxDeductions          Decimal?                @db.Decimal(12, 2)
+  postTaxDeductions         Decimal?                @db.Decimal(12, 2)
+  totalDeductions           Decimal?                @db.Decimal(12, 2)
+  grossSalary               Decimal?                @db.Decimal(12, 2)
+  taxableIncome             Decimal?                @db.Decimal(12, 2)
+  employeePension           Decimal?                @db.Decimal(12, 2)
+  employerPension           Decimal?                @db.Decimal(12, 2)
+  payeTax                   Decimal?                @db.Decimal(12, 2)
+  netSalary                 Decimal?                @db.Decimal(12, 2)
+  employerTotalCost         Decimal?                @db.Decimal(12, 2)
+  otherEmployerContributions Decimal?               @db.Decimal(12, 2)
+  manualAdjustments         Decimal?                @db.Decimal(12, 2)
+  approvedDeductions        Decimal?                @db.Decimal(12, 2)
+  readinessStatus           PayrollReadiness
+  calculationVersion        Int                     @default(1)
+  calculatedAt              DateTime?
+  calculatedById            String?
+  blockers                  Json?
+  warnings                  Json?
+  calculationBreakdown      Json?
+  includedInExport          Boolean                 @default(true)
+  createdAt                 DateTime                @default(now())
+  updatedAt                 DateTime                @updatedAt
+  batch                     PayrollPreparationBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  employee                  Employee                @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  calculationLines          PayrollCalculationLine[]
 
   @@unique([batchId, employeeId])
+  @@index([payrollPeriodId])
+}
+
+model PayrollCalculationLine {
+  id               String               @id @default(uuid())
+  batchId          String
+  rowId            String?
+  payrollPeriodId  String
+  employeeId       String
+  componentId      String?
+  componentCode    String
+  componentName    String
+  lineType         CalculationLineType
+  sourceType       CalculationSourceType
+  sourceId         String?
+  quantity         Decimal?             @db.Decimal(12, 4)
+  rate             Decimal?             @db.Decimal(12, 4)
+  baseAmount       Decimal?             @db.Decimal(12, 2)
+  grossAmount      Decimal?             @default(0) @db.Decimal(12, 2)
+  taxableAmount    Decimal?             @default(0) @db.Decimal(12, 2)
+  nonTaxableAmount Decimal?             @default(0) @db.Decimal(12, 2)
+  pensionableAmount Decimal?            @default(0) @db.Decimal(12, 2)
+  deductionAmount  Decimal?             @default(0) @db.Decimal(12, 2)
+  employerAmount   Decimal?             @default(0) @db.Decimal(12, 2)
+  ruleId           String?
+  calculationOrder Int                  @default(0)
+  calculationNote  String?
+  createdAt        DateTime             @default(now())
+  batch            PayrollPreparationBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  row              PayrollPreparationRow?  @relation(fields: [rowId], references: [id], onDelete: SetNull)
+  employee         Employee             @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@index([batchId])
+  @@index([rowId])
+  @@index([employeeId])
+  @@index([payrollPeriodId])
 }
 
 model PayrollPeriodLock {
@@ -1559,24 +1693,32 @@ model EmployeePayrollProfile {
 }
 
 model PayComponent {
-  id            String           @id @default(uuid())
-  code          String           @unique
-  name          String
-  description   String?
-  componentType PayComponentType @default(OTHER)
-  taxTreatment  TaxTreatment     @default(UNKNOWN)
-  isEarning     Boolean          @default(true)
-  isDeduction   Boolean          @default(false)
-  isStatutory   Boolean          @default(false)
-  isVariable    Boolean          @default(false)
-  isActive      Boolean          @default(true)
-  createdById   String?
-  updatedById   String?
-  createdAt     DateTime         @default(now())
-  updatedAt     DateTime         @updatedAt
-  createdBy     User?            @relation("PayComponentCreatedBy", fields: [createdById], references: [id])
-  updatedBy     User?            @relation("PayComponentUpdatedBy", fields: [updatedById], references: [id])
-  rules         PayRule[]        @relation("PayRuleComponent")
+  id                String           @id @default(uuid())
+  code              String           @unique
+  name              String
+  description       String?
+  componentType     PayComponentType @default(OTHER)
+  taxTreatment      TaxTreatment     @default(UNKNOWN)
+  isEarning         Boolean          @default(true)
+  isDeduction       Boolean          @default(false)
+  isStatutory       Boolean          @default(false)
+  isVariable        Boolean          @default(false)
+  isActive          Boolean          @default(true)
+  isPensionable     Boolean          @default(false)
+  taxablePercent    Decimal          @default(0) @db.Decimal(5, 2)
+  pensionablePercent Decimal         @default(0) @db.Decimal(5, 2)
+  affectsGross      Boolean          @default(true)
+  affectsNet        Boolean          @default(true)
+  affectsEmployerCost Boolean         @default(false)
+  calculationOrder  Int              @default(0)
+  createdById       String?
+  updatedById       String?
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+  createdBy         User?            @relation("PayComponentCreatedBy", fields: [createdById], references: [id])
+  updatedBy         User?            @relation("PayComponentUpdatedBy", fields: [updatedById], references: [id])
+  rules             PayRule[]        @relation("PayRuleComponent")
+  inputTypes        PayrollInputType[]
 }
 
 model PayRule {
@@ -1697,6 +1839,7 @@ model PayrollPeriod {
   inputs          PayrollInput[]
   waivers         PayrollInputWaiver[]
   incentivePeriod ShopManagerIncentivePeriod?
+  batches         PayrollPreparationBatch[]
 
   @@index([status])
   @@index([createdById])
@@ -1712,12 +1855,14 @@ model PayrollInputType {
   defaultAmount    Decimal?                  @db.Decimal(12, 2)
   requiresApproval Boolean                   @default(false)
   isActive         Boolean                   @default(true)
+  payComponentId   String?
   createdById      String?
   updatedById      String?
   createdAt        DateTime                  @default(now())
   updatedAt        DateTime                  @updatedAt
   createdBy        User?                     @relation("InputTypeCreatedBy", fields: [createdById], references: [id])
   updatedBy        User?                     @relation("InputTypeUpdatedBy", fields: [updatedById], references: [id])
+  payComponent     PayComponent?             @relation(fields: [payComponentId], references: [id])
   inputs           PayrollInput[]
   requirements     PayrollInputRequirement[]
   waivers          PayrollInputWaiver[]
@@ -1725,6 +1870,7 @@ model PayrollInputType {
   @@index([code])
   @@index([category])
   @@index([isActive])
+  @@index([payComponentId])
 }
 
 model PayrollPeriodEmployee {

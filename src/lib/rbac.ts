@@ -99,6 +99,19 @@ export type PermissionKey =
   | 'shopManagerIncentive.sendToPayroll'
   | 'shopManagerIncentive.viewInputConfig'
   | 'shopManagerIncentive.manageInputConfig'
+  | 'payrollCalculation.view'
+  | 'payrollCalculation.readiness'
+  | 'payrollCalculation.preview'
+  | 'payrollCalculation.calculate'
+  | 'payrollCalculation.recalculate'
+  | 'payrollCalculation.review'
+  | 'payrollCalculation.approve'
+  | 'payrollCalculation.return'
+  | 'payrollCalculation.reopen'
+  | 'payrollCalculation.export'
+  | 'payrollStatutory.view'
+  | 'payrollStatutory.manage'
+  | 'payrollStatutory.approve'
 
 export async function getUserPermissions(userId: string): Promise<PermissionKey[]> {
   const roles = await prisma.userRole.findMany({
@@ -239,6 +252,19 @@ const ALL_PERMISSIONS_MAP: Record<string, boolean> = {
   'shopManagerIncentive.sendToPayroll': true,
   'shopManagerIncentive.viewInputConfig': true,
   'shopManagerIncentive.manageInputConfig': true,
+  'payrollCalculation.view': true,
+  'payrollCalculation.readiness': true,
+  'payrollCalculation.preview': true,
+  'payrollCalculation.calculate': true,
+  'payrollCalculation.recalculate': true,
+  'payrollCalculation.review': true,
+  'payrollCalculation.approve': true,
+  'payrollCalculation.return': true,
+  'payrollCalculation.reopen': true,
+  'payrollCalculation.export': true,
+  'payrollStatutory.view': true,
+  'payrollStatutory.manage': true,
+  'payrollStatutory.approve': true,
 }
 
 export const ALL_PERMISSIONS = Object.keys(ALL_PERMISSIONS_MAP)

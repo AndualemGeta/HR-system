@@ -671,24 +671,28 @@ async function main() {
   await prisma.requiredDocumentRule.createMany({ data: allRules })
   console.log(`  Created ${allRules.length} required document rules`)
 
-  // Create default pay components
+  // Create default pay components (Phase 5A — upserted with statutory properties)
   const defaultComponents = [
-    { code: 'BASIC_SALARY', name: 'Basic Salary', componentType: 'BASIC_SALARY' as const, isEarning: true, isDeduction: false, isStatutory: false, isVariable: false, taxTreatment: 'TAXABLE' as const },
-    { code: 'TRANSPORT_ALLOWANCE', name: 'Transport Allowance', componentType: 'TRANSPORT' as const, isEarning: true, isDeduction: false, isStatutory: false, isVariable: false, taxTreatment: 'NON_TAXABLE' as const },
-    { code: 'KPI_ALLOWANCE', name: 'KPI Allowance', componentType: 'KPI' as const, isEarning: true, isDeduction: false, isStatutory: false, isVariable: true, taxTreatment: 'TAXABLE' as const },
-    { code: 'OVERTIME', name: 'Overtime', componentType: 'OVERTIME' as const, isEarning: true, isDeduction: false, isStatutory: false, isVariable: true, taxTreatment: 'TAXABLE' as const },
-    { code: 'SALES_COMMISSION', name: 'Sales Commission', componentType: 'COMMISSION' as const, isEarning: true, isDeduction: false, isStatutory: false, isVariable: true, taxTreatment: 'TAXABLE' as const },
-    { code: 'BONUS', name: 'Bonus', componentType: 'BONUS' as const, isEarning: true, isDeduction: false, isStatutory: false, isVariable: true, taxTreatment: 'TAXABLE' as const },
-    { code: 'ADJUSTMENT', name: 'Adjustment', componentType: 'ADJUSTMENT' as const, isEarning: false, isDeduction: false, isStatutory: false, isVariable: true, taxTreatment: 'TAXABLE' as const },
-    { code: 'DEDUCTION', name: 'General Deduction', componentType: 'DEDUCTION' as const, isEarning: false, isDeduction: true, isStatutory: false, isVariable: false, taxTreatment: 'NON_TAXABLE' as const },
+    { code: 'BASIC_SALARY', name: 'Basic Salary', componentType: 'BASIC_SALARY' as const, isEarning: true, isDeduction: false, isVariable: false, taxTreatment: 'TAXABLE' as const, isPensionable: true, taxablePercent: 100, pensionablePercent: 100, affectsGross: true, affectsNet: true, calculationOrder: 10 },
+    { code: 'TRANSPORT_ALLOWANCE', name: 'Transport Allowance', componentType: 'TRANSPORT' as const, isEarning: true, isDeduction: false, isVariable: false, taxTreatment: 'NON_TAXABLE' as const, isPensionable: false, taxablePercent: 0, pensionablePercent: 0, affectsGross: true, affectsNet: true, calculationOrder: 30 },
+    { code: 'KPI_ALLOWANCE', name: 'KPI Allowance', componentType: 'KPI' as const, isEarning: true, isDeduction: false, isVariable: true, taxTreatment: 'TAXABLE' as const, isPensionable: false, taxablePercent: 100, pensionablePercent: 0, affectsGross: true, affectsNet: true, calculationOrder: 40 },
+    { code: 'OVERTIME', name: 'Overtime', componentType: 'OVERTIME' as const, isEarning: true, isDeduction: false, isVariable: true, taxTreatment: 'TAXABLE' as const, isPensionable: true, taxablePercent: 100, pensionablePercent: 100, affectsGross: true, affectsNet: true, calculationOrder: 45 },
+    { code: 'SALES_COMMISSION', name: 'Sales Commission', componentType: 'COMMISSION' as const, isEarning: true, isDeduction: false, isVariable: true, taxTreatment: 'TAXABLE' as const, isPensionable: true, taxablePercent: 100, pensionablePercent: 100, affectsGross: true, affectsNet: true, calculationOrder: 50 },
+    { code: 'BONUS', name: 'Bonus', componentType: 'BONUS' as const, isEarning: true, isDeduction: false, isVariable: true, taxTreatment: 'TAXABLE' as const, isPensionable: false, taxablePercent: 100, pensionablePercent: 0, affectsGross: true, affectsNet: true, calculationOrder: 60 },
+    { code: 'ADJUSTMENT', name: 'Adjustment', componentType: 'ADJUSTMENT' as const, isEarning: false, isDeduction: false, isVariable: true, taxTreatment: 'TAXABLE' as const, isPensionable: false, taxablePercent: 100, pensionablePercent: 0, affectsGross: true, affectsNet: true, calculationOrder: 90 },
+    { code: 'DEDUCTION', name: 'General Deduction', componentType: 'DEDUCTION' as const, isEarning: false, isDeduction: true, isVariable: false, taxTreatment: 'NON_TAXABLE' as const, isPensionable: false, taxablePercent: 0, pensionablePercent: 0, affectsGross: false, affectsNet: true, calculationOrder: 95 },
   ]
   const componentRecords = await Promise.all(
     defaultComponents.map(c =>
-      prisma.payComponent.create({ data: { ...c, description: `${c.name} component`, createdById: userMap['admin@leapfrog.com'] } })
+      prisma.payComponent.upsert({
+        where: { code: c.code },
+        update: { ...c, description: `${c.name} component`, updatedById: userMap['admin@leapfrog.com'] },
+        create: { ...c, description: `${c.name} component`, createdById: userMap['admin@leapfrog.com'] },
+      })
     )
   )
   const compMap = Object.fromEntries(componentRecords.map(c => [c.code, c.id]))
-  console.log(`  Created ${componentRecords.length} pay components`)
+  console.log(`  Upserted ${componentRecords.length} pay components`)
 
   // Create default pay rules for DSA roles
   const kpiAllowanceId = compMap['KPI_ALLOWANCE']
@@ -701,7 +705,7 @@ async function main() {
       {
         componentId: transportAllowanceId,
         name: 'DSA Transport Allowance',
-        description: 'Transport allowance for DSA roles — 1,500 birr flat when sales >= 40%, 0 below',
+        description: 'Transport allowance for DSA roles — 1,500 birr flat when sales >= 40%, 0 below — SAMPLE: requires management confirmation',
         employeeCategory: 'SHOP_FIELD' as const,
         role: 'DSA' as const,
         ruleType: 'THRESHOLD' as const,
@@ -713,13 +717,13 @@ async function main() {
         thresholdValue: 40,
         thresholdMetric: 'SALES_ACHIEVEMENT_PERCENT' as const,
         effectiveFrom: new Date('2024-01-01'),
-        status: 'ACTIVE' as const,
+        status: 'DRAFT' as const,
         priority: 10,
       },
       {
         componentId: kpiAllowanceId,
         name: 'DSA KPI Allowance',
-        description: 'Performance-based KPI allowance for DSA roles — tiered flat amounts',
+        description: 'Performance-based KPI allowance for DSA roles — SAMPLE: requires management confirmation',
         employeeCategory: 'SHOP_FIELD' as const,
         role: 'DSA' as const,
         ruleType: 'TIERED' as const,
@@ -732,7 +736,7 @@ async function main() {
           { min: 0, amount: 0 },
         ]),
         effectiveFrom: new Date('2024-01-01'),
-        status: 'ACTIVE' as const,
+        status: 'DRAFT' as const,
         priority: 10,
       },
       {
@@ -750,7 +754,7 @@ async function main() {
       {
         componentId: salesCommissionId,
         name: 'DSA Sales Commission',
-        description: 'Tiered sales commission structure for DSA',
+        description: 'Tiered sales commission structure for DSA — SAMPLE: requires management confirmation',
         employeeCategory: 'SHOP_FIELD' as const,
         role: 'DSA' as const,
         ruleType: 'TIERED' as const,
@@ -853,6 +857,105 @@ async function main() {
     await prisma.payrollInputRequirement.create({ data: { inputTypeId: commissionType.id, role: 'DSA', isRequired: true, severity: 'BLOCKER', createdById: adminUser.id, updatedById: adminUser.id } }).catch(() => {})
   }
   console.log('  Created 3 default payroll input requirements (DSA)')
+
+  // Phase 5A: Link payroll input types to PayComponents
+  const inputTypeToComponent: Record<string, string> = {
+    TRANSPORT_ALLOWANCE_INPUT: 'TRANSPORT_ALLOWANCE',
+    KPI_ACHIEVEMENT_PERCENT: 'KPI_ALLOWANCE',
+    SALES_COMMISSION_INPUT: 'SALES_COMMISSION',
+  }
+  for (const [inputCode, compCode] of Object.entries(inputTypeToComponent)) {
+    const inputType = await prisma.payrollInputType.findUnique({ where: { code: inputCode } })
+    const component = await prisma.payComponent.findUnique({ where: { code: compCode } })
+    if (inputType && component && !inputType.payComponentId) {
+      await prisma.payrollInputType.update({
+        where: { code: inputCode },
+        data: { payComponentId: component.id },
+      })
+    }
+  }
+  console.log(`  Linked ${Object.keys(inputTypeToComponent).length} input types to pay components`)
+
+  // Phase 5A: Seed SHOP_MANAGER_INCENTIVE PayComponent
+  const shopMgrIncentiveComponent = await prisma.payComponent.upsert({
+    where: { code: 'SHOP_MANAGER_INCENTIVE' },
+    update: {},
+    create: {
+      code: 'SHOP_MANAGER_INCENTIVE',
+      name: 'Shop Manager Incentive',
+      componentType: 'BONUS',
+      taxTreatment: 'UNKNOWN',
+      isEarning: true,
+      isDeduction: false,
+      isVariable: true,
+      isActive: true,
+      isPensionable: false,
+      taxablePercent: 100,
+      pensionablePercent: 0,
+      affectsGross: true,
+      affectsNet: true,
+      affectsEmployerCost: false,
+      calculationOrder: 50,
+      createdById: adminUserId,
+    },
+  })
+  console.log('  Upserted SHOP_MANAGER_INCENTIVE PayComponent')
+
+  // Link SHOP_MANAGER_TOTAL_INCENTIVE input type to PayComponent
+  const totalIncentiveType = await prisma.payrollInputType.findUnique({ where: { code: 'SHOP_MANAGER_TOTAL_INCENTIVE' } })
+  if (totalIncentiveType && totalIncentiveType.payComponentId !== shopMgrIncentiveComponent.id) {
+    await prisma.payrollInputType.update({
+      where: { code: 'SHOP_MANAGER_TOTAL_INCENTIVE' },
+      data: { payComponentId: shopMgrIncentiveComponent.id },
+    })
+    console.log('  Linked SHOP_MANAGER_TOTAL_INCENTIVE to SHOP_MANAGER_INCENTIVE PayComponent')
+  }
+
+  // Phase 5A: Seed sample PAYE brackets (DRAFT, not active — must be verified before use)
+  const payeBrackets = [
+    { name: 'Bracket 1 - Up to 600', minIncome: 0, maxIncome: 600, taxRate: 0, deductionAmount: 0 },
+    { name: 'Bracket 2 - 601 to 1,650', minIncome: 600, maxIncome: 1650, taxRate: 10, deductionAmount: 60 },
+    { name: 'Bracket 3 - 1,651 to 3,200', minIncome: 1650, maxIncome: 3200, taxRate: 15, deductionAmount: 142.50 },
+    { name: 'Bracket 4 - 3,201 to 5,250', minIncome: 3200, maxIncome: 5250, taxRate: 20, deductionAmount: 302.50 },
+    { name: 'Bracket 5 - 5,251 to 7,800', minIncome: 5250, maxIncome: 7800, taxRate: 25, deductionAmount: 565 },
+    { name: 'Bracket 6 - 7,801 to 10,900', minIncome: 7800, maxIncome: 10900, taxRate: 30, deductionAmount: 955 },
+    { name: 'Bracket 7 - 10,901 to 15,000', minIncome: 10900, maxIncome: 15000, taxRate: 35, deductionAmount: 1500 },
+    { name: 'Bracket 8 - Over 15,000', minIncome: 15000, maxIncome: null, taxRate: 40, deductionAmount: 2250 },
+  ]
+  for (const b of payeBrackets) {
+    await prisma.payeTaxBracket.create({
+      data: {
+        ...b,
+        effectiveStartDate: new Date('2024-01-01'),
+        effectiveEndDate: null,
+        isActive: false,
+        approvalStatus: 'DRAFT',
+        isSample: true,
+        createdById: adminUserId,
+      },
+    }).catch(() => {})
+  }
+  console.log(`  Created ${payeBrackets.length} sample PAYE brackets (DRAFT/sample)`)
+
+  // Phase 5A: Seed sample PensionRule (DRAFT/sample)
+  await prisma.pensionRule.create({
+    data: {
+      name: 'Sample Ethiopian Pension Rule',
+      employeeRate: 7,
+      employerRate: 11,
+      pensionBaseType: 'BASIC_SALARY',
+      minimumBase: null,
+      maximumBase: null,
+      priority: 0,
+      effectiveStartDate: new Date('2024-01-01'),
+      effectiveEndDate: null,
+      isActive: false,
+      approvalStatus: 'DRAFT',
+      isSample: true,
+      createdById: adminUserId,
+    },
+  }).catch(() => {})
+  console.log('  Created sample PensionRule (DRAFT/sample)')
 
   console.log('\nSeed complete!')
   console.log('Demo users (password: Test123!):')
