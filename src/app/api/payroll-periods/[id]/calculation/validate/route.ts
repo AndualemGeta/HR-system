@@ -9,28 +9,34 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
   try {
     const session = await getSession()
     if (!session) return unauthorized()
-    if (!(await userHasPermission(session.userId, 'payrollCalculation.review'))) return forbidden()
+    if (!(await userHasPermission(session.userId, 'payrollCalculation.validate'))) return forbidden()
     const { id } = await params
     const period = await prisma.payrollPeriod.findUnique({ where: { id } })
     if (!period) return notFound()
-    if (period.status !== 'READY_FOR_REVIEW') return badRequest(`Period is ${period.status}, expected READY_FOR_REVIEW`)
+    if (period.status !== 'REVIEW_IN_PROGRESS') return badRequest(`Period is ${period.status}, expected REVIEW_IN_PROGRESS`)
 
     const batch = await prisma.payrollPreparationBatch.findFirst({
       where: { payrollPeriodId: id, status: 'DRAFT' },
       orderBy: { version: 'desc' },
     })
-    if (!batch) return badRequest('No DRAFT batch found to review')
+    if (!batch) return badRequest('No DRAFT batch found to validate')
+    if (batch.blockerCount && batch.blockerCount > 0) return badRequest('Cannot validate batch with blockers')
 
-    const updated = await prisma.payrollPeriod.update({
-      where: { id },
-      data: { status: 'REVIEW_IN_PROGRESS' },
+    const now = new Date()
+    await prisma.payrollPreparationBatch.update({
+      where: { id: batch.id },
+      data: {
+        status: 'VALIDATED',
+        reviewedById: session.userId,
+        reviewedAt: now,
+      },
     })
 
     await createAuditLog({
-      userId: session.userId, action: 'PAYROLL_CALCULATION_REVIEW_START',
+      userId: session.userId, action: 'PAYROLL_CALCULATION_VALIDATE',
       entityType: 'PayrollPeriod', entityId: id,
-      newValue: { oldStatus: period.status, newStatus: 'REVIEW_IN_PROGRESS' },
+      newValue: { batchId: batch.id, version: batch.version, status: 'VALIDATED' },
     })
-    return success(updated)
+    return success({ batchId: batch.id, status: 'VALIDATED' })
   } catch (e) { console.error(e); return internalError() }
 }

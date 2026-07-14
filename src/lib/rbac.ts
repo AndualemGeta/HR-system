@@ -105,6 +105,7 @@ export type PermissionKey =
   | 'payrollCalculation.calculate'
   | 'payrollCalculation.recalculate'
   | 'payrollCalculation.review'
+  | 'payrollCalculation.validate'
   | 'payrollCalculation.approve'
   | 'payrollCalculation.return'
   | 'payrollCalculation.reopen'
@@ -258,6 +259,7 @@ const ALL_PERMISSIONS_MAP: Record<string, boolean> = {
   'payrollCalculation.calculate': true,
   'payrollCalculation.recalculate': true,
   'payrollCalculation.review': true,
+  'payrollCalculation.validate': true,
   'payrollCalculation.approve': true,
   'payrollCalculation.return': true,
   'payrollCalculation.reopen': true,

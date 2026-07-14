@@ -838,7 +838,10 @@ async function main() {
     { inputCode: 'RESPONSIBLE_REMARKS', inputLabel: 'Responsible Remarks', ownerDepartment: 'Management', ownerRole: 'All', inputType: 'TEXT', allowedValues: null, usedInComponent: null, displayOrder: 15, isActive: true, isRequired: false, blocksCalculation: false, blocksPayrollHandoff: false, helpText: 'Optional remarks', requiredWhenJson: null },
   ]
   for (const cfg of inputConfigs) {
-    await prisma.shopManagerIncentiveInputConfig.create({ data: cfg }).catch(() => {})
+    const existing = await prisma.shopManagerIncentiveInputConfig.findFirst({ where: { inputCode: cfg.inputCode } })
+    if (!existing) {
+      await prisma.shopManagerIncentiveInputConfig.create({ data: cfg })
+    }
   }
   console.log(`  Created ${inputConfigs.length} incentive input configs`)
 
@@ -848,13 +851,22 @@ async function main() {
   const commissionType = await prisma.payrollInputType.findUnique({ where: { code: 'SALES_COMMISSION_INPUT' } })
   const adminUser = userRecords.find(u => u.email === 'admin@leapfrog.com')
   if (adminUser && transportType) {
-    await prisma.payrollInputRequirement.create({ data: { inputTypeId: transportType.id, role: 'DSA', isRequired: true, severity: 'BLOCKER', createdById: adminUser.id, updatedById: adminUser.id } }).catch(() => {})
+    const existingReq = await prisma.payrollInputRequirement.findFirst({ where: { inputTypeId: transportType.id, role: 'DSA' } })
+    if (!existingReq) {
+      await prisma.payrollInputRequirement.create({ data: { inputTypeId: transportType.id, role: 'DSA', isRequired: true, severity: 'BLOCKER', createdById: adminUser.id, updatedById: adminUser.id } })
+    }
   }
   if (adminUser && kpiType) {
-    await prisma.payrollInputRequirement.create({ data: { inputTypeId: kpiType.id, role: 'DSA', isRequired: true, severity: 'BLOCKER', createdById: adminUser.id, updatedById: adminUser.id } }).catch(() => {})
+    const existingReq = await prisma.payrollInputRequirement.findFirst({ where: { inputTypeId: kpiType.id, role: 'DSA' } })
+    if (!existingReq) {
+      await prisma.payrollInputRequirement.create({ data: { inputTypeId: kpiType.id, role: 'DSA', isRequired: true, severity: 'BLOCKER', createdById: adminUser.id, updatedById: adminUser.id } })
+    }
   }
   if (adminUser && commissionType) {
-    await prisma.payrollInputRequirement.create({ data: { inputTypeId: commissionType.id, role: 'DSA', isRequired: true, severity: 'BLOCKER', createdById: adminUser.id, updatedById: adminUser.id } }).catch(() => {})
+    const existingReq = await prisma.payrollInputRequirement.findFirst({ where: { inputTypeId: commissionType.id, role: 'DSA' } })
+    if (!existingReq) {
+      await prisma.payrollInputRequirement.create({ data: { inputTypeId: commissionType.id, role: 'DSA', isRequired: true, severity: 'BLOCKER', createdById: adminUser.id, updatedById: adminUser.id } })
+    }
   }
   console.log('  Created 3 default payroll input requirements (DSA)')
 
@@ -923,9 +935,39 @@ async function main() {
     { name: 'Bracket 8 - Over 15,000', minIncome: 15000, maxIncome: null, taxRate: 40, deductionAmount: 2250 },
   ]
   for (const b of payeBrackets) {
-    await prisma.payeTaxBracket.create({
+    const existing = await prisma.payeTaxBracket.findFirst({
+      where: { name: b.name, isSample: true, effectiveStartDate: new Date('2024-01-01') },
+    })
+    if (!existing) {
+      await prisma.payeTaxBracket.create({
+        data: {
+          ...b,
+          effectiveStartDate: new Date('2024-01-01'),
+          effectiveEndDate: null,
+          isActive: false,
+          approvalStatus: 'DRAFT',
+          isSample: true,
+          createdById: adminUserId,
+        },
+      })
+    }
+  }
+  console.log(`  Created ${payeBrackets.length} sample PAYE brackets (DRAFT/sample)`)
+
+  // Phase 5A: Seed sample PensionRule (DRAFT/sample)
+  const existingPensionRule = await prisma.pensionRule.findFirst({
+    where: { name: 'Sample Ethiopian Pension Rule', isSample: true },
+  })
+  if (!existingPensionRule) {
+    await prisma.pensionRule.create({
       data: {
-        ...b,
+        name: 'Sample Ethiopian Pension Rule',
+        employeeRate: 7,
+        employerRate: 11,
+        pensionBaseType: 'BASIC_SALARY',
+        minimumBase: null,
+        maximumBase: null,
+        priority: 0,
         effectiveStartDate: new Date('2024-01-01'),
         effectiveEndDate: null,
         isActive: false,
@@ -933,28 +975,8 @@ async function main() {
         isSample: true,
         createdById: adminUserId,
       },
-    }).catch(() => {})
+    })
   }
-  console.log(`  Created ${payeBrackets.length} sample PAYE brackets (DRAFT/sample)`)
-
-  // Phase 5A: Seed sample PensionRule (DRAFT/sample)
-  await prisma.pensionRule.create({
-    data: {
-      name: 'Sample Ethiopian Pension Rule',
-      employeeRate: 7,
-      employerRate: 11,
-      pensionBaseType: 'BASIC_SALARY',
-      minimumBase: null,
-      maximumBase: null,
-      priority: 0,
-      effectiveStartDate: new Date('2024-01-01'),
-      effectiveEndDate: null,
-      isActive: false,
-      approvalStatus: 'DRAFT',
-      isSample: true,
-      createdById: adminUserId,
-    },
-  }).catch(() => {})
   console.log('  Created sample PensionRule (DRAFT/sample)')
 
   console.log('\nSeed complete!')

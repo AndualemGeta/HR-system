@@ -13,36 +13,41 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
     const { id } = await params
     const period = await prisma.payrollPeriod.findUnique({ where: { id } })
     if (!period) return notFound()
+    if (period.status !== 'REVIEW_IN_PROGRESS') return badRequest(`Period status is ${period.status}, expected REVIEW_IN_PROGRESS`)
 
     const batch = await prisma.payrollPreparationBatch.findFirst({
-      where: { payrollPeriodId: id, status: { not: 'CANCELLED' } },
+      where: { payrollPeriodId: id, status: 'VALIDATED' },
       orderBy: { version: 'desc' },
     })
-    if (!batch) return badRequest('No calculation batch found')
-    if (batch.status === 'APPROVED') return badRequest('Already approved')
+    if (!batch) return badRequest('No VALIDATED batch found to approve')
+    if (!batch.reviewedById || !batch.reviewedAt) return badRequest('Batch must be reviewed/validated before approval')
+
     if (batch.calculatedById === session.userId) {
+      return forbidden('Calculator cannot approve their own calculation')
+    }
+    if (batch.reviewedById === session.userId) {
       const isSuperAdmin = await prisma.userRole.findFirst({
         where: { userId: session.userId, role: { name: 'SUPER_ADMIN' } },
       })
-      if (!isSuperAdmin) return forbidden('Calculator cannot approve without SUPER_ADMIN override')
+      if (!isSuperAdmin) return forbidden('Reviewer cannot approve unless Super Admin')
     }
 
     const now = new Date()
     await prisma.$transaction([
       prisma.payrollPreparationBatch.update({
         where: { id: batch.id },
-        data: { status: 'APPROVED', approvedById: session.userId, approvedAt: now },
+        data: { status: 'APPROVED', approvedById: session.userId, approvedAt: now, lockedById: session.userId, lockedAt: now },
       }),
       prisma.payrollPeriod.update({
         where: { id },
-        data: { status: 'READY_FOR_REVIEW' },
+        data: { status: 'APPROVED' },
       }),
     ])
 
     await createAuditLog({
       userId: session.userId, action: 'PAYROLL_CALCULATION_APPROVE',
       entityType: 'PayrollPeriod', entityId: id,
-      newValue: { batchId: batch.id, version: batch.version, status: 'APPROVED' },
+      newValue: { batchId: batch.id, version: batch.version, oldStatus: 'REVIEW_IN_PROGRESS', newStatus: 'APPROVED' },
     })
     return success({ batchId: batch.id, status: 'APPROVED' })
   } catch (e) { console.error(e); return internalError() }

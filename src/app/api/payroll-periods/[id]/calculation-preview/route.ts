@@ -3,8 +3,10 @@ import { getSession } from '@/lib/session'
 import { prisma } from '@/lib/prisma'
 import { userHasPermission } from '@/lib/rbac'
 import { success, unauthorized, forbidden, notFound, badRequest, internalError } from '@/lib/api'
-import { resolveSalary } from '@/lib/payroll-calculation-engine'
-import { round2, sum } from '@/lib/payroll-rounding'
+import {
+  buildCalculationContext,
+  calculateEmployeePayroll,
+} from '@/lib/payroll-calculation-engine'
 
 export async function POST(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -17,82 +19,60 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
     if (!period) return notFound()
     if (period.status !== 'READY_FOR_CALCULATION') return badRequest(`Period status is ${period.status}, expected READY_FOR_CALCULATION`)
 
-    const selectedEmployees = await prisma.payrollPeriodEmployee.findMany({
-      where: { payrollPeriodId: id, isSelected: true, removedAt: null },
-      include: { employee: true },
-    })
+    const ctx = await buildCalculationContext(id, session.userId)
+    if (!ctx) return notFound()
+    if (ctx.employees.length === 0) return badRequest('No selected employees')
 
-    if (selectedEmployees.length === 0) return badRequest('No selected employees')
-
-    let grossEarningsTotal = 0
-    const rows: Record<string, unknown>[] = []
-
-    for (const pe of selectedEmployees) {
-      const emp = pe.employee
-      const salary = await resolveSalary(emp.id, period.periodEnd)
-      const blockers: string[] = []
-      const warnings: string[] = []
-
-      if (!salary.basicSalary || salary.basicSalary <= 0) blockers.push('MISSING_EFFECTIVE_BASIC_SALARY')
-
-      const proratedBasicSalary = salary.basicSalary || 0
-      const lines: Record<string, unknown>[] = []
-
-      if (proratedBasicSalary > 0) {
-        lines.push({
-          componentCode: 'BASIC_SALARY',
-          componentName: 'Basic Salary',
-          lineType: 'BASIC_SALARY',
-          sourceType: salary.salarySource,
-          grossAmount: proratedBasicSalary,
-          taxableAmount: proratedBasicSalary,
-        })
-      }
-
-      const acceptedInputs = await prisma.payrollInput.findMany({
-        where: { payrollPeriodId: id, employeeId: emp.id, status: 'ACCEPTED', isLocked: true },
-        include: { inputType: true },
-      })
-
-      for (const inp of acceptedInputs) {
-        const amount = inp.amount ? Number(inp.amount) : 0
-        if (amount > 0) {
-          lines.push({
-            componentCode: inp.inputType.code,
-            componentName: inp.inputType.name,
-            lineType: 'ALLOWANCE',
-            sourceType: 'PAYROLL_INPUT',
-            grossAmount: amount,
-            taxableAmount: amount,
-          })
-        }
-      }
-
-      const grossSalary = round2(sum(...lines.map(l => l.grossAmount as number)))
-      const taxableIncome = round2(sum(...lines.map(l => l.taxableAmount as number)))
-      const status = blockers.length > 0 ? 'BLOCKED' : warnings.length > 0 ? 'WARNING' : 'READY'
-      grossEarningsTotal += grossSalary
-
-      rows.push({
-        employeeId: emp.id,
-        employeeCode: emp.employeeId,
-        fullName: emp.fullName,
-        role: emp.currentRole,
-        level: emp.currentLevel,
-        basicSalary: proratedBasicSalary,
-        grossSalary,
-        taxableIncome,
-        status,
-        blockers,
-        warnings,
-        lineCount: lines.length,
-      })
+    const results: Awaited<ReturnType<typeof calculateEmployeePayroll>>[] = []
+    for (const emp of ctx.employees) {
+      const result = await calculateEmployeePayroll(ctx, emp)
+      results.push(result)
     }
+
+    let grossTotal = 0, taxTotal = 0, netTotal = 0, pensionTotal = 0, payeTotal = 0
+
+    const rows = results.map(r => {
+      grossTotal += r.grossSalary
+      taxTotal += r.taxableIncome
+      netTotal += r.netSalary
+      pensionTotal += r.employeePension
+      payeTotal += r.payeTax
+      return {
+        employeeId: r.employeeId,
+        employeeCode: ctx.employees.find(e => e.id === r.employeeId)?.employeeId || '',
+        fullName: ctx.employees.find(e => e.id === r.employeeId)?.fullName || '',
+        role: ctx.employees.find(e => e.id === r.employeeId)?.currentRole || '',
+        level: ctx.employees.find(e => e.id === r.employeeId)?.currentLevel || '',
+        basicSalary: r.proratedBasicSalary,
+        grossSalary: r.grossSalary,
+        grossTaxableEarnings: r.grossTaxableEarnings,
+        grossNonTaxableEarnings: r.grossNonTaxableEarnings,
+        taxableIncome: r.taxableIncome,
+        employeePension: r.employeePension,
+        employerPension: r.employerPension,
+        payeTax: r.payeTax,
+        preTaxDeductions: r.preTaxDeductions,
+        postTaxDeductions: r.postTaxDeductions,
+        totalDeductions: r.totalDeductions,
+        netSalary: r.netSalary,
+        employerTotalCost: r.employerTotalCost,
+        status: r.blockers.length > 0 ? 'BLOCKED' : r.warnings.length > 0 ? 'WARNING' : 'READY',
+        blockers: r.blockers,
+        warnings: r.warnings,
+        lineCount: r.lines.length,
+        lines: r.lines,
+      }
+    })
 
     return success({
       payrollPeriodId: id,
-      totalEmployees: selectedEmployees.length,
-      grossEarningsTotal: round2(grossEarningsTotal),
+      totalEmployees: results.length,
+      grossEarningsTotal: grossTotal,
+      taxableIncomeTotal: taxTotal,
+      employeePensionTotal: pensionTotal,
+      payeTaxTotal: payeTotal,
+      netSalaryTotal: netTotal,
+      blockerCount: results.filter(r => r.blockers.length > 0).length,
       rows,
     })
   } catch (e) { console.error(e); return internalError() }

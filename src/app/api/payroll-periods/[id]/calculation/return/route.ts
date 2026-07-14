@@ -17,16 +17,34 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     if (!period) return notFound()
     if (period.status !== 'REVIEW_IN_PROGRESS') return badRequest(`Period is ${period.status}, expected REVIEW_IN_PROGRESS`)
 
-    const targetStatus = body.returnToOpen ? 'OPEN_FOR_INPUT' : 'REVIEW_IN_PROGRESS'
-    const updated = await prisma.payrollPeriod.update({
-      where: { id },
-      data: { status: targetStatus },
+    const batch = await prisma.payrollPreparationBatch.findFirst({
+      where: { payrollPeriodId: id, status: 'DRAFT' },
+      orderBy: { version: 'desc' },
     })
+    if (!batch) return badRequest('No DRAFT batch found to return')
+
+    const targetStatus = body.returnToInput !== false ? 'OPEN_FOR_INPUT' : 'READY_FOR_CALCULATION'
+
+    await prisma.$transaction([
+      prisma.payrollPreparationBatch.update({
+        where: { id: batch.id },
+        data: {
+          status: 'CANCELLED',
+          calculationStatus: 'SUPERSEDED',
+          notes: `Returned: ${body.reason}`,
+        },
+      }),
+      prisma.payrollPeriod.update({
+        where: { id },
+        data: { status: targetStatus },
+      }),
+    ])
+
     await createAuditLog({
       userId: session.userId, action: 'PAYROLL_CALCULATION_RETURN',
       entityType: 'PayrollPeriod', entityId: id,
-      newValue: { oldStatus: period.status, newStatus: targetStatus, reason: body.reason },
+      newValue: { batchId: batch.id, oldStatus: period.status, newStatus: targetStatus, reason: body.reason },
     })
-    return success({ period: updated, reason: body.reason })
+    return success({ status: targetStatus, reason: body.reason })
   } catch (e) { console.error(e); return internalError() }
 }

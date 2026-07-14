@@ -4,7 +4,7 @@ import { prisma } from '@/lib/prisma'
 import { userHasPermission } from '@/lib/rbac'
 import { success, unauthorized, forbidden, notFound, internalError } from '@/lib/api'
 import { createAuditLog } from '@/lib/audit'
-import { resolveSalary } from '@/lib/payroll-calculation-engine'
+import { checkEmployeeReadiness } from '@/lib/payroll-calculation-engine'
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -21,47 +21,31 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
       include: { employee: true },
     })
 
-    const employeeIssues: Record<string, string[]> = {}
     let readyCount = 0
     let blockedCount = 0
     let warningCount = 0
+    const employeeIssues: Record<string, { employeeCode: string; blockers: string[]; warnings: string[] }> = {}
 
     for (const pe of selectedEmployees) {
       const emp = pe.employee
-      const issues: string[] = []
-
-      const salary = await resolveSalary(emp.id, period.periodEnd)
-      if (!salary.basicSalary || salary.basicSalary <= 0) issues.push('MISSING_EFFECTIVE_BASIC_SALARY')
-
-      if (!emp.employmentStatus || !['ACTIVE', 'ON_PROBATION', 'ON_LEAVE'].includes(emp.employmentStatus)) {
-        if (emp.employmentStatus === 'SUSPENDED') issues.push('INVALID_EMPLOYEE_STATUS')
-        else if (['RESIGNED', 'TERMINATED', 'EXITED'].includes(emp.employmentStatus || '')) issues.push('PARTIAL_PERIOD_EMPLOYEE')
-        else issues.push('INVALID_EMPLOYEE_STATUS')
+      const readiness = await checkEmployeeReadiness(emp.id, emp, id, period.periodEnd, period.payDate)
+      employeeIssues[emp.id] = {
+        employeeCode: emp.employeeId,
+        blockers: readiness.blockers,
+        warnings: readiness.warnings,
       }
-
-      employeeIssues[emp.id] = issues
-      if (issues.length === 0) readyCount++
-      else if (issues.some(i => ['MISSING_EFFECTIVE_BASIC_SALARY', 'INVALID_EMPLOYEE_STATUS'].includes(i))) blockedCount++
-      else warningCount++
+      if (readiness.blockers.length > 0) blockedCount++
+      else if (readiness.warnings.length > 0) warningCount++
+      else readyCount++
     }
 
+    // Global checks
     const acceptedInputCount = await prisma.payrollInput.count({
       where: { payrollPeriodId: id, status: 'ACCEPTED' },
     })
     const unlockedAcceptedCount = await prisma.payrollInput.count({
       where: { payrollPeriodId: id, status: 'ACCEPTED', isLocked: false },
     })
-    const missingRequiredInputCount = await prisma.payrollInputRequirement.count({
-      where: {
-        isActive: true,
-        AND: [
-          { inputType: { isActive: true } },
-          { NOT: { inputType: { inputs: { some: { payrollPeriodId: id, status: 'ACCEPTED', isLocked: true } } } } },
-        ],
-      },
-    })
-
-    const readyForCalculation = period.status === 'READY_FOR_CALCULATION' && readyCount > 0 && blockedCount === 0
 
     await createAuditLog({
       userId: session.userId,
@@ -80,14 +64,8 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
       warningEmployees: warningCount,
       acceptedInputCount,
       unlockedInputCount: unlockedAcceptedCount,
-      missingRequiredInputCount,
-      readyForCalculation,
-      employeeIssues: Object.fromEntries(
-        Object.entries(employeeIssues).map(([empId, issues]) => [
-          empId,
-          { employeeCode: selectedEmployees.find(pe => pe.employeeId === empId)?.employee.employeeId, issues },
-        ])
-      ),
+      readyForCalculation: period.status === 'READY_FOR_CALCULATION' && readyCount > 0 && blockedCount === 0,
+      employeeIssues,
     })
   } catch (e) { console.error(e); return internalError() }
 }

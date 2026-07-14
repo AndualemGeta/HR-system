@@ -96,7 +96,6 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     const payrollHandoffReady = period.status === 'CALCULATED' && staleCalculations === 0 && incompleteShops === 0
 
     const sums = calculationAgg._sum
-    const avg = calculationAgg._avg
     const max = calculationAgg._max
     const totalIncentive = Number(sums.totalIncentive) || 0
 

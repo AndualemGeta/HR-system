@@ -21,30 +21,40 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       where: { payrollPeriodId: id, status: { not: 'CANCELLED' } },
       orderBy: { version: 'desc' },
     })
-    if (batch?.status === 'APPROVED') {
-      const isSuperAdmin = await prisma.userRole.findFirst({
-        where: { userId: session.userId, role: { name: 'SUPER_ADMIN' } },
-      })
-      if (!isSuperAdmin && !(await userHasPermission(session.userId, 'payrollCalculation.approve'))) {
-        return forbidden('Approved calculation can only be reopened by Finance Director or Super Admin')
-      }
-      await prisma.payrollPreparationBatch.update({
-        where: { id: batch.id },
-        data: { status: 'CANCELLED' },
-      })
-    }
 
     const newVersion = (batch?.version ?? 0) + 1
-    await prisma.payrollPeriod.update({
-      where: { id },
-      data: { status: 'OPEN_FOR_INPUT' },
+    const needsFinanceAuth = batch?.status === 'APPROVED'
+
+    if (needsFinanceAuth) {
+      const canApprove = await userHasPermission(session.userId, 'payrollCalculation.approve')
+      if (!canApprove) return forbidden('Approved calculation can only be reopened by Finance Director or Super Admin')
+    }
+
+    await prisma.$transaction(async (tx) => {
+      if (batch) {
+        await tx.payrollPreparationBatch.update({
+          where: { id: batch.id },
+          data: {
+            status: 'CANCELLED',
+            calculationStatus: 'SUPERSEDED',
+            notes: `Superseded by reopen: ${body.reason}`,
+          },
+        })
+      }
+
+      const targetStatus = body.returnToInput === false ? 'READY_FOR_CALCULATION' : 'OPEN_FOR_INPUT'
+      await tx.payrollPeriod.update({
+        where: { id },
+        data: { status: targetStatus },
+      })
     })
 
     await createAuditLog({
       userId: session.userId, action: 'PAYROLL_CALCULATION_REOPEN',
       entityType: 'PayrollPeriod', entityId: id,
-      newValue: { reason: body.reason, newVersion, oldStatus: period.status, newStatus: 'OPEN_FOR_INPUT' },
+      newValue: { reason: body.reason, newVersion, oldStatus: period.status, newStatus: body.returnToInput === false ? 'READY_FOR_CALCULATION' : 'OPEN_FOR_INPUT' },
     })
-    return success({ newVersion, status: 'OPEN_FOR_INPUT', reason: body.reason })
+
+    return success({ newVersion, status: body.returnToInput === false ? 'READY_FOR_CALCULATION' : 'OPEN_FOR_INPUT', reason: body.reason })
   } catch (e) { console.error(e); return internalError() }
 }
