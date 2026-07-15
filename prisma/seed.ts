@@ -1055,6 +1055,34 @@ async function main() {
   console.log(`  Permissions: ${permTestPassed} checked, ${permTestFailed} failed`)
   if (permTestFailed > 0) throw new Error(`Seed permission validation failed: ${permTestFailed} errors`)
 
+  // ── Employee KPI Default Amounts ──────────────────────────────────────
+  console.log('\n[Employee KPI Default Amounts]')
+  const kpiComponent = await prisma.payComponent.findUnique({ where: { code: 'KPI_ALLOWANCE' } })
+  const adminKpi = adminUser
+  if (kpiComponent && adminKpi) {
+    const dsaEmp = await prisma.employee.findFirst({ where: { email: 'dsa.shiromeda@leapfrog.com' } })
+    if (dsaEmp) {
+      const existing = await prisma.employeePayComponentAssignment.findFirst({
+        where: { employeeId: dsaEmp.id, payComponentId: kpiComponent.id },
+      })
+      if (!existing) {
+        await prisma.employeePayComponentAssignment.create({
+          data: {
+            employeeId: dsaEmp.id,
+            payComponentId: kpiComponent.id,
+            defaultAmount: 2000,
+            effectiveFrom: new Date('2024-01-01'),
+            isActive: true,
+            createdById: adminKpi.id,
+          },
+        })
+        console.log('  Created KPI default amount ETB 2,000 for DSA employee')
+      } else {
+        console.log('  KPI default amount already exists for DSA employee')
+      }
+    }
+  }
+
   console.log('\nSeed complete!')
   console.log('Demo users (password: Test123!):')
   for (const u of ALL_USERS) {

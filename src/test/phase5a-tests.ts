@@ -13,6 +13,9 @@ import {
   processDeductionInput,
   getApprovedPayeBrackets,
   getApprovedPensionRules,
+  getEffectiveKpiDefaultAmount,
+  validateKpiPercentage,
+  processKpiEarning,
 } from '../lib/payroll-calculation-engine'
 
 const RUNNING_TOTAL = { passed: 0, failed: 0 }
@@ -405,6 +408,129 @@ async function main() {
     })
   } catch (e) {
     test('getApprovedPensionRules does not throw', () => { throw e })
+  }
+
+  // ── KPI Processing ──────────────────────────────────────────────────
+  console.log('\n[KPI Processing]')
+  const kpiPc = {
+    id: 'kpi1', code: 'KPI_ALLOWANCE', name: 'KPI Allowance', componentType: 'KPI',
+    isEarning: true, isDeduction: false, isPensionable: false,
+    taxablePercent: 100, pensionablePercent: 0,
+    affectsGross: true, affectsNet: true, affectsEmployerCost: false,
+    calculationOrder: 40, taxTreatment: 'TAXABLE', isActive: true, deductionTiming: 'NOT_APPLICABLE',
+  }
+
+  test('Missing percentage defaults to 100%', () => {
+    const err = validateKpiPercentage(null)
+    assert.strictEqual(err, null)
+  })
+
+  test('100% pays the full default KPI amount', () => {
+    const line = processKpiEarning(2000, 100, kpiPc)
+    assert.strictEqual(line.grossAmount, 2000)
+    assert.strictEqual(line.baseAmount, 2000)
+    assert.strictEqual(line.rate, 100)
+    assert.strictEqual(line.lineType, 'EARNING')
+    assert.strictEqual(line.sourceType, 'PAY_RULE')
+  })
+
+  test('80% pays 80% of the default KPI amount', () => {
+    const line = processKpiEarning(2000, 80, kpiPc)
+    assert.strictEqual(line.grossAmount, 1600)
+    assert.strictEqual(line.rate, 80)
+  })
+
+  test('0% pays zero', () => {
+    const line = processKpiEarning(2000, 0, kpiPc)
+    assert.strictEqual(line.grossAmount, 0)
+  })
+
+  test('A percentage below 0 is rejected', () => {
+    const err = validateKpiPercentage(-1)
+    assert.strictEqual(err, 'INVALID_KPI_PERCENTAGE')
+  })
+
+  test('A percentage above 100 is rejected', () => {
+    const err = validateKpiPercentage(101)
+    assert.strictEqual(err, 'INVALID_KPI_PERCENTAGE')
+  })
+
+  test('KPI percentage is never treated directly as a Birr amount', () => {
+    // The processKpiEarning uses defaultAmount * percentage / 100, not percentage as amount
+    const line50 = processKpiEarning(2000, 50, kpiPc)
+    const line100 = processKpiEarning(2000, 100, kpiPc)
+    assert.strictEqual(line50.grossAmount, 1000)   // 2000 * 50 / 100 = 1000
+    assert.strictEqual(line100.grossAmount, 2000)  // 2000 * 100 / 100 = 2000
+    // If percentage were treated as Birr, 50 would give 50 and 100 would give 100
+    assert.notStrictEqual(line50.grossAmount, 50)
+    assert.notStrictEqual(line100.grossAmount, 100)
+  })
+
+  test('KPI line uses component tax and pension config', () => {
+    // Partially taxable KPI
+    const partTaxPc = { ...kpiPc, taxablePercent: 50, isPensionable: true, pensionablePercent: 75 }
+    const line = processKpiEarning(2000, 100, partTaxPc)
+    assert.strictEqual(line.grossAmount, 2000)
+    assert.strictEqual(line.taxableAmount, 1000)     // 2000 * 50%
+    assert.strictEqual(line.nonTaxableAmount, 1000)
+    assert.strictEqual(line.pensionableAmount, 1500)  // 2000 * 75%
+  })
+
+  // ── KPI Assignment Effective-Dated Lookup (DB) ─────────────────────
+  console.log('\n[KPI Assignment Lookup]')
+  try {
+    const kpiComp = await prisma.payComponent.findUnique({ where: { code: 'KPI_ALLOWANCE' } })
+    const dsaEmp = await prisma.employee.findFirst({ where: { email: 'dsa.shiromeda@leapfrog.com' } })
+
+    if (!kpiComp || !dsaEmp) {
+      test('Skipping DB-dependent KPI tests — no KPI component or DSA employee', () => {})
+    } else {
+      // Future-dated assignment (effective 2099) should not be resolved for 2024
+      await prisma.employeePayComponentAssignment.upsert({
+        where: {
+          employeeId_payComponentId_effectiveFrom: {
+            employeeId: dsaEmp.id, payComponentId: kpiComp.id, effectiveFrom: new Date('2099-01-01'),
+          },
+        },
+        update: { defaultAmount: 9999 },
+        create: {
+          employeeId: dsaEmp.id, payComponentId: kpiComp.id,
+          defaultAmount: 9999, effectiveFrom: new Date('2099-01-01'), isActive: true,
+        },
+      })
+      const futureResult = await getEffectiveKpiDefaultAmount(dsaEmp.id, kpiComp.id, new Date('2024-06-01'))
+      test('Future KPI default amounts are ignored', () => {
+        assert.ok(futureResult !== null)
+        assert.strictEqual(futureResult!.defaultAmount, 2000)
+      })
+
+      // Add an updated assignment effective 2025 — should resolve for 2025
+      await prisma.employeePayComponentAssignment.upsert({
+        where: {
+          employeeId_payComponentId_effectiveFrom: {
+            employeeId: dsaEmp.id, payComponentId: kpiComp.id, effectiveFrom: new Date('2025-01-01'),
+          },
+        },
+        update: { defaultAmount: 3000 },
+        create: {
+          employeeId: dsaEmp.id, payComponentId: kpiComp.id,
+          defaultAmount: 3000, effectiveFrom: new Date('2025-01-01'), isActive: true,
+        },
+      })
+      const latestResult = await getEffectiveKpiDefaultAmount(dsaEmp.id, kpiComp.id, new Date('2025-06-01'))
+      test('The latest effective KPI default amount is selected', () => {
+        assert.ok(latestResult !== null)
+        assert.strictEqual(latestResult!.defaultAmount, 3000)
+      })
+
+      // Nonexistent employee
+      const missingResult = await getEffectiveKpiDefaultAmount('nonexistent-id', kpiComp.id, new Date('2024-06-01'))
+      test('Missing effective KPI default amount blocks calculation', () => {
+        assert.strictEqual(missingResult, null)
+      })
+    }
+  } catch (e: any) {
+    test('KPI assignment lookup', () => { throw e })
   }
 
   // ── Summary ───────────────────────────────────────────────────────

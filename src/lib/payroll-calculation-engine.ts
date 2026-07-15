@@ -330,6 +330,76 @@ export function determinePensionableIncome(
   }
 }
 
+// ─── KPI Default Amount ────────────────────────────────────────────────
+
+export interface KpiDefaultAmountResult {
+  defaultAmount: number
+  assignmentId: string
+  effectiveFrom: Date
+}
+
+export async function getEffectiveKpiDefaultAmount(
+  employeeId: string,
+  payComponentId: string,
+  periodEnd: Date,
+): Promise<KpiDefaultAmountResult | null> {
+  const assignment = await prisma.employeePayComponentAssignment.findFirst({
+    where: {
+      employeeId,
+      payComponentId,
+      isActive: true,
+      effectiveFrom: { lte: periodEnd },
+      AND: [
+        { OR: [{ effectiveTo: null }, { effectiveTo: { gte: periodEnd } }] },
+      ],
+    },
+    orderBy: { effectiveFrom: 'desc' },
+  })
+  if (!assignment) return null
+  return {
+    defaultAmount: Number(assignment.defaultAmount),
+    assignmentId: assignment.id,
+    effectiveFrom: assignment.effectiveFrom,
+  }
+}
+
+export function validateKpiPercentage(percentage: number | null): string | null {
+  if (percentage === null || percentage === undefined) return null
+  if (typeof percentage !== 'number' || isNaN(percentage)) return 'INVALID_KPI_PERCENTAGE'
+  if (percentage < 0 || percentage > 100) return 'INVALID_KPI_PERCENTAGE'
+  return null
+}
+
+export function processKpiEarning(
+  defaultAmount: number,
+  percentage: number,
+  pc: PayComponentInfo,
+): CalculationLine {
+  const earned = round2(defaultAmount * percentage / 100)
+  const taxableAmount = round2(earned * Number(pc.taxablePercent) / 100)
+  const nonTaxableAmount = round2(earned - taxableAmount)
+  const pensionableAmount = pc.isPensionable ? round2(earned * Number(pc.pensionablePercent) / 100) : 0
+  return {
+    componentId: pc.id,
+    componentCode: pc.code,
+    componentName: pc.name,
+    lineType: 'EARNING',
+    sourceType: 'PAY_RULE',
+    sourceId: null,
+    quantity: null,
+    rate: percentage,
+    baseAmount: defaultAmount,
+    grossAmount: pc.affectsGross ? earned : 0,
+    taxableAmount,
+    nonTaxableAmount,
+    pensionableAmount,
+    deductionAmount: 0,
+    employerAmount: pc.affectsEmployerCost ? earned : 0,
+    calculationOrder: pc.calculationOrder ?? 40,
+    calculationNote: pc.affectsNet ? null : 'Does not affect net salary',
+  }
+}
+
 // ─── Component Validation ──────────────────────────────────────────────
 
 export function validatePayComponent(component: PayComponentInfo): string[] {
@@ -516,6 +586,25 @@ export async function checkEmployeeReadiness(
     }
   }
 
+  // KPI readiness: validate KPI setup per spec blocker codes
+  const kpiReq = requirements.find(r => r.inputType?.code === 'KPI_ACHIEVEMENT_PERCENT')
+  if (kpiReq?.inputType?.payComponent) {
+    const kpiComp = kpiReq.inputType.payComponent
+    if (!kpiComp.isActive) {
+      blockers.push(`KPI_COMPONENT_INACTIVE:${kpiComp.code}`)
+    }
+    if (kpiComp.taxTreatment === 'UNKNOWN') {
+      blockers.push(`UNKNOWN_KPI_TAX_TREATMENT:${kpiComp.code}`)
+    }
+    const kpiAssignment = await getEffectiveKpiDefaultAmount(employeeId, kpiComp.id, periodEnd)
+    if (!kpiAssignment) {
+      blockers.push('MISSING_EFFECTIVE_KPI_DEFAULT_AMOUNT')
+    }
+    if (kpiAssignment && kpiAssignment.defaultAmount < 0) {
+      blockers.push('MISSING_EFFECTIVE_KPI_DEFAULT_AMOUNT')
+    }
+  }
+
   // Approved PAYE schedule
   const payeBrackets = await getApprovedPayeBrackets(payDate)
   if (payeBrackets.length === 0) blockers.push('MISSING_PAYE_SCHEDULE')
@@ -673,6 +762,61 @@ export async function calculateEmployeePayroll(
     } else {
       if (amount < 0) blockers.push(`NEGATIVE_INPUT_AMOUNT:${comp.code}`)
       else lines.push(processEarningInput(amount, pc, inp.id))
+    }
+  }
+
+  // ── KPI Processing ────────────────────────────────────────────────────
+  const kpiInputType = await prisma.payrollInputType.findUnique({
+    where: { code: 'KPI_ACHIEVEMENT_PERCENT' },
+    include: { payComponent: true },
+  })
+  if (kpiInputType?.payComponent) {
+    const kpiComp = kpiInputType.payComponent
+    const kpiPc: PayComponentInfo = {
+      id: kpiComp.id,
+      code: kpiComp.code,
+      name: kpiComp.name,
+      componentType: kpiComp.componentType,
+      isEarning: kpiComp.isEarning,
+      isDeduction: kpiComp.isDeduction,
+      isPensionable: kpiComp.isPensionable,
+      taxablePercent: Number(kpiComp.taxablePercent),
+      pensionablePercent: Number(kpiComp.pensionablePercent),
+      affectsGross: kpiComp.affectsGross,
+      affectsNet: kpiComp.affectsNet,
+      affectsEmployerCost: kpiComp.affectsEmployerCost,
+      calculationOrder: kpiComp.calculationOrder,
+      taxTreatment: kpiComp.taxTreatment,
+      isActive: kpiComp.isActive,
+      deductionTiming: kpiComp.deductionTiming,
+    }
+
+    let kpiBlocked = false
+    if (!kpiPc.isActive) {
+      blockers.push(`KPI_COMPONENT_INACTIVE:${kpiComp.code}`)
+      kpiBlocked = true
+    }
+    if (kpiPc.taxTreatment === 'UNKNOWN') {
+      blockers.push(`UNKNOWN_KPI_TAX_TREATMENT:${kpiComp.code}`)
+      kpiBlocked = true
+    }
+
+    if (!kpiBlocked) {
+      const kpiInput = acceptedInputs.find(inp => inp.inputType.code === 'KPI_ACHIEVEMENT_PERCENT')
+      const kpiPercentage = kpiInput?.value !== null && kpiInput?.value !== undefined
+        ? Number(kpiInput.value)
+        : 100
+      const percentageErr = validateKpiPercentage(kpiPercentage)
+      if (percentageErr) {
+        blockers.push(`${percentageErr}:${kpiComp.code}`)
+      } else {
+        const kpiAmount = await getEffectiveKpiDefaultAmount(emp.id, kpiComp.id, ctx.periodEnd)
+        if (!kpiAmount) {
+          blockers.push(`MISSING_EFFECTIVE_KPI_DEFAULT_AMOUNT:${kpiComp.code}`)
+        } else {
+          lines.push(processKpiEarning(kpiAmount.defaultAmount, kpiPercentage, kpiPc))
+        }
+      }
     }
   }
 
