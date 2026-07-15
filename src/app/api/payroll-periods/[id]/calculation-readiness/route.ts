@@ -64,7 +64,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
       warningEmployees: warningCount,
       acceptedInputCount,
       unlockedInputCount: unlockedAcceptedCount,
-      readyForCalculation: period.status === 'READY_FOR_CALCULATION' && readyCount > 0 && blockedCount === 0,
+      readyForCalculation: period.status === 'READY_FOR_CALCULATION' && selectedEmployees.length > 0 && blockedCount === 0 && unlockedAcceptedCount === 0,
       employeeIssues,
     })
   } catch (e) { console.error(e); return internalError() }

@@ -39,6 +39,15 @@ const ALL_PERMISSIONS = [
   'shopManagerIncentive.calculate',
   'shopManagerIncentive.export', 'shopManagerIncentive.sendToPayroll',
   'shopManagerIncentive.viewInputConfig', 'shopManagerIncentive.manageInputConfig',
+
+  // Phase 5A Payroll Calculation
+  'payrollCalculation.view', 'payrollCalculation.readiness', 'payrollCalculation.preview',
+  'payrollCalculation.calculate', 'payrollCalculation.recalculate',
+  'payrollCalculation.review', 'payrollCalculation.validate', 'payrollCalculation.approve',
+  'payrollCalculation.return', 'payrollCalculation.reopen', 'payrollCalculation.export',
+
+  // Phase 5A Payroll Statutory
+  'payrollStatutory.view', 'payrollStatutory.manage', 'payrollStatutory.approve',
 ] as const
 
 const ROLE_PERMISSIONS: Record<string, string[]> = {
@@ -75,6 +84,10 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
     'shopManagerIncentive.inputSales', 'shopManagerIncentive.inputDistribution', 'shopManagerIncentive.inputEbu', 'shopManagerIncentive.inputAll',
     'shopManagerIncentive.calculate',
     'shopManagerIncentive.export', 'shopManagerIncentive.sendToPayroll',
+    // Phase 5A
+    'payrollCalculation.view', 'payrollCalculation.readiness', 'payrollCalculation.preview',
+    'payrollCalculation.review', 'payrollCalculation.export',
+    'payrollStatutory.view',
   ],
   HR_OFFICER: [
     'employee.view', 'employee.create', 'employee.update',
@@ -122,6 +135,11 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
     'shopManagerIncentive.calculate',
     'shopManagerIncentive.export', 'shopManagerIncentive.sendToPayroll',
     'shopManagerIncentive.viewInputConfig',
+    // Phase 5A
+    'payrollCalculation.view', 'payrollCalculation.readiness', 'payrollCalculation.preview',
+    'payrollCalculation.review', 'payrollCalculation.validate', 'payrollCalculation.approve',
+    'payrollCalculation.return', 'payrollCalculation.reopen', 'payrollCalculation.export',
+    'payrollStatutory.view', 'payrollStatutory.manage', 'payrollStatutory.approve',
   ],
   FINANCE_PAYROLL: [
     'employee.view', 'salary.view', 'reports.view',
@@ -142,6 +160,12 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
     'shop.view', 'shop.viewCriteriaHistory',
     'shopManagerIncentive.view',
     'shopManagerIncentive.export', 'shopManagerIncentive.sendToPayroll',
+    // Phase 5A
+    'payrollCalculation.view', 'payrollCalculation.readiness', 'payrollCalculation.preview',
+    'payrollCalculation.calculate', 'payrollCalculation.recalculate',
+    'payrollCalculation.review', 'payrollCalculation.validate',
+    'payrollCalculation.export',
+    'payrollStatutory.view',
   ],
   TREASURY_MANAGER: [
     'employee.view', 'salary.view',
@@ -216,6 +240,9 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
     'shop.view', 'shop.viewCriteriaHistory',
     'shopManagerIncentive.view', 'shopManagerIncentive.export',
     'shopManagerIncentive.viewInputConfig',
+    // Phase 5A
+    'payrollCalculation.view', 'payrollCalculation.export',
+    'payrollStatutory.view',
   ],
 }
 
@@ -980,6 +1007,53 @@ async function main() {
     })
   }
   console.log('  Created sample PensionRule (DRAFT/sample)')
+
+  // ── Seed Permission Validation Test ──────────────────────────────────
+  console.log('\n[Seed Permission Validation]')
+  let permTestPassed = 0
+  let permTestFailed = 0
+
+  // Check all Phase 5A permissions are registered
+  const phase5aPerms = [
+    'payrollCalculation.view', 'payrollCalculation.readiness', 'payrollCalculation.preview',
+    'payrollCalculation.calculate', 'payrollCalculation.recalculate',
+    'payrollCalculation.review', 'payrollCalculation.validate', 'payrollCalculation.approve',
+    'payrollCalculation.return', 'payrollCalculation.reopen', 'payrollCalculation.export',
+    'payrollStatutory.view', 'payrollStatutory.manage', 'payrollStatutory.approve',
+  ]
+  // Verify all phase5a perms are in ALL_PERMISSIONS
+  for (const p of phase5aPerms) {
+    if (!ALL_PERMISSIONS.includes(p as any)) {
+      console.log(`  FAIL: Permission "${p}" not found in ALL_PERMISSIONS`)
+      permTestFailed++
+    } else {
+      permTestPassed++
+    }
+  }
+
+  // Verify role assignments
+  const roleChecks: { role: string; perms: string[] }[] = [
+    { role: 'SUPER_ADMIN', perms: phase5aPerms },
+    { role: 'FINANCE_PAYROLL', perms: ['payrollCalculation.view', 'payrollCalculation.calculate', 'payrollCalculation.review', 'payrollCalculation.validate', 'payrollStatutory.view'] },
+    { role: 'FINANCE_DIRECTOR', perms: ['payrollCalculation.approve', 'payrollCalculation.reopen', 'payrollStatutory.approve', 'payrollStatutory.manage'] },
+    { role: 'HR_ADMIN', perms: ['payrollCalculation.view', 'payrollCalculation.readiness', 'payrollStatutory.view'] },
+    { role: 'AUDITOR', perms: ['payrollCalculation.view', 'payrollStatutory.view'] },
+    { role: 'EMPLOYEE', perms: [] },
+  ]
+  for (const rc of roleChecks) {
+    const rolePerms = ROLE_PERMISSIONS[rc.role]
+    if (!rolePerms) { console.log(`  FAIL: Role "${rc.role}" not in ROLE_PERMISSIONS`); permTestFailed++; continue }
+    for (const p of rc.perms) {
+      if (!rolePerms.includes(p)) {
+        console.log(`  FAIL: Role "${rc.role}" missing permission "${p}"`)
+        permTestFailed++
+      } else {
+        permTestPassed++
+      }
+    }
+  }
+  console.log(`  Permissions: ${permTestPassed} checked, ${permTestFailed} failed`)
+  if (permTestFailed > 0) throw new Error(`Seed permission validation failed: ${permTestFailed} errors`)
 
   console.log('\nSeed complete!')
   console.log('Demo users (password: Test123!):')

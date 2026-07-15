@@ -311,6 +311,12 @@ enum TaxTreatment {
   UNKNOWN
 }
 
+enum DeductionTiming {
+  NOT_APPLICABLE
+  PRE_TAX
+  POST_TAX
+}
+
 enum PayRuleStatus {
   DRAFT
   ACTIVE
@@ -1716,6 +1722,7 @@ model PayComponent {
   affectsNet        Boolean          @default(true)
   affectsEmployerCost Boolean         @default(false)
   calculationOrder  Int              @default(0)
+  deductionTiming   DeductionTiming  @default(NOT_APPLICABLE)
   createdById       String?
   updatedById       String?
   createdAt         DateTime         @default(now())

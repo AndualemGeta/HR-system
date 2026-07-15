@@ -88,12 +88,7 @@ export async function validatePayeSchedule(scheduleCode: string): Promise<Schedu
       })
     }
 
-    // Boundary conflict: current max === next min
-    if (currentMax === nextMin) {
-      errors.push({
-        message: `Boundary conflict: "${current.name}" max (${currentMax}) equals "${next.name}" min (${nextMin}). Use minIncome inclusive / maxIncome exclusive convention`,
-      })
-    }
+    // currentMax === nextMin is valid adjacency (min inclusive, max exclusive)
   }
 
   return { valid: errors.length === 0, errors }

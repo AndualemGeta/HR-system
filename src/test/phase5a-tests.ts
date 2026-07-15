@@ -208,8 +208,9 @@ async function main() {
     const rules = [
       { id: 'r1', employeeRate: 7, employerRate: 11, pensionBaseType: 'BASIC_SALARY', minimumBase: null, maximumBase: null, priority: 0, applicableRole: 'DSP', applicableEmploymentType: null },
     ]
-    const { rule } = selectPensionRule(rules, { role: 'DSA', employmentType: null })
-    assert.strictEqual(rule?.id, 'r1')
+    const { rule, blockers } = selectPensionRule(rules, { role: 'DSA', employmentType: null })
+    assert.strictEqual(rule, null)
+    assert.ok(blockers.includes('MISSING_PENSION_RULE'))
   })
   test('Empty rules returns blocker', () => {
     const { rule, blockers } = selectPensionRule([], { role: 'DSA', employmentType: null })
@@ -234,7 +235,8 @@ async function main() {
       isEarning: true, isDeduction: false, isPensionable: false,
       taxablePercent: 100, pensionablePercent: 0,
       affectsGross: true, affectsNet: true, affectsEmployerCost: false,
-      calculationOrder: 30, taxTreatment: 'TAXABLE', isActive: true,
+      calculationOrder: 30, taxTreatment: 'TAXABLE',       deductionTiming: 'NOT_APPLICABLE',
+      isActive: true,
     })
     assert.strictEqual(blockers.length, 0)
   })
@@ -244,7 +246,8 @@ async function main() {
       isEarning: true, isDeduction: false, isPensionable: false,
       taxablePercent: 100, pensionablePercent: 0,
       affectsGross: true, affectsNet: true, affectsEmployerCost: false,
-      calculationOrder: 30, taxTreatment: 'TAXABLE', isActive: false,
+      calculationOrder: 30, taxTreatment: 'TAXABLE', deductionTiming: 'NOT_APPLICABLE',
+      isActive: false,
     })
     assert.ok(blockers.includes('PAY_COMPONENT_INACTIVE'))
   })
@@ -254,7 +257,8 @@ async function main() {
       isEarning: true, isDeduction: false, isPensionable: false,
       taxablePercent: 100, pensionablePercent: 0,
       affectsGross: true, affectsNet: true, affectsEmployerCost: false,
-      calculationOrder: 30, taxTreatment: 'UNKNOWN', isActive: true,
+      calculationOrder: 30, taxTreatment: 'UNKNOWN', deductionTiming: 'NOT_APPLICABLE',
+      isActive: true,
     })
     assert.ok(blockers.includes('UNKNOWN_TAX_TREATMENT'))
   })
@@ -264,15 +268,16 @@ async function main() {
       isEarning: true, isDeduction: false, isPensionable: false,
       taxablePercent: -5, pensionablePercent: 0,
       affectsGross: true, affectsNet: true, affectsEmployerCost: false,
-      calculationOrder: 30, taxTreatment: 'TAXABLE', isActive: true,
+      calculationOrder: 30, taxTreatment: 'TAXABLE', deductionTiming: 'NOT_APPLICABLE',
+      isActive: true,
     })
     assert.ok(blockers.some(b => b.includes('taxablePercent')))
   })
 
   // ── Earning and Deduction Processing ──────────────────────────────
   console.log('\n[Earning and Deduction Processing]')
-  const comp = { id: 'c1', code: 'KPI_ALLOWANCE', name: 'KPI Allowance', taxablePercent: 100, isPensionable: true, pensionablePercent: 50, affectsGross: true, affectsNet: true, affectsEmployerCost: false, calculationOrder: 30 }
-  const dedComp = { id: 'c2', code: 'LOAN_DEDUCTION', name: 'Loan Deduction', taxablePercent: 0, pensionablePercent: 0, affectsGross: false, affectsNet: true, affectsEmployerCost: false, calculationOrder: 60 }
+  const comp = { id: 'c1', code: 'KPI_ALLOWANCE', name: 'KPI Allowance', componentType: 'ALLOWANCE', taxablePercent: 100, isPensionable: true, pensionablePercent: 50, affectsGross: true, affectsNet: true, affectsEmployerCost: false, calculationOrder: 30 }
+  const dedComp = { id: 'c2', code: 'LOAN_DEDUCTION', name: 'Loan Deduction', componentType: 'DEDUCTION', taxablePercent: 0, pensionablePercent: 0, affectsGross: false, affectsNet: true, affectsEmployerCost: false, calculationOrder: 60, deductionTiming: 'POST_TAX' }
 
   test('Earning input increases gross and taxable', () => {
     const line = processEarningInput(2000, comp, 'src1')

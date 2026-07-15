@@ -45,6 +45,21 @@ export interface PayComponentInfo {
   calculationOrder: number
   taxTreatment: string
   isActive: boolean
+  deductionTiming: string
+}
+
+export function mapComponentTypeToLineType(componentType: string): string {
+  switch (componentType) {
+    case 'KPI': return 'EARNING'
+    case 'TRANSPORT': return 'ALLOWANCE'
+    case 'COMMISSION': return 'COMMISSION'
+    case 'BONUS': return 'BONUS'
+    case 'OVERTIME': return 'OVERTIME'
+    case 'ADJUSTMENT': return 'ADJUSTMENT'
+    case 'DEDUCTION': return 'DEDUCTION'
+    case 'STATUTORY': return 'STATUTORY'
+    default: return 'ALLOWANCE'
+  }
 }
 
 export interface PayeBracket {
@@ -216,12 +231,22 @@ export function selectPensionRule(
     return { rule: null, blockers }
   }
 
-  const scored = rules.map(r => {
+  // Pre-filter: discard rules where applicableRole/employmentType is set and doesn't match
+  const applicable = rules.filter(r => {
+    if (r.applicableRole !== null && r.applicableRole !== (employee.role ?? null)) return false
+    if (r.applicableEmploymentType !== null && r.applicableEmploymentType !== (employee.employmentType ?? null)) return false
+    return true
+  })
+
+  if (applicable.length === 0) {
+    blockers.push('MISSING_PENSION_RULE')
+    return { rule: null, blockers }
+  }
+
+  const scored = applicable.map(r => {
     let score = 0
-    if (r.applicableRole && r.applicableRole === (employee.role ?? null)) score += 10
-    else if (r.applicableRole) score -= 10
-    if (r.applicableEmploymentType && r.applicableEmploymentType === (employee.employmentType ?? null)) score += 5
-    else if (r.applicableEmploymentType) score -= 5
+    if (r.applicableRole) score += 10
+    if (r.applicableEmploymentType) score += 5
     return { rule: r, score }
   })
 
@@ -317,6 +342,9 @@ export function validatePayComponent(component: PayComponentInfo): string[] {
   if (component.pensionablePercent < 0 || component.pensionablePercent > 100) {
     blockers.push(`Invalid pensionablePercent ${component.pensionablePercent}`)
   }
+  if (component.isDeduction && component.deductionTiming === 'NOT_APPLICABLE') {
+    blockers.push(`DEDUCTION_WITHOUT_TIMING:${component.code}`)
+  }
   return blockers
 }
 
@@ -324,7 +352,7 @@ export function validatePayComponent(component: PayComponentInfo): string[] {
 
 export function processEarningInput(
   amount: number,
-  component: { id: string; code: string; name: string; taxablePercent: number; isPensionable: boolean; pensionablePercent: number; affectsGross: boolean; affectsNet: boolean; affectsEmployerCost: boolean; calculationOrder: number },
+  component: { id: string; code: string; name: string; componentType: string; taxablePercent: number; isPensionable: boolean; pensionablePercent: number; affectsGross: boolean; affectsNet: boolean; affectsEmployerCost: boolean; calculationOrder: number },
   sourceId: string,
 ): CalculationLine {
   const taxableAmount = round2(amount * Number(component.taxablePercent) / 100)
@@ -336,20 +364,20 @@ export function processEarningInput(
     componentId: component.id,
     componentCode: component.code,
     componentName: component.name,
-    lineType: amount > 0 ? 'ALLOWANCE' : 'ADJUSTMENT',
+    lineType: mapComponentTypeToLineType(component.componentType),
     sourceType: 'PAYROLL_INPUT',
     sourceId,
     quantity: null,
     rate: null,
     baseAmount: amount,
-    grossAmount: amount,
+    grossAmount: component.affectsGross ? amount : 0,
     taxableAmount,
     nonTaxableAmount,
     pensionableAmount,
     deductionAmount: 0,
     employerAmount: component.affectsEmployerCost ? amount : 0,
     calculationOrder: component.calculationOrder ?? 30,
-    calculationNote: null,
+    calculationNote: component.affectsNet ? null : 'Does not affect net salary',
   }
 }
 
@@ -357,14 +385,14 @@ export function processEarningInput(
 
 export function processDeductionInput(
   amount: number,
-  component: { id: string; code: string; name: string; taxablePercent: number; pensionablePercent: number; affectsGross: boolean; affectsNet: boolean; affectsEmployerCost: boolean; calculationOrder: number },
+  component: { id: string; code: string; name: string; componentType: string; taxablePercent: number; pensionablePercent: number; affectsGross: boolean; affectsNet: boolean; affectsEmployerCost: boolean; calculationOrder: number; deductionTiming: string },
   sourceId: string,
 ): CalculationLine {
   return {
     componentId: component.id,
     componentCode: component.code,
     componentName: component.name,
-    lineType: 'DEDUCTION',
+    lineType: mapComponentTypeToLineType(component.componentType),
     sourceType: 'PAYROLL_INPUT',
     sourceId,
     quantity: null,
@@ -377,7 +405,7 @@ export function processDeductionInput(
     deductionAmount: amount,
     employerAmount: 0,
     calculationOrder: component.calculationOrder ?? 60,
-    calculationNote: null,
+    calculationNote: component.deductionTiming === 'PRE_TAX' ? 'Pre-tax deduction' : component.deductionTiming === 'POST_TAX' ? 'Post-tax deduction' : null,
   }
 }
 
@@ -482,6 +510,7 @@ export async function checkEmployeeReadiness(
         calculationOrder: comp.calculationOrder,
         taxTreatment: comp.taxTreatment,
         isActive: comp.isActive,
+        deductionTiming: comp.deductionTiming,
       })
       blockers.push(...compBlockers.map(b => `${b}:${comp.code}`))
     }
@@ -629,6 +658,7 @@ export async function calculateEmployeePayroll(
       calculationOrder: comp.calculationOrder,
       taxTreatment: comp.taxTreatment,
       isActive: comp.isActive,
+      deductionTiming: comp.deductionTiming,
     }
 
     const compBlockers = validatePayComponent(pc)
@@ -646,12 +676,12 @@ export async function calculateEmployeePayroll(
     }
   }
 
-  // Totals
+  // Totals — distinguish pre-tax vs post-tax deductions via deductionTiming stored in calculationNote
   const grossSalary = round2(lines.reduce((s, l) => s + l.grossAmount, 0))
   const grossTaxable = round2(lines.reduce((s, l) => s + l.taxableAmount, 0))
   const grossNonTaxable = round2(lines.reduce((s, l) => s + l.nonTaxableAmount, 0))
-  const preTaxDeductions = round2(lines.filter(l => l.lineType === 'DEDUCTION').reduce((s, l) => s + l.deductionAmount, 0))
-  const postTaxDeductions = 0
+  const preTaxDeductions = round2(lines.filter(l => l.calculationNote === 'Pre-tax deduction').reduce((s, l) => s + l.deductionAmount, 0))
+  const postTaxDeductions = round2(lines.filter(l => l.calculationNote === 'Post-tax deduction').reduce((s, l) => s + l.deductionAmount, 0))
 
   // PAYE
   const payeBrackets = await getApprovedPayeBrackets(ctx.payDate)
