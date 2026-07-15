@@ -199,7 +199,7 @@ export default function EditEmployeePage() {
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
             <Field label="First Name *" value={form.firstName} onChange={v => set('firstName', v)} required />
             <Field label="Middle Name" value={form.middleName} onChange={v => set('middleName', v)} />
-            <Field label="Last Name *" value={form.lastName} onChange={v => set('lastName', v)} required />
+            <Field label="Last Name" value={form.lastName} onChange={v => set('lastName', v)} />
             <Select label="Gender" value={form.gender} onChange={v => set('gender', v)} options={[
               { value: 'NOT_SPECIFIED', label: 'Not Specified' }, { value: 'MALE', label: 'Male' }, { value: 'FEMALE', label: 'Female' },
             ]} />

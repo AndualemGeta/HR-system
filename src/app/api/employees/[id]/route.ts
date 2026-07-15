@@ -9,7 +9,7 @@ import { createAuditLog } from '@/lib/audit'
 const updateSchema = z.object({
   firstName: z.string().min(1).optional(),
   middleName: z.string().optional(),
-  lastName: z.string().min(1).optional(),
+  lastName: z.string().optional(),
   email: z.string().email().optional().or(z.literal('')),
   phoneNumber: z.string().optional(),
   gender: z.string().optional(),
@@ -134,7 +134,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
             updateData[field] = 'DRAFT'
           } else if (field === 'currentRole') {
             updateData[field] = 'OTHER'
-          } else if (field === 'email' || field === 'phoneNumber') {
+          } else if (field === 'email' || field === 'phoneNumber' || field === 'lastName') {
             updateData[field] = null
           } else {
             updateData[field] = val

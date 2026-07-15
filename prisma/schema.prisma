@@ -735,7 +735,7 @@ model Employee {
   employeeId                   String                            @unique(map: "emp_employee_id_unique")
   firstName                    String
   middleName                   String?
-  lastName                     String
+  lastName                     String?
   fullName                     String
   gender                       String                            @default("NOT_SPECIFIED")
   dateOfBirth                  DateTime?

@@ -8,7 +8,7 @@ const SYSTEM_FIELDS = [
   { key: 'employeeId', label: 'Employee ID', required: false, category: 'core' },
   { key: 'firstName', label: 'First Name', required: true, category: 'core' },
   { key: 'middleName', label: 'Middle Name', required: false, category: 'core' },
-  { key: 'lastName', label: 'Last Name', required: true, category: 'core' },
+  { key: 'lastName', label: 'Last Name', required: false, category: 'core' },
   { key: 'fullName', label: 'Full Name', required: false, category: 'core' },
   { key: 'gender', label: 'Gender', required: true, category: 'core' },
   { key: 'phoneNumber', label: 'Phone Number', required: false, category: 'core' },

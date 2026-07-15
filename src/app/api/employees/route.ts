@@ -24,7 +24,7 @@ const onboardingItemDefs = [
 const createSchema = z.object({
   firstName: z.string().min(1, 'First name is required'),
   middleName: z.string().optional(),
-  lastName: z.string().min(1, 'Last name is required'),
+  lastName: z.string().optional(),
   email: z.string().email().optional().or(z.literal('')),
   phoneNumber: z.string().optional(),
   gender: z.string().optional(),
@@ -189,7 +189,7 @@ export const POST = withAuth(async (req: NextRequest, ctx) => {
       employeeId,
       firstName: data.firstName,
       middleName: data.middleName || null,
-      lastName: data.lastName,
+      lastName: data.lastName || null,
       fullName,
       email: data.email || null,
       phoneNumber: data.phoneNumber || null,
