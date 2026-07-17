@@ -766,6 +766,10 @@ export async function calculateEmployeePayroll(
   }
 
   // ── KPI Processing ────────────────────────────────────────────────────
+  // Three cases:
+  //   1. Active KPI assignment exists → calculate KPI (default % = 100)
+  //   2. No assignment + no KPI input → do nothing, do NOT block
+  //   3. KPI input entered + no assignment → block MISSING_EFFECTIVE_KPI_DEFAULT_AMOUNT
   const kpiInputType = await prisma.payrollInputType.findUnique({
     where: { code: 'KPI_ACHIEVEMENT_PERCENT' },
     include: { payComponent: true },
@@ -791,33 +795,31 @@ export async function calculateEmployeePayroll(
       deductionTiming: kpiComp.deductionTiming,
     }
 
-    let kpiBlocked = false
-    if (!kpiPc.isActive) {
-      blockers.push(`KPI_COMPONENT_INACTIVE:${kpiComp.code}`)
-      kpiBlocked = true
-    }
-    if (kpiPc.taxTreatment === 'UNKNOWN') {
-      blockers.push(`UNKNOWN_KPI_TAX_TREATMENT:${kpiComp.code}`)
-      kpiBlocked = true
-    }
+    const kpiInput = acceptedInputs.find(inp => inp.inputType.code === 'KPI_ACHIEVEMENT_PERCENT')
+    const kpiAssignment = await getEffectiveKpiDefaultAmount(emp.id, kpiComp.id, ctx.periodEnd)
 
-    if (!kpiBlocked) {
-      const kpiInput = acceptedInputs.find(inp => inp.inputType.code === 'KPI_ACHIEVEMENT_PERCENT')
-      const kpiPercentage = kpiInput?.value !== null && kpiInput?.value !== undefined
-        ? Number(kpiInput.value)
-        : 100
-      const percentageErr = validateKpiPercentage(kpiPercentage)
-      if (percentageErr) {
-        blockers.push(`${percentageErr}:${kpiComp.code}`)
+    if (kpiInput && !kpiAssignment) {
+      // Case 3: input entered but no effective assignment
+      blockers.push(`MISSING_EFFECTIVE_KPI_DEFAULT_AMOUNT:${kpiComp.code}`)
+    } else if (kpiAssignment) {
+      // Case 1: assignment exists — calculate (default % = 100)
+      if (!kpiPc.isActive) {
+        blockers.push(`KPI_COMPONENT_INACTIVE:${kpiComp.code}`)
+      } else if (kpiPc.taxTreatment === 'UNKNOWN') {
+        blockers.push(`UNKNOWN_KPI_TAX_TREATMENT:${kpiComp.code}`)
       } else {
-        const kpiAmount = await getEffectiveKpiDefaultAmount(emp.id, kpiComp.id, ctx.periodEnd)
-        if (!kpiAmount) {
-          blockers.push(`MISSING_EFFECTIVE_KPI_DEFAULT_AMOUNT:${kpiComp.code}`)
+        const kpiPercentage = kpiInput?.value !== null && kpiInput?.value !== undefined
+          ? Number(kpiInput.value)
+          : 100
+        const percentageErr = validateKpiPercentage(kpiPercentage)
+        if (percentageErr) {
+          blockers.push(`${percentageErr}:${kpiComp.code}`)
         } else {
-          lines.push(processKpiEarning(kpiAmount.defaultAmount, kpiPercentage, kpiPc))
+          lines.push(processKpiEarning(kpiAssignment.defaultAmount, kpiPercentage, kpiPc))
         }
       }
     }
+    // Case 2: no assignment + no input → do nothing
   }
 
   // Totals — distinguish pre-tax vs post-tax deductions via deductionTiming stored in calculationNote
