@@ -377,6 +377,12 @@ enum PayrollInputTypeValueType {
   TEXT
 }
 
+enum PayrollInputCalculationMode {
+  DIRECT_AMOUNT
+  METRIC_ONLY
+  RULE_DERIVED
+}
+
 enum PayrollInputSource {
   MANUAL
   IMPORT
@@ -1869,6 +1875,7 @@ model PayrollInputType {
   defaultAmount    Decimal?                  @db.Decimal(12, 2)
   requiresApproval Boolean                   @default(false)
   isActive         Boolean                   @default(true)
+  calculationMode  PayrollInputCalculationMode @default(DIRECT_AMOUNT)
   payComponentId   String?
   createdById      String?
   updatedById      String?
@@ -2082,7 +2089,7 @@ model EmployeePayComponentAssignment {
   createdAt       DateTime    @default(now())
   updatedAt       DateTime    @updatedAt
   employee        Employee    @relation(fields: [employeeId], references: [id], onDelete: Cascade)
-  payComponent    PayComponent @relation(fields: [payComponentId], references: [id])
+  payComponent    PayComponent @relation(fields: [payComponentId], references: [id], onDelete: Cascade)
 
   @@unique([employeeId, payComponentId, effectiveFrom])
   @@index([employeeId, payComponentId, effectiveTo])

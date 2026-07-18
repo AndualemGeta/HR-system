@@ -718,13 +718,15 @@ export async function calculateEmployeePayroll(
     })
   }
 
-  // Accepted inputs with component mapping
+  // Accepted inputs with component mapping — skip METRIC_ONLY inputs (processed by dedicated logic)
   const acceptedInputs = await prisma.payrollInput.findMany({
     where: { payrollPeriodId: ctx.payrollPeriodId, employeeId: emp.id, status: 'ACCEPTED', isLocked: true },
     include: { inputType: { include: { payComponent: true } } },
   })
 
   for (const inp of acceptedInputs) {
+    if (inp.inputType.calculationMode === 'METRIC_ONLY') continue
+
     const comp = inp.inputType.payComponent
     if (!comp) {
       blockers.push(`UNMAPPED_PAYROLL_INPUT_TYPE:${inp.inputType.code}`)

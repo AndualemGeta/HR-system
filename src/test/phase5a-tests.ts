@@ -20,21 +20,12 @@ import {
 
 const RUNNING_TOTAL = { passed: 0, failed: 0 }
 
-function test(name: string, fn: () => Promise<void> | void) {
+async function test(name: string, fn: () => (Promise<void> | void)): Promise<void> {
   try {
     const r = fn()
-    if (r instanceof Promise) {
-      r.then(() => {
-        RUNNING_TOTAL.passed++
-        console.log(`  ✓ ${name}`)
-      }).catch(e => {
-        RUNNING_TOTAL.failed++
-        console.log(`  ✗ ${name}: ${e.message}`)
-      })
-    } else {
-      RUNNING_TOTAL.passed++
-      console.log(`  ✓ ${name}`)
-    }
+    if (r instanceof Promise) await r
+    RUNNING_TOTAL.passed++
+    console.log(`  ✓ ${name}`)
   } catch (e: any) {
     RUNNING_TOTAL.failed++
     console.log(`  ✗ ${name}: ${e.message}`)
@@ -46,16 +37,16 @@ async function main() {
 
   // ── Salary Source Mapping ──────────────────────────────────────────
   console.log('[Salary Source Mapping]')
-  test('EmployeeSalary → EMPLOYEE_SALARY', () => {
+  await test('EmployeeSalary → EMPLOYEE_SALARY', () => {
     assert.strictEqual(mapSalarySourceToCalculationSource('EmployeeSalary'), 'EMPLOYEE_SALARY')
   })
-  test('Employee.basicSalary → SYSTEM', () => {
+  await test('Employee.basicSalary → SYSTEM', () => {
     assert.strictEqual(mapSalarySourceToCalculationSource('Employee.basicSalary'), 'SYSTEM')
   })
-  test('MISSING → SYSTEM', () => {
+  await test('MISSING → SYSTEM', () => {
     assert.strictEqual(mapSalarySourceToCalculationSource('MISSING'), 'SYSTEM')
   })
-  test('Unknown source → SYSTEM', () => {
+  await test('Unknown source → SYSTEM', () => {
     assert.strictEqual(mapSalarySourceToCalculationSource('anything'), 'SYSTEM')
   })
 
@@ -64,10 +55,10 @@ async function main() {
   const employees = await prisma.employee.findMany({ take: 2 })
   if (employees.length > 0) {
     const salary = await resolveSalary(employees[0].id, new Date('2025-12-31'))
-    test('Latest effective EmployeeSalary is selected (returns numeric)', () => {
+    await test('Latest effective EmployeeSalary is selected (returns numeric)', () => {
       assert.ok(typeof salary.basicSalary === 'number')
     })
-    test('Missing salary returns 0', async () => {
+    await test('Missing salary returns 0', async () => {
       const result = await resolveSalary('nonexistent-id', new Date())
       assert.strictEqual(result.basicSalary, 0)
       assert.strictEqual(result.salarySource, 'MISSING')
@@ -76,20 +67,20 @@ async function main() {
 
   // ── Proration ─────────────────────────────────────────────────────
   console.log('\n[Proration]')
-  test('NONE returns full salary', () => {
+  await test('NONE returns full salary', () => {
     const { prorated } = calcProratedSalary(10000, 'NONE', 30, 15)
     assert.strictEqual(prorated, 10000)
   })
-  test('CALENDAR_DAYS calculates correctly', () => {
+  await test('CALENDAR_DAYS calculates correctly', () => {
     const { prorated } = calcProratedSalary(10000, 'CALENDAR_DAYS', 30, 15)
     assert.strictEqual(prorated, 5000)
   })
-  test('CALENDAR_DAYS zero period returns warning', () => {
+  await test('CALENDAR_DAYS zero period returns warning', () => {
     const { prorated, warning } = calcProratedSalary(10000, 'CALENDAR_DAYS', 0, 15)
     assert.ok(warning)
     assert.strictEqual(prorated, 10000)
   })
-  test('MANUAL returns 0 with warning', () => {
+  await test('MANUAL returns 0 with warning', () => {
     const { prorated, warning } = calcProratedSalary(10000, 'MANUAL', 30, 15)
     assert.strictEqual(prorated, 0)
     assert.ok(warning)
@@ -97,7 +88,7 @@ async function main() {
 
   // ── Pension ───────────────────────────────────────────────────────
   console.log('\n[Pension]')
-  test('calcPension employee and employer rates', () => {
+  await test('calcPension employee and employer rates', () => {
     const { employeePension, employerPension } = calcPension(10000, {
       id: '1', employeeRate: 7, employerRate: 11, pensionBaseType: 'BASIC_SALARY',
       minimumBase: null, maximumBase: null, priority: 0,
@@ -106,7 +97,7 @@ async function main() {
     assert.strictEqual(employeePension, 700)
     assert.strictEqual(employerPension, 1100)
   })
-  test('calcPension respects min base', () => {
+  await test('calcPension respects min base', () => {
     const { employeePension } = calcPension(500, {
       id: '1', employeeRate: 7, employerRate: 11, pensionBaseType: 'BASIC_SALARY',
       minimumBase: 1000, maximumBase: null, priority: 0,
@@ -114,7 +105,7 @@ async function main() {
     })
     assert.strictEqual(employeePension, 70) // 7% of 1000
   })
-  test('calcPension respects max base', () => {
+  await test('calcPension respects max base', () => {
     const { employeePension } = calcPension(50000, {
       id: '1', employeeRate: 7, employerRate: 11, pensionBaseType: 'BASIC_SALARY',
       minimumBase: null, maximumBase: 20000, priority: 0,
@@ -136,33 +127,33 @@ async function main() {
     { id: 'b8', minIncome: 15000, maxIncome: null, taxRate: 40, deductionAmount: 2250 },
   ]
 
-  test('Empty brackets returns null with MISSING_PAYE_SCHEDULE', () => {
+  await test('Empty brackets returns null with MISSING_PAYE_SCHEDULE', () => {
     const { bracket, blockers } = selectPayeBracket(10000, [])
     assert.strictEqual(bracket, null)
     assert.ok(blockers.includes('MISSING_PAYE_SCHEDULE'))
   })
-  test('Correct bracket selected for income 0', () => {
+  await test('Correct bracket selected for income 0', () => {
     const { bracket } = selectPayeBracket(0, brackets)
     assert.strictEqual(bracket?.id, 'b1')
   })
-  test('Correct bracket selected for income 599', () => {
+  await test('Correct bracket selected for income 599', () => {
     const { bracket } = selectPayeBracket(599, brackets)
     assert.strictEqual(bracket?.id, 'b1')
   })
-  test('Correct bracket selected for income 600', () => {
+  await test('Correct bracket selected for income 600', () => {
     const { bracket } = selectPayeBracket(600, brackets)
     assert.strictEqual(bracket?.id, 'b2')
   })
-  test('Correct bracket selected for income 15000', () => {
+  await test('Correct bracket selected for income 15000', () => {
     const { bracket } = selectPayeBracket(15000, brackets)
     assert.strictEqual(bracket?.id, 'b8')
   })
-  test('No boundary matches two brackets', () => {
+  await test('No boundary matches two brackets', () => {
     const { bracket } = selectPayeBracket(600, brackets)
     assert.strictEqual(bracket?.id, 'b2') // 600 >= 600 is b2, not b1 (b1 max is 600, exclusive)
     assert.strictEqual(bracket?.minIncome, 600)
   })
-  test('Schedule gap detected', () => {
+  await test('Schedule gap detected', () => {
     const gapBrackets = [
       { id: 'b1', minIncome: 0, maxIncome: 1000, taxRate: 10, deductionAmount: 0 },
       { id: 'b2', minIncome: 2000, maxIncome: null, taxRate: 20, deductionAmount: 100 },
@@ -171,7 +162,7 @@ async function main() {
     assert.strictEqual(bracket, null)
     assert.ok(blockers.some(b => b.includes('gap')))
   })
-  test('Multiple matching brackets returns null', () => {
+  await test('Multiple matching brackets returns null', () => {
     const overlapping = [
       { id: 'b1', minIncome: 0, maxIncome: 5000, taxRate: 10, deductionAmount: 0 },
       { id: 'b2', minIncome: 0, maxIncome: 5000, taxRate: 15, deductionAmount: 50 },
@@ -180,14 +171,14 @@ async function main() {
     assert.strictEqual(bracket, null)
     assert.ok(blockers.some(b => b.includes('Multiple')))
   })
-  test('PAYE formula correct', () => {
+  await test('PAYE formula correct', () => {
     // Bracket: 5250-7800, rate 25%, deduction 565
     // taxableIncome = 7000
     // PAYE = 7000 * 25/100 - 565 = 1750 - 565 = 1185
     const paye = calcPaye(7000, { id: 'b5', minIncome: 5250, maxIncome: 7800, taxRate: 25, deductionAmount: 565 })
     assert.strictEqual(paye, 1185)
   })
-  test('PAYE cannot be negative', () => {
+  await test('PAYE cannot be negative', () => {
     const paye = calcPaye(100, { id: 'b1', minIncome: 0, maxIncome: 600, taxRate: 0, deductionAmount: 50 })
     assert.strictEqual(paye, 0) // 0% rate, Math.max(0, -50) = 0
   })
@@ -199,15 +190,15 @@ async function main() {
     { id: 'r2', employeeRate: 8, employerRate: 12, pensionBaseType: 'BASIC_SALARY', minimumBase: null, maximumBase: null, priority: 10, applicableRole: 'DSA', applicableEmploymentType: null },
   ]
 
-  test('Generic rule applies when no specific rule exists', () => {
+  await test('Generic rule applies when no specific rule exists', () => {
     const { rule } = selectPensionRule(pensionRules, { role: 'NONEXISTENT', employmentType: null })
     assert.strictEqual(rule?.id, 'r1')
   })
-  test('Role-specific rule overrides generic', () => {
+  await test('Role-specific rule overrides generic', () => {
     const { rule } = selectPensionRule(pensionRules, { role: 'DSA', employmentType: null })
     assert.strictEqual(rule?.id, 'r2')
   })
-  test('Unrelated role rule is not selected', () => {
+  await test('Unrelated role rule is not selected', () => {
     const rules = [
       { id: 'r1', employeeRate: 7, employerRate: 11, pensionBaseType: 'BASIC_SALARY', minimumBase: null, maximumBase: null, priority: 0, applicableRole: 'DSP', applicableEmploymentType: null },
     ]
@@ -215,12 +206,12 @@ async function main() {
     assert.strictEqual(rule, null)
     assert.ok(blockers.includes('MISSING_PENSION_RULE'))
   })
-  test('Empty rules returns blocker', () => {
+  await test('Empty rules returns blocker', () => {
     const { rule, blockers } = selectPensionRule([], { role: 'DSA', employmentType: null })
     assert.strictEqual(rule, null)
     assert.ok(blockers.includes('MISSING_PENSION_RULE'))
   })
-  test('Equal priority ambiguity returns blocker', () => {
+  await test('Equal priority ambiguity returns blocker', () => {
     const ambiguous = [
       { id: 'r1', employeeRate: 7, employerRate: 11, pensionBaseType: 'BASIC_SALARY', minimumBase: null, maximumBase: null, priority: 10, applicableRole: 'DSA', applicableEmploymentType: null },
       { id: 'r2', employeeRate: 8, employerRate: 12, pensionBaseType: 'BASIC_SALARY', minimumBase: null, maximumBase: null, priority: 10, applicableRole: 'DSA', applicableEmploymentType: null },
@@ -232,7 +223,7 @@ async function main() {
 
   // ── Component Validation ──────────────────────────────────────────
   console.log('\n[Component Validation]')
-  test('Active component with KNOWN treatment passes', () => {
+  await test('Active component with KNOWN treatment passes', () => {
     const blockers = validatePayComponent({
       id: '1', code: 'TEST', name: 'Test', componentType: 'ALLOWANCE',
       isEarning: true, isDeduction: false, isPensionable: false,
@@ -243,7 +234,7 @@ async function main() {
     })
     assert.strictEqual(blockers.length, 0)
   })
-  test('Inactive component returns PAY_COMPONENT_INACTIVE', () => {
+  await test('Inactive component returns PAY_COMPONENT_INACTIVE', () => {
     const blockers = validatePayComponent({
       id: '1', code: 'TEST', name: 'Test', componentType: 'ALLOWANCE',
       isEarning: true, isDeduction: false, isPensionable: false,
@@ -254,7 +245,7 @@ async function main() {
     })
     assert.ok(blockers.includes('PAY_COMPONENT_INACTIVE'))
   })
-  test('Unknown tax treatment returns UNKNOWN_TAX_TREATMENT', () => {
+  await test('Unknown tax treatment returns UNKNOWN_TAX_TREATMENT', () => {
     const blockers = validatePayComponent({
       id: '1', code: 'TEST', name: 'Test', componentType: 'ALLOWANCE',
       isEarning: true, isDeduction: false, isPensionable: false,
@@ -265,7 +256,7 @@ async function main() {
     })
     assert.ok(blockers.includes('UNKNOWN_TAX_TREATMENT'))
   })
-  test('Invalid taxablePercent returns blocker', () => {
+  await test('Invalid taxablePercent returns blocker', () => {
     const blockers = validatePayComponent({
       id: '1', code: 'TEST', name: 'Test', componentType: 'ALLOWANCE',
       isEarning: true, isDeduction: false, isPensionable: false,
@@ -282,38 +273,38 @@ async function main() {
   const comp = { id: 'c1', code: 'KPI_ALLOWANCE', name: 'KPI Allowance', componentType: 'ALLOWANCE', taxablePercent: 100, isPensionable: true, pensionablePercent: 50, affectsGross: true, affectsNet: true, affectsEmployerCost: false, calculationOrder: 30 }
   const dedComp = { id: 'c2', code: 'LOAN_DEDUCTION', name: 'Loan Deduction', componentType: 'DEDUCTION', taxablePercent: 0, pensionablePercent: 0, affectsGross: false, affectsNet: true, affectsEmployerCost: false, calculationOrder: 60, deductionTiming: 'POST_TAX' }
 
-  test('Earning input increases gross and taxable', () => {
+  await test('Earning input increases gross and taxable', () => {
     const line = processEarningInput(2000, comp, 'src1')
     assert.strictEqual(line.grossAmount, 2000)
     assert.strictEqual(line.taxableAmount, 2000)
     assert.strictEqual(line.deductionAmount, 0)
     assert.strictEqual(line.lineType, 'ALLOWANCE')
   })
-  test('Non-taxable transport is not added to taxable income', () => {
+  await test('Non-taxable transport is not added to taxable income', () => {
     const ntComp = { ...comp, taxablePercent: 0 }
     const line = processEarningInput(1500, ntComp, 'src2')
     assert.strictEqual(line.grossAmount, 1500)
     assert.strictEqual(line.taxableAmount, 0)
     assert.strictEqual(line.nonTaxableAmount, 1500)
   })
-  test('Partial taxable percent', () => {
+  await test('Partial taxable percent', () => {
     const ptComp = { ...comp, taxablePercent: 50 }
     const line = processEarningInput(2000, ptComp, 'src3')
     assert.strictEqual(line.grossAmount, 2000)
     assert.strictEqual(line.taxableAmount, 1000)
     assert.strictEqual(line.nonTaxableAmount, 1000)
   })
-  test('Non-pensionable component does not increase pension base', () => {
+  await test('Non-pensionable component does not increase pension base', () => {
     const npComp = { ...comp, isPensionable: false }
     const line = processEarningInput(2000, npComp, 'src4')
     assert.strictEqual(line.pensionableAmount, 0)
   })
-  test('Pensionable component uses pensionablePercent', () => {
+  await test('Pensionable component uses pensionablePercent', () => {
     const pComp = { ...comp, isPensionable: true, pensionablePercent: 75 }
     const line = processEarningInput(2000, pComp, 'src5')
     assert.strictEqual(line.pensionableAmount, 1500)
   })
-  test('Deduction input reduces net salary and does not increase gross', () => {
+  await test('Deduction input reduces net salary and does not increase gross', () => {
     const line = processDeductionInput(500, dedComp, 'src6')
     assert.strictEqual(line.grossAmount, 0)
     assert.strictEqual(line.deductionAmount, 500)
@@ -322,7 +313,7 @@ async function main() {
 
   // ── Requirement Applicability ─────────────────────────────────────
   console.log('\n[Requirement Applicability]')
-  test('Requirement with role=DSA does not match non-DSA employee', () => {
+  await test('Requirement with role=DSA does not match non-DSA employee', () => {
     const req = { employeeCategory: null, role: 'DSA' as any, departmentId: null, regionId: null, areaId: null, shopId: null, employmentType: null }
     const emp = { employeeCategory: null, currentRole: 'DSP' as any, currentDepartmentId: null, currentRegionId: null, currentAreaId: null, currentShopId: null, employmentType: null }
     const matches = (
@@ -336,7 +327,7 @@ async function main() {
     )
     assert.strictEqual(matches, false)
   })
-  test('Requirement with role=DSA matches DSA employee', () => {
+  await test('Requirement with role=DSA matches DSA employee', () => {
     const req = { employeeCategory: null, role: 'DSA' as any, departmentId: null, regionId: null, areaId: null, shopId: null, employmentType: null }
     const emp = { employeeCategory: null, currentRole: 'DSA' as any, currentDepartmentId: null, currentRegionId: null, currentAreaId: null, currentShopId: null, employmentType: null }
     const matches = (
@@ -350,7 +341,7 @@ async function main() {
     )
     assert.strictEqual(matches, true)
   })
-  test('Requirement with role=DSA + dept=X matches only DSA employees in dept X', () => {
+  await test('Requirement with role=DSA + dept=X matches only DSA employees in dept X', () => {
     const req = { employeeCategory: null, role: 'DSA' as any, departmentId: 'deptX', regionId: null, areaId: null, shopId: null, employmentType: null }
     const empDsaWrongDept = { employeeCategory: null, currentRole: 'DSA' as any, currentDepartmentId: 'deptY', currentRegionId: null, currentAreaId: null, currentShopId: null, employmentType: null }
     const empDsaRightDept = { employeeCategory: null, currentRole: 'DSA' as any, currentDepartmentId: 'deptX', currentRegionId: null, currentAreaId: null, currentShopId: null, employmentType: null }
@@ -375,7 +366,7 @@ async function main() {
     assert.strictEqual(matchesWrong, false)
     assert.strictEqual(matchesRight, true)
   })
-  test('Requirement with no filters matches any employee', () => {
+  await test('Requirement with no filters matches any employee', () => {
     const req = { employeeCategory: null, role: null, departmentId: null, regionId: null, areaId: null, shopId: null, employmentType: null }
     const emp = { employeeCategory: null, currentRole: 'DSA' as any, currentDepartmentId: 'deptX', currentRegionId: null, currentAreaId: null, currentShopId: null, employmentType: null }
     const matches = (
@@ -394,20 +385,20 @@ async function main() {
   console.log('\n[Statutory Data]')
   try {
     const brackets = await getApprovedPayeBrackets(new Date('2024-06-01'))
-    test('getApprovedPayeBrackets returns array (may be empty for samples)', () => {
+    await test('getApprovedPayeBrackets returns array (may be empty for samples)', () => {
       assert.ok(Array.isArray(brackets))
     })
   } catch (e) {
-    test('getApprovedPayeBrackets does not throw', () => { throw e })
+    await test('getApprovedPayeBrackets does not throw', () => { throw e })
   }
 
   try {
     const rules = await getApprovedPensionRules(new Date('2024-06-01'))
-    test('getApprovedPensionRules returns array (may be empty for samples)', () => {
+    await test('getApprovedPensionRules returns array (may be empty for samples)', () => {
       assert.ok(Array.isArray(rules))
     })
   } catch (e) {
-    test('getApprovedPensionRules does not throw', () => { throw e })
+    await test('getApprovedPensionRules does not throw', () => { throw e })
   }
 
   // ── KPI Processing ──────────────────────────────────────────────────
@@ -420,12 +411,12 @@ async function main() {
     calculationOrder: 40, taxTreatment: 'TAXABLE', isActive: true, deductionTiming: 'NOT_APPLICABLE',
   }
 
-  test('Missing percentage defaults to 100%', () => {
+  await test('Missing percentage defaults to 100%', () => {
     const err = validateKpiPercentage(null)
     assert.strictEqual(err, null)
   })
 
-  test('100% pays the full default KPI amount', () => {
+  await test('100% pays the full default KPI amount', () => {
     const line = processKpiEarning(2000, 100, kpiPc)
     assert.strictEqual(line.grossAmount, 2000)
     assert.strictEqual(line.baseAmount, 2000)
@@ -434,28 +425,28 @@ async function main() {
     assert.strictEqual(line.sourceType, 'PAY_RULE')
   })
 
-  test('80% pays 80% of the default KPI amount', () => {
+  await test('80% pays 80% of the default KPI amount', () => {
     const line = processKpiEarning(2000, 80, kpiPc)
     assert.strictEqual(line.grossAmount, 1600)
     assert.strictEqual(line.rate, 80)
   })
 
-  test('0% pays zero', () => {
+  await test('0% pays zero', () => {
     const line = processKpiEarning(2000, 0, kpiPc)
     assert.strictEqual(line.grossAmount, 0)
   })
 
-  test('A percentage below 0 is rejected', () => {
+  await test('A percentage below 0 is rejected', () => {
     const err = validateKpiPercentage(-1)
     assert.strictEqual(err, 'INVALID_KPI_PERCENTAGE')
   })
 
-  test('A percentage above 100 is rejected', () => {
+  await test('A percentage above 100 is rejected', () => {
     const err = validateKpiPercentage(101)
     assert.strictEqual(err, 'INVALID_KPI_PERCENTAGE')
   })
 
-  test('KPI percentage is never treated directly as a Birr amount', () => {
+  await test('KPI percentage is never treated directly as a Birr amount', () => {
     // The processKpiEarning uses defaultAmount * percentage / 100, not percentage as amount
     const line50 = processKpiEarning(2000, 50, kpiPc)
     const line100 = processKpiEarning(2000, 100, kpiPc)
@@ -466,7 +457,7 @@ async function main() {
     assert.notStrictEqual(line100.grossAmount, 100)
   })
 
-  test('KPI line uses component tax and pension config', () => {
+  await test('KPI line uses component tax and pension config', () => {
     // Partially taxable KPI
     const partTaxPc = { ...kpiPc, taxablePercent: 50, isPensionable: true, pensionablePercent: 75 }
     const line = processKpiEarning(2000, 100, partTaxPc)
@@ -483,7 +474,7 @@ async function main() {
     const dsaEmp = await prisma.employee.findFirst({ where: { email: 'dsa.shiromeda@leapfrog.com' } })
 
     if (!kpiComp || !dsaEmp) {
-      test('Skipping DB-dependent KPI tests — no KPI component or DSA employee', () => {})
+      await test('Skipping DB-dependent KPI tests — no KPI component or DSA employee', () => {})
     } else {
       // Future-dated assignment (effective 2099) should not be resolved for 2024
       await prisma.employeePayComponentAssignment.upsert({
@@ -499,7 +490,7 @@ async function main() {
         },
       })
       const futureResult = await getEffectiveKpiDefaultAmount(dsaEmp.id, kpiComp.id, new Date('2024-06-01'))
-      test('Future KPI default amounts are ignored', () => {
+      await test('Future KPI default amounts are ignored', () => {
         assert.ok(futureResult !== null)
         assert.strictEqual(futureResult!.defaultAmount, 2000)
       })
@@ -518,19 +509,19 @@ async function main() {
         },
       })
       const latestResult = await getEffectiveKpiDefaultAmount(dsaEmp.id, kpiComp.id, new Date('2025-06-01'))
-      test('The latest effective KPI default amount is selected', () => {
+      await test('The latest effective KPI default amount is selected', () => {
         assert.ok(latestResult !== null)
         assert.strictEqual(latestResult!.defaultAmount, 3000)
       })
 
       // Nonexistent employee
       const missingResult = await getEffectiveKpiDefaultAmount('nonexistent-id', kpiComp.id, new Date('2024-06-01'))
-      test('Missing effective KPI default amount blocks calculation', () => {
+      await test('Missing effective KPI default amount blocks calculation', () => {
         assert.strictEqual(missingResult, null)
       })
     }
   } catch (e: any) {
-    test('KPI assignment lookup', () => { throw e })
+    await test('KPI assignment lookup', () => { throw e })
   }
 
   // ── Summary ───────────────────────────────────────────────────────

@@ -305,6 +305,7 @@ async function main() {
   await prisma.payeTaxBracket.deleteMany()
   await prisma.pensionRule.deleteMany()
   await prisma.payrollRule.deleteMany()
+  await prisma.employeePayComponentAssignment.deleteMany()
   await prisma.payRule.deleteMany()
   await prisma.payComponent.deleteMany()
   await prisma.shopCriteriaStatusHistory.deleteMany()
@@ -807,14 +808,14 @@ async function main() {
 
   // Create default payroll input types
   const defaultInputTypes = [
-    { code: 'TRANSPORT_ALLOWANCE_INPUT', name: 'Transport Allowance', category: 'TRANSPORT' as const, valueType: 'AMOUNT' as const, defaultAmount: 0 },
-    { code: 'KPI_ACHIEVEMENT_PERCENT', name: 'KPI Achievement %', category: 'KPI' as const, valueType: 'PERCENTAGE' as const },
-    { code: 'SALES_COMMISSION_INPUT', name: 'Sales Commission', category: 'COMMISSION' as const, valueType: 'AMOUNT' as const, defaultAmount: 0 },
-    { code: 'OVERTIME_HOURS', name: 'Overtime Hours', category: 'OVERTIME' as const, valueType: 'NUMBER' as const, defaultAmount: 0 },
-    { code: 'MANUAL_ALLOWANCE', name: 'Manual Allowance', category: 'ALLOWANCE' as const, valueType: 'AMOUNT' as const, defaultAmount: 0, requiresApproval: true },
-    { code: 'MANUAL_DEDUCTION', name: 'Manual Deduction', category: 'DEDUCTION' as const, valueType: 'AMOUNT' as const, defaultAmount: 0, requiresApproval: true },
-    { code: 'ABSENCE_DAYS', name: 'Absence Days', category: 'ADJUSTMENT' as const, valueType: 'NUMBER' as const, defaultAmount: 0 },
-    { code: 'OTHER_ADJUSTMENT', name: 'Other Adjustment', category: 'ADJUSTMENT' as const, valueType: 'AMOUNT' as const, defaultAmount: 0, requiresApproval: true },
+    { code: 'TRANSPORT_ALLOWANCE_INPUT', name: 'Transport Allowance', category: 'TRANSPORT' as const, valueType: 'AMOUNT' as const, defaultAmount: 0, calculationMode: 'DIRECT_AMOUNT' as const },
+    { code: 'KPI_ACHIEVEMENT_PERCENT', name: 'KPI Achievement %', category: 'KPI' as const, valueType: 'PERCENTAGE' as const, calculationMode: 'METRIC_ONLY' as const },
+    { code: 'SALES_COMMISSION_INPUT', name: 'Sales Commission', category: 'COMMISSION' as const, valueType: 'AMOUNT' as const, defaultAmount: 0, calculationMode: 'DIRECT_AMOUNT' as const },
+    { code: 'OVERTIME_HOURS', name: 'Overtime Hours', category: 'OVERTIME' as const, valueType: 'NUMBER' as const, defaultAmount: 0, calculationMode: 'METRIC_ONLY' as const },
+    { code: 'MANUAL_ALLOWANCE', name: 'Manual Allowance', category: 'ALLOWANCE' as const, valueType: 'AMOUNT' as const, defaultAmount: 0, requiresApproval: true, calculationMode: 'DIRECT_AMOUNT' as const },
+    { code: 'MANUAL_DEDUCTION', name: 'Manual Deduction', category: 'DEDUCTION' as const, valueType: 'AMOUNT' as const, defaultAmount: 0, requiresApproval: true, calculationMode: 'DIRECT_AMOUNT' as const },
+    { code: 'ABSENCE_DAYS', name: 'Absence Days', category: 'ADJUSTMENT' as const, valueType: 'NUMBER' as const, defaultAmount: 0, calculationMode: 'METRIC_ONLY' as const },
+    { code: 'OTHER_ADJUSTMENT', name: 'Other Adjustment', category: 'ADJUSTMENT' as const, valueType: 'AMOUNT' as const, defaultAmount: 0, requiresApproval: true, calculationMode: 'DIRECT_AMOUNT' as const },
   ]
   for (const it of defaultInputTypes) {
     await prisma.payrollInputType.create({
@@ -884,9 +885,10 @@ async function main() {
     }
   }
   if (adminUser && kpiType) {
-    const existingReq = await prisma.payrollInputRequirement.findFirst({ where: { inputTypeId: kpiType.id, role: 'DSA' } })
-    if (!existingReq) {
-      await prisma.payrollInputRequirement.create({ data: { inputTypeId: kpiType.id, role: 'DSA', isRequired: true, severity: 'BLOCKER', createdById: adminUser.id, updatedById: adminUser.id } })
+    const existingKpiReq = await prisma.payrollInputRequirement.findFirst({ where: { inputTypeId: kpiType.id, role: 'DSA' } })
+    if (existingKpiReq) {
+      await prisma.payrollInputRequirement.update({ where: { id: existingKpiReq.id }, data: { isRequired: false, severity: 'WARNING', updatedById: adminUser.id } })
+      console.log('  Deactivated mandatory KPI requirement for DSA (KPI eligibility from assignment)')
     }
   }
   if (adminUser && commissionType) {
