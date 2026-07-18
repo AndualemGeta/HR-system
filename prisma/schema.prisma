@@ -2089,7 +2089,7 @@ model EmployeePayComponentAssignment {
   createdAt       DateTime    @default(now())
   updatedAt       DateTime    @updatedAt
   employee        Employee    @relation(fields: [employeeId], references: [id], onDelete: Cascade)
-  payComponent    PayComponent @relation(fields: [payComponentId], references: [id], onDelete: Cascade)
+  payComponent    PayComponent @relation(fields: [payComponentId], references: [id], onDelete: Restrict)
 
   @@unique([employeeId, payComponentId, effectiveFrom])
   @@index([employeeId, payComponentId, effectiveTo])

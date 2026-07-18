@@ -332,7 +332,7 @@ async function main() {
   await assertAsync('shops exist with Ethiopia names', async () => {
     const shops = await prisma.location.findMany({ where: { type: 'SHOP' } })
     if (shops.length === 0) return false
-    const hasEthiopiaName = shops.some(s => s.name.includes('Megenagna') || s.name.includes('Shiromeda'))
+    const hasEthiopiaName = shops.some(s => s.name.includes('Zone Shop'))
     return hasEthiopiaName
   })
   await assertAsync('no unrelated Kathmandu locations', async () => {

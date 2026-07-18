@@ -16,7 +16,7 @@ import {
   getEffectiveKpiDefaultAmount,
   validateKpiPercentage,
   processKpiEarning,
-} from '../lib/payroll-calculation-engine'
+} from '../lib/payroll'
 
 const RUNNING_TOTAL = { passed: 0, failed: 0 }
 
