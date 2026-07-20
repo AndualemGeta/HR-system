@@ -1,9 +1,10 @@
 import { prisma } from '@/lib/prisma'
 import { round2 } from '@/lib/payroll-rounding'
+import { calcPercent } from '@/lib/money'
 import type { PayeBracket } from './types'
 
 export function calcPaye(taxableIncome: number, bracket: PayeBracket): number {
-  return Math.max(0, round2(taxableIncome * bracket.taxRate / 100 - bracket.deductionAmount))
+  return Math.max(0, round2(calcPercent(taxableIncome, bracket.taxRate).minus(bracket.deductionAmount)))
 }
 
 export function selectPayeBracket(taxableIncome: number, brackets: PayeBracket[]): { bracket: PayeBracket | null; blockers: string[] } {

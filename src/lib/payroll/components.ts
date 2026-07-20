@@ -1,5 +1,5 @@
 import { prisma } from '@/lib/prisma'
-import { roundMoney } from '@/lib/money'
+import { roundMoney, calcPercent, money } from '@/lib/money'
 import type { PayComponentInfo, KpiDefaultAmountResult, CalculationLine } from './types'
 
 export function mapComponentTypeToLineType(componentType: string): string {
@@ -37,10 +37,10 @@ export function processEarningInput(
   component: { id: string; code: string; name: string; componentType: string; taxablePercent: number; isPensionable: boolean; pensionablePercent: number; affectsGross: boolean; affectsNet: boolean; affectsEmployerCost: boolean; calculationOrder: number },
   sourceId: string,
 ): CalculationLine {
-  const taxableAmount = roundMoney(amount * Number(component.taxablePercent) / 100)
-  const nonTaxableAmount = roundMoney(amount - taxableAmount)
+  const taxableAmount = roundMoney(calcPercent(amount, component.taxablePercent))
+  const nonTaxableAmount = roundMoney(money(amount).minus(taxableAmount))
   const pensionableAmount = component.isPensionable
-    ? roundMoney(amount * Number(component.pensionablePercent) / 100)
+    ? roundMoney(calcPercent(amount, component.pensionablePercent))
     : 0
   return {
     componentId: component.id,
@@ -126,10 +126,10 @@ export function processKpiEarning(
   percentage: number,
   pc: PayComponentInfo,
 ): CalculationLine {
-  const earned = roundMoney(defaultAmount * percentage / 100)
-  const taxableAmount = roundMoney(earned * Number(pc.taxablePercent) / 100)
-  const nonTaxableAmount = roundMoney(earned - taxableAmount)
-  const pensionableAmount = pc.isPensionable ? roundMoney(earned * Number(pc.pensionablePercent) / 100) : 0
+  const earned = roundMoney(calcPercent(defaultAmount, percentage))
+  const taxableAmount = roundMoney(calcPercent(earned, pc.taxablePercent))
+  const nonTaxableAmount = roundMoney(money(earned).minus(taxableAmount))
+  const pensionableAmount = pc.isPensionable ? roundMoney(calcPercent(earned, pc.pensionablePercent)) : 0
   return {
     componentId: pc.id,
     componentCode: pc.code,
@@ -169,7 +169,7 @@ export async function processRuleDerivedInput(
 
   const value = input.value ? Number(input.value) : (input.amount ? Number(input.amount) : 0)
   const rate = Number(rule.percentageRate || rule.baseAmount || 0)
-  const computedAmount = roundMoney(value * rate)
+  const computedAmount = roundMoney(money(value).mul(rate))
   return {
     line: {
       componentId: component.id,

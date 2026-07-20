@@ -1,5 +1,6 @@
 import { prisma } from '@/lib/prisma'
 import { round2 } from '@/lib/payroll-rounding'
+import { calcPercent } from '@/lib/money'
 import type { PensionRuleInfo, CalculationLine } from './types'
 
 export function calcPension(pensionableBase: number, rule: PensionRuleInfo): { employeePension: number; employerPension: number } {
@@ -7,8 +8,8 @@ export function calcPension(pensionableBase: number, rule: PensionRuleInfo): { e
   if (rule.minimumBase !== null && base < rule.minimumBase) base = rule.minimumBase
   if (rule.maximumBase !== null && base > rule.maximumBase) base = rule.maximumBase
   return {
-    employeePension: round2(base * rule.employeeRate / 100),
-    employerPension: round2(base * rule.employerRate / 100),
+    employeePension: round2(calcPercent(base, rule.employeeRate)),
+    employerPension: round2(calcPercent(base, rule.employerRate)),
   }
 }
 

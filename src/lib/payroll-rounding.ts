@@ -1,6 +1,7 @@
+import Decimal from 'decimal.js'
 import { roundMoney, sumMoney } from './money'
 
-export function round2(value: number): number {
+export function round2(value: number | Decimal): number {
   return roundMoney(value)
 }
 
