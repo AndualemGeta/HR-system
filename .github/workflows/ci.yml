@@ -6,6 +6,13 @@ on:
   pull_request:
     branches: [main]
 
+env:
+  DATABASE_URL: postgresql://leapfrog:leapfrog123@localhost:5433/leapfrog_hr
+  AUTH_SECRET: ci-test-auth-secret-not-used-in-production
+  NODE_ENV: test
+  TEST_PORT: 3001
+  TEST_BASE_URL: http://127.0.0.1:3001
+
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -38,8 +45,6 @@ jobs:
 
       - name: Generate Prisma client
         run: npm run prisma:generate
-        env:
-          DATABASE_URL: postgresql://leapfrog:leapfrog123@localhost:5433/leapfrog_hr
 
       - name: TypeScript type check
         run: npm run typecheck
@@ -49,36 +54,30 @@ jobs:
 
       - name: Build
         run: npm run build
-        env:
-          DATABASE_URL: postgresql://leapfrog:leapfrog123@localhost:5433/leapfrog_hr
 
-      - name: Push database schema
-        run: npx prisma db push --force-reset
-        env:
-          DATABASE_URL: postgresql://leapfrog:leapfrog123@localhost:5433/leapfrog_hr
+      - name: Deploy database migrations
+        run: npx prisma migrate deploy
 
-      - name: Seed database
-        run: npm run prisma:seed
-        env:
-          DATABASE_URL: postgresql://leapfrog:leapfrog123@localhost:5433/leapfrog_hr
+      - name: Seed CI database
+        run: npm run prisma:seed:ci
 
       - name: Run all tests
         run: npm test
-        env:
-          DATABASE_URL: postgresql://leapfrog:leapfrog123@localhost:5433/leapfrog_hr
 
       - name: Run Phase 4C.2 E2E tests
         run: npm run test:phase4c2-e2e
-        env:
-          DATABASE_URL: postgresql://leapfrog:leapfrog123@localhost:5433/leapfrog_hr
 
       - name: Run Phase 5A tests
         run: npm run test:phase5a
-        env:
-          DATABASE_URL: postgresql://leapfrog:leapfrog123@localhost:5433/leapfrog_hr
 
       - name: Run Phase 5A E2E tests
         run: npm run test:phase5a-e2e
-        env:
-          DATABASE_URL: postgresql://leapfrog:leapfrog123@localhost:5433/leapfrog_hr
-          TEST_PORT: 3001
+
+      - name: Run KPI assignment tests
+        run: npm run test:kpi-assignment
+
+      - name: Install Playwright
+        run: npx playwright install --with-deps chromium
+
+      - name: Run UI E2E tests
+        run: npm run test:ui-e2e

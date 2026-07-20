@@ -26,7 +26,9 @@
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:seed": "tsx prisma/seed.ts",
-    "seed:phase5a-demo": "tsx prisma/seed-phase5a-demo.ts",
+    "prisma:seed:ci": "tsx prisma/seed-ci.ts",
+    "prisma:seed:master": "tsx prisma/seed.ts",
+    "prisma:seed:demo": "tsx prisma/seed-phase5a-demo.ts",
     "seed:all": "tsx prisma/seed.ts && tsx prisma/seed-phase5a-demo.ts"
   },
   "prisma": {
