@@ -471,7 +471,7 @@ async function main() {
   console.log('\n[KPI Assignment Lookup]')
   try {
     const kpiComp = await prisma.payComponent.findUnique({ where: { code: 'KPI_ALLOWANCE' } })
-    const dsaEmp = await prisma.employee.findFirst({ where: { email: 'dsa.shiromeda@leapfrog.com' } })
+    const dsaEmp = await prisma.employee.findFirst({ where: { currentRole: 'DSA', employmentStatus: 'ACTIVE' } })
 
     if (!kpiComp || !dsaEmp) {
       await test('Skipping DB-dependent KPI tests — no KPI component or DSA employee', () => {})

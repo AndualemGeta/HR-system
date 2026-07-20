@@ -1062,7 +1062,7 @@ async function main() {
   const kpiComponent = await prisma.payComponent.findUnique({ where: { code: 'KPI_ALLOWANCE' } })
   const adminKpi = adminUser
   if (kpiComponent && adminKpi) {
-    const dsaEmp = await prisma.employee.findFirst({ where: { email: 'dsa.shiromeda@leapfrog.com' } })
+    const dsaEmp = await prisma.employee.findFirst({ where: { currentRole: 'DSA', employmentStatus: 'ACTIVE' } })
     if (dsaEmp) {
       const existing = await prisma.employeePayComponentAssignment.findFirst({
         where: { employeeId: dsaEmp.id, payComponentId: kpiComponent.id },

@@ -105,12 +105,6 @@ export interface KpiDefaultAmountResult {
   effectiveFrom: Date
 }
 
-export interface ReadinessCheckResult {
-  employeeId: string
-  blockers: string[]
-  warnings: string[]
-}
-
 export interface CalculationContext {
   payrollPeriodId: string
   periodStart: Date

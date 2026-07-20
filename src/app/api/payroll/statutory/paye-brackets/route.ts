@@ -8,6 +8,7 @@ import { z } from 'zod'
 
 const createSchema = z.object({
   name: z.string().min(1),
+  scheduleCode: z.string().min(1),
   minIncome: z.number().min(0),
   maxIncome: z.number().min(0).nullable().optional(),
   taxRate: z.number().min(0).max(100),
@@ -38,6 +39,7 @@ export async function POST(req: NextRequest) {
     const bracket = await prisma.payeTaxBracket.create({
       data: {
         name: d.name,
+        scheduleCode: d.scheduleCode,
         minIncome: d.minIncome,
         maxIncome: d.maxIncome ?? null,
         taxRate: d.taxRate,
