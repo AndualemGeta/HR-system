@@ -1,28 +1,11 @@
-import { createSession } from '../lib/session'
 import { prisma } from '../lib/prisma'
 
 const BASE = process.env.TEST_BASE_URL || 'http://127.0.0.1:3000'
 
-interface TestCtx {
-  sessionToken: string
-  userId: string
-  employeeId?: string
-  payrollOfficerToken: string
-  payrollOfficerId: string
-  financeDirectorToken: string
-  financeDirectorId: string
-  periodId?: string
-  batchId?: string
-  dsaEmployeeId?: string
-  nonDsaEmployeeId?: string
-  payComponentId?: string
-}
-
-const ctx: TestCtx = {} as any
-
 let passed = 0
 let failed = 0
 const errors: string[] = []
+const cleanupFns: (() => Promise<void>)[] = []
 
 async function assert(label: string, fn: () => Promise<boolean | void>) {
   try {
@@ -44,33 +27,58 @@ async function api(method: string, path: string, body?: unknown, token?: string)
     body: body ? JSON.stringify(body) : undefined,
   })
   const json = await res.json().catch(() => ({}))
-  return { status: res.status, data: json.data, error: json.error, headers: res.headers }
+  return { status: res.status, data: json.data, error: json.error }
 }
 
-async function login(email: string): Promise<{ token: string; userId: string }> {
-  const user = await prisma.user.findUnique({ where: { email } })
-  if (!user) throw new Error(`User ${email} not found - seed must be run first`)
-  const token = await createSession({
-    userId: user.id, email: user.email, name: user.name, employeeId: user.employeeId,
+async function login(email: string, password: string): Promise<{ token: string; userId: string }> {
+  const res = await fetch(`${BASE}/api/auth/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, password }),
   })
-  return { token, userId: user.id }
+  if (!res.ok) throw new Error(`Login failed for ${email}: ${res.status}`)
+  const body = await res.json()
+  const setCookie = res.headers.get('set-cookie')
+  if (!setCookie) throw new Error('No set-cookie header in login response')
+  const match = setCookie.match(/session=([^;]+)/)
+  if (!match) throw new Error('No session cookie in set-cookie header')
+  return { token: match[1], userId: body.data?.user?.id }
 }
 
-async function getEmployeeByRole(role: string) {
-  const emp = await prisma.employee.findFirst({
-    where: { currentRole: role as any, employmentStatus: 'ACTIVE' },
+let payrollOfficerToken: string
+let financeDirectorToken: string
+let employeeToken: string
+let payrollOfficerId: string
+let financeDirectorId: string
+
+function makeUnique(tag: string) {
+  const ts = Date.now()
+  return { employeeId: `E2E-${tag}-${ts}`, email: `e2e.${tag}.${ts}@test.leapfrog.com` }
+}
+
+async function createEmployee(tag: string, role: string) {
+  const uid = makeUnique(tag)
+  const emp = await prisma.employee.create({
+    data: {
+      employeeId: uid.employeeId,
+      firstName: `E2E_${tag}`,
+      lastName: 'Test',
+      fullName: `E2E ${tag} Test`,
+      email: uid.email,
+      employmentStatus: 'ACTIVE',
+      currentRole: role as any,
+    },
   })
-  if (!emp) throw new Error(`No active ${role} employee found`)
+  cleanupFns.push(async () => { try { await prisma.employee.delete({ where: { id: emp.id } }) } catch {} })
   return emp
 }
 
 async function ensurePayComponent(): Promise<string> {
-  const existing = await prisma.payComponent.findFirst({ where: { code: 'E2E_TEST_ALLOW' } })
-  if (existing) return existing.id
+  const code = `E2E_ALLOW_${Date.now()}`
   const comp = await prisma.payComponent.create({
     data: {
-      code: 'E2E_TEST_ALLOW',
-      name: 'E2E Test Allowance',
+      code,
+      name: 'E2E Allowance',
       componentType: 'ALLOWANCE',
       taxTreatment: 'TAXABLE',
       isEarning: true,
@@ -83,6 +91,7 @@ async function ensurePayComponent(): Promise<string> {
       calculationOrder: 1,
     },
   })
+  cleanupFns.push(async () => { try { await prisma.payComponent.delete({ where: { id: comp.id } }) } catch {} })
   return comp.id
 }
 
@@ -91,7 +100,6 @@ async function ensureActivePayeSchedule() {
     where: { isActive: true, approvalStatus: 'APPROVED', isSample: false },
   })
   if (existing) return
-
   const scheduleCode = `E2E_SCHED_${Date.now()}`
   const brackets = [
     { minIncome: 0, maxIncome: 600, taxRate: 0, deductionAmount: 0 },
@@ -102,11 +110,10 @@ async function ensureActivePayeSchedule() {
     { minIncome: 7800, maxIncome: 10900, taxRate: 30, deductionAmount: 955 },
     { minIncome: 10900, maxIncome: null, taxRate: 35, deductionAmount: 1500 },
   ]
-  const now = new Date()
   for (const b of brackets) {
     await prisma.payeTaxBracket.create({
       data: {
-        name: `E2E Bracket ${b.minIncome}-${b.maxIncome ?? '∞'}`,
+        name: `E2E Bracket ${b.minIncome}-${b.maxIncome ?? 'inf'}`,
         scheduleCode,
         minIncome: b.minIncome,
         maxIncome: b.maxIncome,
@@ -127,7 +134,6 @@ async function ensureActivePensionRule() {
     where: { isActive: true, approvalStatus: 'APPROVED', isSample: false },
   })
   if (existing) return
-
   await prisma.pensionRule.create({
     data: {
       name: 'E2E Pension Rule',
@@ -146,31 +152,6 @@ async function ensureActivePensionRule() {
   })
 }
 
-async function ensureInputRequirement(inputTypeCode: string, overrides: Record<string, unknown> = {}) {
-  const inputType = await prisma.payrollInputType.findUnique({ where: { code: inputTypeCode } })
-  if (!inputType) throw new Error(`Input type ${inputTypeCode} not found`)
-
-  const where: Record<string, unknown> = { inputTypeId: inputType.id }
-  if (overrides.role) where.role = overrides.role
-  if (overrides.employmentType) where.employmentType = overrides.employmentType
-  if (overrides.employeeCategory) where.employeeCategory = overrides.employeeCategory
-
-  const existing = await prisma.payrollInputRequirement.findFirst({ where: where as any })
-  if (existing) return existing.id
-
-  const req = await prisma.payrollInputRequirement.create({
-    data: {
-      inputTypeId: inputType.id,
-      severity: 'BLOCKER',
-      role: (overrides.role as any) ?? undefined,
-      employmentType: (overrides.employmentType as any) ?? undefined,
-      employeeCategory: (overrides.employeeCategory as any) ?? undefined,
-      isActive: overrides.isActive !== false,
-    },
-  })
-  return req.id
-}
-
 async function ensureInputType(code: string, name: string, compId: string) {
   const existing = await prisma.payrollInputType.findUnique({ where: { code } })
   if (existing) return existing.id
@@ -184,7 +165,31 @@ async function ensureInputType(code: string, name: string, compId: string) {
       payComponentId: compId,
     },
   })
+  cleanupFns.push(async () => { try { await prisma.payrollInputType.delete({ where: { id: it.id } }) } catch {} })
   return it.id
+}
+
+async function ensureInputRequirement(inputTypeCode: string, overrides: { role?: string; employmentType?: string; employeeCategory?: string; isActive?: boolean }) {
+  const inputType = await prisma.payrollInputType.findUnique({ where: { code: inputTypeCode } })
+  if (!inputType) throw new Error(`Input type ${inputTypeCode} not found`)
+  const where: Record<string, unknown> = { inputTypeId: inputType.id }
+  if (overrides.role) where.role = overrides.role
+  if (overrides.employmentType) where.employmentType = overrides.employmentType
+  if (overrides.employeeCategory) where.employeeCategory = overrides.employeeCategory
+  const existing = await prisma.payrollInputRequirement.findFirst({ where: where as any })
+  if (existing) return existing.id
+  const req = await prisma.payrollInputRequirement.create({
+    data: {
+      inputTypeId: inputType.id,
+      severity: 'BLOCKER',
+      role: (overrides.role ?? null) as any,
+      employmentType: (overrides.employmentType ?? null) as any,
+      employeeCategory: (overrides.employeeCategory ?? null) as any,
+      isActive: overrides.isActive !== false,
+    },
+  })
+  cleanupFns.push(async () => { try { await prisma.payrollInputRequirement.delete({ where: { id: req.id } }) } catch {} })
+  return req.id
 }
 
 async function main() {
@@ -198,32 +203,27 @@ async function main() {
     console.log('  \u2717 Prerequisites missing: seed must be run first')
     process.exit(1)
   }
-  ctx.payComponentId = await ensurePayComponent()
 
-  // Login as different users
-  const payroll = await login('finance.payroll@leapfrog.com')
-  ctx.payrollOfficerToken = payroll.token
-  ctx.payrollOfficerId = payroll.userId
+  // Authenticate via real login endpoint
+  const payroll = await login('finance.payroll@leapfrog.com', 'test123')
+  payrollOfficerToken = payroll.token
+  payrollOfficerId = payroll.userId
 
-  const fd = await login('finance.director@leapfrog.com')
-  ctx.financeDirectorToken = fd.token
-  ctx.financeDirectorId = fd.userId
+  const fd = await login('finance.director@leapfrog.com', 'test123')
+  financeDirectorToken = fd.token
+  financeDirectorId = fd.userId
 
-  const emp = await login('employee@leapfrog.com')
-  ctx.sessionToken = emp.token
-  ctx.userId = emp.userId
-  ctx.employeeId = emp.userId
+  const empLogin = await login('employee@leapfrog.com', 'test123')
+  employeeToken = empLogin.token
 
-  const dsa = await getEmployeeByRole('DSA')
-  ctx.dsaEmployeeId = dsa.id
-  const nonDsa = await getEmployeeByRole('DSP') || await prisma.employee.findFirst({
-    where: { currentRole: { not: 'DSA' }, employmentStatus: 'ACTIVE' },
-  })
-  if (nonDsa) ctx.nonDsaEmployeeId = nonDsa.id
+  // Create isolated test employees
+  const dsaEmployee = await createEmployee('DSA', 'DSA')
+  const nonDsaEmployee = await createEmployee('NON_DSA', 'DSP')
 
-  // Ensure statutory data exists for calculation
+  // Ensure statutory data
   await ensureActivePayeSchedule()
   await ensureActivePensionRule()
+  const payComponentId = await ensurePayComponent()
 
   // ─── Permission Tests ──────────────────────────────────────
   console.log('[Permission Failures]')
@@ -234,12 +234,12 @@ async function main() {
   })
 
   await assert('Employee without permission gets 403', async () => {
-    const res = await api('GET', '/api/payroll-periods', undefined, ctx.sessionToken)
+    const res = await api('GET', '/api/payroll-periods', undefined, employeeToken)
     return res.status === 403
   })
 
   await assert('Payroll officer with permission succeeds', async () => {
-    const res = await api('GET', '/api/payroll-periods', undefined, ctx.payrollOfficerToken)
+    const res = await api('GET', '/api/payroll-periods', undefined, payrollOfficerToken)
     return res.status === 200
   })
 
@@ -261,13 +261,13 @@ async function main() {
       affectsNet: true,
       affectsEmployerCost: false,
       calculationOrder: 5,
-    }, ctx.payrollOfficerToken)
+    }, payrollOfficerToken)
     return res.status === 201 && res.data?.taxablePercent === 80
   })
 
   let compId: string | undefined
   await assert('List components returns array', async () => {
-    const res = await api('GET', '/api/salary-structure/components', undefined, ctx.payrollOfficerToken)
+    const res = await api('GET', '/api/salary-structure/components', undefined, payrollOfficerToken)
     compId = res.data?.[0]?.id
     return Array.isArray(res.data) && res.data.length > 0
   })
@@ -276,7 +276,7 @@ async function main() {
     if (!compId) return false
     const res = await api('PATCH', `/api/salary-structure/components/${compId}`, {
       isPensionable: true, pensionablePercent: 90, calculationOrder: 10,
-    }, ctx.payrollOfficerToken)
+    }, payrollOfficerToken)
     return res.status === 200 && res.data?.pensionablePercent === 90 && res.data?.calculationOrder === 10
   })
 
@@ -290,7 +290,7 @@ async function main() {
       periodStart: '2024-01-01',
       periodEnd: '2024-01-31',
       payDate: '2024-02-05',
-    }, ctx.payrollOfficerToken)
+    }, payrollOfficerToken)
     periodId = res.data?.id
     return res.status === 201 && !!periodId
   })
@@ -299,22 +299,20 @@ async function main() {
     console.log('  \u2717 Cannot continue without period')
     process.exit(1)
   }
-  ctx.periodId = periodId
+  cleanupFns.push(async () => { try { await prisma.payrollPeriod.delete({ where: { id: periodId! } }) } catch {} })
 
   // Add employees to period
   await assert('Add DSA employee to period', async () => {
-    if (!ctx.dsaEmployeeId) return false
     const res = await api('POST', `/api/payroll-periods/${periodId}/employees`, {
-      employeeIds: [ctx.dsaEmployeeId],
-    }, ctx.payrollOfficerToken)
+      employeeIds: [dsaEmployee.id],
+    }, payrollOfficerToken)
     return res.status === 200
   })
 
   await assert('Add non-DSA employee to period', async () => {
-    if (!ctx.nonDsaEmployeeId) return false
     const res = await api('POST', `/api/payroll-periods/${periodId}/employees`, {
-      employeeIds: [ctx.nonDsaEmployeeId],
-    }, ctx.payrollOfficerToken)
+      employeeIds: [nonDsaEmployee.id],
+    }, payrollOfficerToken)
     return res.status === 200
   })
 
@@ -322,72 +320,67 @@ async function main() {
   console.log('[Requirement Applicability]')
 
   // Create input type + requirement specific to DSA role
-  const inputTypeId = await ensureInputType('E2E_DSA_ONLY', 'E2E DSA Only', ctx.payComponentId)
+  const inputTypeId = await ensureInputType('E2E_DSA_ONLY', 'E2E DSA Only', payComponentId)
   await ensureInputRequirement('E2E_DSA_ONLY', { role: 'DSA' })
 
   // Submit input for DSA employee
   await assert('Submit input for DSA employee', async () => {
     const res = await api('POST', `/api/payroll-periods/${periodId}/inputs`, {
-      employeeId: ctx.dsaEmployeeId,
+      employeeId: dsaEmployee.id,
       inputTypeCode: 'E2E_DSA_ONLY',
       amount: 1000,
-    }, ctx.employeeId)
+    }, employeeToken)
     return res.status === 201 || res.status === 200
   })
 
-  // Accept and lock the input (as payroll officer)
+  // Accept and lock the input via API
   const dsaInput = await prisma.payrollInput.findFirst({
-    where: { payrollPeriodId: periodId, employeeId: ctx.dsaEmployeeId, inputType: { code: 'E2E_DSA_ONLY' } },
+    where: { payrollPeriodId: periodId, employeeId: dsaEmployee.id, inputType: { code: 'E2E_DSA_ONLY' } },
   })
   if (dsaInput) {
-    await prisma.payrollInput.update({ where: { id: dsaInput.id }, data: { status: 'ACCEPTED', isLocked: true } })
+    await api('POST', `/api/payroll-periods/${periodId}/inputs/${dsaInput.id}/accept`, undefined, payrollOfficerToken)
+    await api('POST', `/api/payroll-periods/${periodId}/inputs/${dsaInput.id}/lock`, undefined, payrollOfficerToken)
   }
 
   // Input type + requirement for non-DSA (transport type)
-  const transportTypeId = await ensureInputType('E2E_TRANSPORT', 'E2E Transport', ctx.payComponentId)
+  await ensureInputType('E2E_TRANSPORT', 'E2E Transport', payComponentId)
   await ensureInputRequirement('E2E_TRANSPORT', { employmentType: 'GENERAL_STAFF' })
 
   // ─── Readiness Tests ──────────────────────────────────────
   console.log('[Readiness - DSA Requirements Do Not Apply to Non-DSA]')
 
-  // Check DSA employee readiness
   await assert('DSA employee has DSA-specific requirement blocking', async () => {
-    const res = await api('GET', `/api/payroll-periods/${periodId}/calculation-readiness`, undefined, ctx.payrollOfficerToken)
+    const res = await api('GET', `/api/payroll-periods/${periodId}/calculation-readiness`, undefined, payrollOfficerToken)
     const issues = res.data?.employeeIssues
-    if (!issues || !ctx.dsaEmployeeId) return false
-    const dsaIssues = issues[ctx.dsaEmployeeId]
+    if (!issues) return false
+    const dsaIssues = issues[dsaEmployee.id]
     return dsaIssues?.blockers?.some((b: string) => b.includes('E2E_DSA_ONLY'))
   })
 
-  // Move period through workflow for calculation
+  // Move period through workflow using API endpoints
   await assert('Period transitions to OPEN_FOR_INPUT', async () => {
-    const res = await api('POST', `/api/payroll-periods/${periodId}/open`, undefined, ctx.payrollOfficerToken)
-    return res.status === 200 || res.status === 400
+    const res = await api('POST', `/api/payroll-periods/${periodId}/open`, undefined, payrollOfficerToken)
+    return res.status === 200
   })
 
-  // Close input collection
-  const currentPeriod = await prisma.payrollPeriod.findUnique({ where: { id: periodId } })
-  if (currentPeriod && currentPeriod.status === 'OPEN_FOR_INPUT') {
-    await prisma.payrollPeriod.update({ where: { id: periodId }, data: { status: 'INPUT_COLLECTION_CLOSED' } })
-  }
+  await assert('Close input collection', async () => {
+    const res = await api('POST', `/api/payroll-periods/${periodId}/close`, undefined, payrollOfficerToken)
+    return res.status === 200
+  })
 
-  // Mark ready for calculation
-  if (currentPeriod && ['INPUT_COLLECTION_CLOSED', 'OPEN_FOR_INPUT'].includes(currentPeriod.status)) {
-    await prisma.payrollPeriod.update({ where: { id: periodId }, data: { status: 'READY_FOR_CALCULATION' } })
-  }
+  // Transition to READY_FOR_CALCULATION (direct DB — no API endpoint for this status transition)
+  await prisma.payrollPeriod.update({ where: { id: periodId }, data: { status: 'READY_FOR_CALCULATION' } })
 
   // ─── Blocked Calculation ──────────────────────────────────
   console.log('[Blocked Calculation]')
 
-  // DSA employee should be blocked due to missing DSA requirement
   await assert('DSA employee has blocker from missing DSA-only input', async () => {
-    const res = await api('GET', `/api/payroll-periods/${periodId}/calculation-readiness`, undefined, ctx.payrollOfficerToken)
+    const res = await api('GET', `/api/payroll-periods/${periodId}/calculation-readiness`, undefined, payrollOfficerToken)
     return res.data?.blockedEmployees > 0
   })
 
-  // Actually run calculation - should write nothing if blocked
   await assert('Blocked calculation writes no batch', async () => {
-    const res = await api('POST', `/api/payroll-periods/${periodId}/calculate`, undefined, ctx.payrollOfficerToken)
+    const res = await api('POST', `/api/payroll-periods/${periodId}/calculate`, undefined, payrollOfficerToken)
     const batchCount = await prisma.payrollPreparationBatch.count({ where: { payrollPeriodId: periodId } })
     return (res.data?.blocked === true) && batchCount === 0
   })
@@ -404,22 +397,19 @@ async function main() {
       where: { id: dsaInput.id },
       update: { isLocked: true, status: 'ACCEPTED', amount: 1000 },
       create: {
-        payrollPeriodId: periodId!, employeeId: ctx.dsaEmployeeId!,
-        inputTypeId: inputTypeId, amount: 1000, status: 'ACCEPTED', isLocked: true,
+        payrollPeriodId: periodId, employeeId: dsaEmployee.id,
+        inputTypeId, amount: 1000, status: 'ACCEPTED', isLocked: true,
       },
     })
   }
 
-  // Also delete non-DSA employee to avoid their transport requirement blocking
-  if (ctx.nonDsaEmployeeId) {
-    await prisma.payrollPeriodEmployee.deleteMany({
-      where: { payrollPeriodId: periodId, employeeId: ctx.nonDsaEmployeeId },
-    })
-  }
+  // Remove non-DSA employee to avoid transport requirement blocking
+  await prisma.payrollPeriodEmployee.deleteMany({
+    where: { payrollPeriodId: periodId, employeeId: nonDsaEmployee.id },
+  }).catch(() => {})
 
-  // Re-run readiness
   await assert('After satisfying requirements, all employees ready', async () => {
-    const res = await api('GET', `/api/payroll-periods/${periodId}/calculation-readiness`, undefined, ctx.payrollOfficerToken)
+    const res = await api('GET', `/api/payroll-periods/${periodId}/calculation-readiness`, undefined, payrollOfficerToken)
     return res.data?.blockedEmployees === 0 && res.data?.readyEmployees > 0
   })
 
@@ -428,24 +418,24 @@ async function main() {
 
   let batchId: string | undefined
   await assert('Calculate payroll succeeds', async () => {
-    const res = await api('POST', `/api/payroll-periods/${periodId}/calculate`, undefined, ctx.payrollOfficerToken)
+    const res = await api('POST', `/api/payroll-periods/${periodId}/calculate`, undefined, payrollOfficerToken)
     batchId = res.data?.batchId
     return res.status === 200 && !!batchId && !res.data?.blocked
   })
 
   await assert('Batch version is 1', async () => {
-    const res = await api('GET', `/api/payroll-periods/${periodId}/calculation`, undefined, ctx.payrollOfficerToken)
+    const res = await api('GET', `/api/payroll-periods/${periodId}/calculation`, undefined, payrollOfficerToken)
     return res.data?.batch?.version === 1
   })
 
   await assert('Calculation totals present', async () => {
-    const res = await api('GET', `/api/payroll-periods/${periodId}/calculation`, undefined, ctx.payrollOfficerToken)
+    const res = await api('GET', `/api/payroll-periods/${periodId}/calculation`, undefined, payrollOfficerToken)
     const s = res.data?.summary
     return s && s.grossEarningsTotal >= 0 && typeof s.netSalaryTotal === 'number' && s.employeeCount > 0
   })
 
   await assert('Calculation rows exist', async () => {
-    const res = await api('GET', `/api/payroll-periods/${periodId}/calculation`, undefined, ctx.payrollOfficerToken)
+    const res = await api('GET', `/api/payroll-periods/${periodId}/calculation`, undefined, payrollOfficerToken)
     return Array.isArray(res.data?.rows) && res.data.rows.length > 0
   })
 
@@ -458,12 +448,12 @@ async function main() {
   console.log('[Review Workflow]')
 
   await assert('Start review requires REVIEW permission', async () => {
-    const res = await api('POST', `/api/payroll-periods/${periodId}/calculation/start-review`, undefined, ctx.sessionToken)
+    const res = await api('POST', `/api/payroll-periods/${periodId}/calculation/start-review`, undefined, employeeToken)
     return res.status === 403
   })
 
   await assert('Start review succeeds with permission', async () => {
-    const res = await api('POST', `/api/payroll-periods/${periodId}/calculation/start-review`, undefined, ctx.payrollOfficerToken)
+    const res = await api('POST', `/api/payroll-periods/${periodId}/calculation/start-review`, undefined, payrollOfficerToken)
     return res.status === 200
   })
 
@@ -473,12 +463,12 @@ async function main() {
   })
 
   await assert('Validate batch requires VALIDATE permission', async () => {
-    const res = await api('POST', `/api/payroll-periods/${periodId}/calculation/validate`, undefined, ctx.sessionToken)
+    const res = await api('POST', `/api/payroll-periods/${periodId}/calculation/validate`, undefined, employeeToken)
     return res.status === 403
   })
 
   await assert('Validate batch succeeds', async () => {
-    const res = await api('POST', `/api/payroll-periods/${periodId}/calculation/validate`, undefined, ctx.financeDirectorToken)
+    const res = await api('POST', `/api/payroll-periods/${periodId}/calculation/validate`, undefined, financeDirectorToken)
     return res.status === 200 && res.data?.status === 'VALIDATED'
   })
 
@@ -488,12 +478,12 @@ async function main() {
   })
 
   await assert('Approve requires APPROVE permission', async () => {
-    const res = await api('POST', `/api/payroll-periods/${periodId}/calculation/approve`, undefined, ctx.payrollOfficerToken)
+    const res = await api('POST', `/api/payroll-periods/${periodId}/calculation/approve`, undefined, payrollOfficerToken)
     return res.status === 403
   })
 
   await assert('Approve batch succeeds', async () => {
-    const res = await api('POST', `/api/payroll-periods/${periodId}/calculation/approve`, undefined, ctx.financeDirectorToken)
+    const res = await api('POST', `/api/payroll-periods/${periodId}/calculation/approve`, undefined, financeDirectorToken)
     return res.status === 200 && res.data?.status === 'APPROVED'
   })
 
@@ -511,7 +501,7 @@ async function main() {
   console.log('[Approved Payroll Immutability]')
 
   await assert('Cannot recalculate approved period', async () => {
-    const res = await api('POST', `/api/payroll-periods/${periodId}/calculate`, undefined, ctx.payrollOfficerToken)
+    const res = await api('POST', `/api/payroll-periods/${periodId}/calculate`, undefined, payrollOfficerToken)
     return res.status === 400 && res.error?.includes('READY_FOR_CALCULATION')
   })
 
@@ -519,12 +509,12 @@ async function main() {
   console.log('[Return / Reopen]')
 
   await assert('Return requires RETURN permission', async () => {
-    const res = await api('POST', `/api/payroll-periods/${periodId}/calculation/return`, { reason: 'Test' }, ctx.sessionToken)
+    const res = await api('POST', `/api/payroll-periods/${periodId}/calculation/return`, { reason: 'Test' }, employeeToken)
     return res.status === 403
   })
 
   await assert('Reopen approved period with reason', async () => {
-    const res = await api('POST', `/api/payroll-periods/${periodId}/reopen-calculation`, { reason: 'E2E reopen test' }, ctx.financeDirectorToken)
+    const res = await api('POST', `/api/payroll-periods/${periodId}/reopen-calculation`, { reason: 'E2E reopen test' }, financeDirectorToken)
     return res.status === 200 && res.data?.newVersion === 2
   })
 
@@ -544,33 +534,21 @@ async function main() {
   // Second calculation
   await assert('Second calculation creates version 2', async () => {
     await prisma.payrollPeriod.update({ where: { id: periodId }, data: { status: 'READY_FOR_CALCULATION' } })
-    const res = await api('POST', `/api/payroll-periods/${periodId}/calculate`, undefined, ctx.payrollOfficerToken)
+    const res = await api('POST', `/api/payroll-periods/${periodId}/calculate`, undefined, payrollOfficerToken)
     return res.data?.version === 2 && !!res.data?.batchId
   })
 
   // ─── Cleanup ──────────────────────────────────────────────
   console.log('[Cleanup]')
-  const lines = await prisma.payrollCalculationLine.count({ where: { payrollPeriodId: periodId } })
-  const rows = await prisma.payrollPreparationRow.count({ where: { payrollPeriodId: periodId } })
-  const batches = await prisma.payrollPreparationBatch.count({ where: { payrollPeriodId: periodId } })
-  const inputs = await prisma.payrollInput.count({ where: { payrollPeriodId: periodId } })
-  await assert('Data exists for cleanup', async () => lines > 0 || rows > 0 || batches > 0 || inputs > 0)
-
-  // Clean up test data
-  await prisma.payrollCalculationLine.deleteMany({ where: { payrollPeriodId: periodId } }).catch(() => {})
-  await prisma.payrollPreparationRow.deleteMany({ where: { payrollPeriodId: periodId } }).catch(() => {})
-  await prisma.payrollPreparationBatch.deleteMany({ where: { payrollPeriodId: periodId } }).catch(() => {})
-  await prisma.payrollInput.deleteMany({ where: { payrollPeriodId: periodId } }).catch(() => {})
-  await prisma.payrollInputWaiver.deleteMany({ where: { payrollPeriodId: periodId } }).catch(() => {})
-  await prisma.payrollPeriodEmployee.deleteMany({ where: { payrollPeriodId: periodId } }).catch(() => {})
-  await prisma.payrollPeriod.delete({ where: { id: periodId } }).catch(() => {})
-
-  // Clean up seeded test data
-  await prisma.payrollInputRequirement.deleteMany({ where: { inputType: { code: { in: ['E2E_DSA_ONLY', 'E2E_TRANSPORT'] } } } }).catch(() => {})
-  await prisma.payrollInputType.deleteMany({ where: { code: { in: ['E2E_DSA_ONLY', 'E2E_TRANSPORT'] } } }).catch(() => {})
-  await prisma.payComponent.deleteMany({ where: { code: { startsWith: 'E2E_' } } }).catch(() => {})
-
-  await assert('Test data cleaned up', async () => true)
+  await assert('Data exists for cleanup', async () => {
+    const [lines, rows, batches, inputs] = await Promise.all([
+      prisma.payrollCalculationLine.count({ where: { payrollPeriodId: periodId } }),
+      prisma.payrollPreparationRow.count({ where: { payrollPeriodId: periodId } }),
+      prisma.payrollPreparationBatch.count({ where: { payrollPeriodId: periodId } }),
+      prisma.payrollInput.count({ where: { payrollPeriodId: periodId } }),
+    ])
+    return lines > 0 || rows > 0 || batches > 0 || inputs > 0
+  })
 
   // Summary
   const total = passed + failed
@@ -589,4 +567,13 @@ async function main() {
 main().catch(e => {
   console.error('Fatal:', e)
   process.exit(1)
+}).finally(async () => {
+  try {
+    // Cleanup all created resources in reverse order
+    for (const fn of cleanupFns.reverse()) {
+      await fn()
+    }
+  } catch {
+    // best-effort cleanup
+  }
 })
