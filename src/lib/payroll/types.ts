@@ -127,5 +127,5 @@ export interface CalculationContext {
     employeeCategory: string | null
     basicSalary: number | null
   }>
-  prorationMethod: string
+  prorationMethod: 'NONE' | 'CALENDAR_DAYS' | 'WORKING_DAYS' | 'MANUAL'
 }

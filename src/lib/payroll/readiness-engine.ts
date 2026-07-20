@@ -361,8 +361,6 @@ export async function evaluatePayrollPeriodReadiness(options: {
       if (!manualInput || manualInput.status !== 'ACCEPTED' || !manualInput.isLocked) {
         empBlockers.push('MISSING_MANUAL_PRORATION_INPUT')
       }
-    } else if (prorationMethod !== 'NONE' && prorationMethod !== 'CALENDAR_DAYS') {
-      empBlockers.push('INVALID_PRORATION_POLICY')
     }
 
     // ── 6. Required input checks ───────────────────────────────────────────

@@ -36,7 +36,7 @@ export async function resolveSalary(employeeId: string, periodEnd: Date): Promis
 
 export function calcProratedSalary(
   basicSalary: number,
-  method: string,
+  method: 'NONE' | 'CALENDAR_DAYS' | 'WORKING_DAYS' | 'MANUAL',
   periodDays: number,
   eligibleDays: number,
 ): { prorated: number; warning?: string } {
@@ -57,7 +57,7 @@ export function calcProratedSalary(
   }
 }
 
-export async function resolveProrationPolicy(payrollPeriodId: string): Promise<string> {
+export async function resolveProrationPolicy(payrollPeriodId: string): Promise<'NONE' | 'CALENDAR_DAYS' | 'WORKING_DAYS' | 'MANUAL'> {
   const period = await prisma.payrollPeriod.findUnique({
     where: { id: payrollPeriodId },
     select: { prorationMethod: true },

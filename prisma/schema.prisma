@@ -346,6 +346,13 @@ enum ThresholdMetric {
   MANUAL_VALUE
 }
 
+enum PayrollProrationMethod {
+  NONE
+  CALENDAR_DAYS
+  WORKING_DAYS
+  MANUAL
+}
+
 enum PayrollPeriodStatus {
   DRAFT
   OPEN_FOR_INPUT
@@ -1855,7 +1862,7 @@ model PayrollPeriod {
   periodEnd       DateTime
   payDate         DateTime
   status          PayrollPeriodStatus         @default(DRAFT)
-  prorationMethod String                      @default("NONE")
+  prorationMethod PayrollProrationMethod      @default(NONE)
   createdById     String?
   createdAt       DateTime                    @default(now())
   updatedAt       DateTime                    @updatedAt

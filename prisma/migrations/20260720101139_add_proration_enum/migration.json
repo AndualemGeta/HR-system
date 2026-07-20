@@ -1,0 +1,17 @@
+{
+  "version": "5.2",
+  "steps": [
+    {
+      "tag": "CreateEnum",
+      "enum": "PayrollProrationMethod",
+      "values": ["NONE", "CALENDAR_DAYS", "WORKING_DAYS", "MANUAL"]
+    },
+    {
+      "tag": "AlterColumn",
+      "table": "PayrollPeriod",
+      "column": "prorationMethod",
+      "type": "PayrollProrationMethod",
+      "default": "NONE"
+    }
+  ]
+}

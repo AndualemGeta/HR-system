@@ -91,10 +91,6 @@ export async function calculateEmployeePayroll(
   if (proratedBasicSalary.warning) warnings.push(proratedBasicSalary.warning)
   const pbs = proratedBasicSalary.prorated
 
-  if (ctx.prorationMethod !== 'NONE' && !['CALENDAR_DAYS', 'WORKING_DAYS', 'MANUAL'].includes(ctx.prorationMethod)) {
-    blockers.push('INVALID_PRORATION_POLICY')
-  }
-
   const salSource = mapSalarySourceToCalculationSource(salary.salarySource)
 
   if (pbs > 0) {
