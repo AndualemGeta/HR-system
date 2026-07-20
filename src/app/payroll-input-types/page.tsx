@@ -5,10 +5,12 @@ import { useEffect, useState, useCallback } from 'react'
 interface InputType {
   id: string; code: string; name: string; category: string
   valueType: string; defaultAmount: number | null; requiresApproval: boolean
-  active: boolean
+  active: boolean; calculationMode: string
 }
 
-const defaultForm = { code: '', name: '', category: 'EARNING', valueType: 'AMOUNT', defaultAmount: '', requiresApproval: false }
+const CALCULATION_MODES = ['DIRECT_AMOUNT', 'METRIC_ONLY', 'RULE_DERIVED'] as const
+
+const defaultForm = { code: '', name: '', category: 'EARNING', valueType: 'AMOUNT', defaultAmount: '', requiresApproval: false, calculationMode: 'DIRECT_AMOUNT' }
 
 export default function PayrollInputTypesPage() {
   const [types, setTypes] = useState<InputType[]>([])
@@ -39,7 +41,7 @@ export default function PayrollInputTypesPage() {
   }
 
   const openEdit = (t: InputType) => {
-    setForm({ code: t.code, name: t.name, category: t.category, valueType: t.valueType, defaultAmount: t.defaultAmount !== null ? String(t.defaultAmount) : '', requiresApproval: t.requiresApproval })
+    setForm({ code: t.code, name: t.name, category: t.category, valueType: t.valueType, defaultAmount: t.defaultAmount !== null ? String(t.defaultAmount) : '', requiresApproval: t.requiresApproval, calculationMode: t.calculationMode || 'DIRECT_AMOUNT' })
     setEditing(t)
     setShowModal(true)
   }
@@ -55,6 +57,7 @@ export default function PayrollInputTypesPage() {
       valueType: form.valueType,
       defaultAmount: form.defaultAmount ? Number(form.defaultAmount) : null,
       requiresApproval: form.requiresApproval,
+      calculationMode: form.calculationMode,
     }
     const url = editing ? `/api/payroll-input-types/${editing.id}` : '/api/payroll-input-types'
     const method = editing ? 'PATCH' : 'POST'
@@ -98,6 +101,7 @@ export default function PayrollInputTypesPage() {
             <th style={{ padding: '0.5rem', fontSize: '0.85rem' }}>Name</th>
             <th style={{ padding: '0.5rem', fontSize: '0.85rem' }}>Category</th>
             <th style={{ padding: '0.5rem', fontSize: '0.85rem' }}>Value Type</th>
+            <th style={{ padding: '0.5rem', fontSize: '0.85rem' }}>Calc Mode</th>
             <th style={{ padding: '0.5rem', fontSize: '0.85rem' }}>Default Amount</th>
             <th style={{ padding: '0.5rem', fontSize: '0.85rem' }}>Requires Approval</th>
             <th style={{ padding: '0.5rem', fontSize: '0.85rem' }}>Active</th>
@@ -111,6 +115,11 @@ export default function PayrollInputTypesPage() {
               <td style={{ padding: '0.5rem', fontSize: '0.9rem' }}>{t.name}</td>
               <td style={{ padding: '0.5rem', fontSize: '0.85rem' }}>{t.category}</td>
               <td style={{ padding: '0.5rem', fontSize: '0.85rem' }}>{t.valueType}</td>
+              <td style={{ padding: '0.5rem', fontSize: '0.85rem' }}>
+                <span style={{ padding: '0.15rem 0.4rem', borderRadius: 4, fontSize: '0.75rem', fontWeight: 600, background: t.calculationMode === 'DIRECT_AMOUNT' ? '#dbeafe' : t.calculationMode === 'METRIC_ONLY' ? '#fef3c7' : '#ede9fe', color: t.calculationMode === 'DIRECT_AMOUNT' ? '#1e40af' : t.calculationMode === 'METRIC_ONLY' ? '#92400e' : '#5b21b6' }}>
+                  {t.calculationMode === 'DIRECT_AMOUNT' ? 'Amount' : t.calculationMode === 'METRIC_ONLY' ? 'Metric' : 'Rule'}
+                </span>
+              </td>
               <td style={{ padding: '0.5rem', fontSize: '0.85rem' }}>{t.defaultAmount !== null ? t.defaultAmount : '-'}</td>
               <td style={{ padding: '0.5rem', fontSize: '0.85rem' }}>
                 <span style={{ padding: '0.15rem 0.4rem', borderRadius: 4, fontSize: '0.75rem', fontWeight: 600, background: t.requiresApproval ? '#d1fae5' : '#e5e7eb', color: t.requiresApproval ? '#065f46' : '#374151' }}>
@@ -133,7 +142,7 @@ export default function PayrollInputTypesPage() {
             </tr>
           ))}
           {types.length === 0 && (
-            <tr><td colSpan={has('payrollInputType.manage') ? 8 : 7} style={{ padding: '1rem', textAlign: 'center', color: '#666' }}>No input types found</td></tr>
+            <tr><td colSpan={has('payrollInputType.manage') ? 9 : 8} style={{ padding: '1rem', textAlign: 'center', color: '#666' }}>No input types found</td></tr>
           )}
         </tbody>
       </table>
@@ -166,6 +175,14 @@ export default function PayrollInputTypesPage() {
                 <option value="PERCENTAGE">Percentage</option>
                 <option value="QUANTITY">Quantity</option>
                 <option value="TEXT">Text</option>
+              </select>
+            </div>
+            <div style={{ marginBottom: '0.75rem' }}>
+              <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 500, marginBottom: '0.25rem' }}>Calculation Mode</label>
+              <select value={form.calculationMode} onChange={e => setForm(f => ({ ...f, calculationMode: e.target.value }))} style={{ padding: '0.4rem 0.5rem', border: '1px solid #d1d5db', borderRadius: 4, width: '100%', boxSizing: 'border-box', fontSize: '0.9rem' }}>
+                <option value="DIRECT_AMOUNT">Direct Amount</option>
+                <option value="METRIC_ONLY">Metric Only</option>
+                <option value="RULE_DERIVED">Rule Derived</option>
               </select>
             </div>
             <div style={{ marginBottom: '0.75rem' }}>
