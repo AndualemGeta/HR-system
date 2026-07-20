@@ -33,37 +33,7 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
           blockedEmployeeCount: readiness.blockedEmployeeCount,
         },
       })
-      // Create zero batch to record the attempt (no rows/lines, no status change)
-      const latestBatch = await prisma.payrollPreparationBatch.findFirst({
-        where: { payrollPeriodId: id },
-        orderBy: { version: 'desc' },
-      })
-      const version = (latestBatch?.version ?? 0) + 1
-      await prisma.payrollPreparationBatch.create({
-        data: {
-          payrollPeriodId: id,
-          version,
-          batchName: `${period.periodName || 'Period'} - Blocked v${version}`,
-          payrollPeriodStart: period.periodStart,
-          payrollPeriodEnd: period.periodEnd,
-          calculationStatus: 'FAILED',
-          status: 'DRAFT',
-          employeeCount: readiness.selectedEmployeeCount,
-          grossEarningsTotal: 0,
-          taxableIncomeTotal: 0,
-          payeTaxTotal: 0,
-          employeePensionTotal: 0,
-          employerPensionTotal: 0,
-          netSalaryTotal: 0,
-          employerTotalCost: 0,
-          blockerCount: readiness.blockedEmployeeCount,
-          notes: `Calculation blocked: ${[...readiness.periodBlockers, ...readiness.employeeResults.flatMap(e => e.blockers)].join(', ')}`,
-          calculatedById: session.userId,
-          calculationStartedAt: new Date(),
-          calculationCompletedAt: new Date(),
-          createdById: session.userId,
-        },
-      })
+      // Return readiness result — write zero batches, rows, lines; do not change status
       return success({
         blocked: true,
         readyForCalculation: false,
