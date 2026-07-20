@@ -6,6 +6,7 @@ import { success, unauthorized, forbidden, notFound, badRequest, internalError }
 import {
   buildCalculationContext,
   calculateEmployeePayroll,
+  evaluatePayrollPeriodReadiness,
 } from '@/lib/payroll-calculation-engine'
 
 export async function POST(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -17,7 +18,23 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
     const { id } = await params
     const period = await prisma.payrollPeriod.findUnique({ where: { id } })
     if (!period) return notFound()
-    if (period.status !== 'READY_FOR_CALCULATION') return badRequest(`Period status is ${period.status}, expected READY_FOR_CALCULATION`)
+
+    // Run readiness first — same blockers as calculate
+    const readiness = await evaluatePayrollPeriodReadiness({ payrollPeriodId: id, userId: session.userId, includeEmployeeDetails: true })
+    if (!readiness.readyForCalculation) {
+      return success({
+        blocked: true,
+        readyForCalculation: false,
+        periodBlockers: readiness.periodBlockers,
+        periodWarnings: readiness.periodWarnings,
+        selectedEmployeeCount: readiness.selectedEmployeeCount,
+        readyEmployeeCount: readiness.readyEmployeeCount,
+        warningEmployeeCount: readiness.warningEmployeeCount,
+        blockedEmployeeCount: readiness.blockedEmployeeCount,
+        employeeResults: readiness.employeeResults,
+        rows: [],
+      })
+    }
 
     const ctx = await buildCalculationContext(id, session.userId)
     if (!ctx) return notFound()

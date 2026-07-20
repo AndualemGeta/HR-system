@@ -8,7 +8,7 @@ import {
   buildCalculationContext,
   calculateEmployeePayroll,
   persistPayrollCalculation,
-  checkEmployeeReadiness,
+  evaluatePayrollPeriodReadiness,
 } from '@/lib/payroll-calculation-engine'
 
 export async function POST(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -22,23 +22,63 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
     if (!period) return notFound()
     if (period.status !== 'READY_FOR_CALCULATION') return badRequest(`Period status is ${period.status}, expected READY_FOR_CALCULATION`)
 
-    // Run readiness first
+    // Run readiness first — when blocked, write zero batches/rows/lines, do not change status
+    const readiness = await evaluatePayrollPeriodReadiness({ payrollPeriodId: id, userId: session.userId, includeEmployeeDetails: false })
+    if (!readiness.readyForCalculation) {
+      await createAuditLog({
+        userId: session.userId, action: 'PAYROLL_CALCULATION_BLOCKED',
+        entityType: 'PayrollPeriod', entityId: id,
+        newValue: {
+          periodBlockers: readiness.periodBlockers,
+          blockedEmployeeCount: readiness.blockedEmployeeCount,
+        },
+      })
+      // Create zero batch to record the attempt (no rows/lines, no status change)
+      const latestBatch = await prisma.payrollPreparationBatch.findFirst({
+        where: { payrollPeriodId: id },
+        orderBy: { version: 'desc' },
+      })
+      const version = (latestBatch?.version ?? 0) + 1
+      await prisma.payrollPreparationBatch.create({
+        data: {
+          payrollPeriodId: id,
+          version,
+          batchName: `${period.periodName || 'Period'} - Blocked v${version}`,
+          payrollPeriodStart: period.periodStart,
+          payrollPeriodEnd: period.periodEnd,
+          calculationStatus: 'FAILED',
+          status: 'DRAFT',
+          employeeCount: readiness.selectedEmployeeCount,
+          grossEarningsTotal: 0,
+          taxableIncomeTotal: 0,
+          payeTaxTotal: 0,
+          employeePensionTotal: 0,
+          employerPensionTotal: 0,
+          netSalaryTotal: 0,
+          employerTotalCost: 0,
+          blockerCount: readiness.blockedEmployeeCount,
+          notes: `Calculation blocked: ${[...readiness.periodBlockers, ...readiness.employeeResults.flatMap(e => e.blockers)].join(', ')}`,
+          calculatedById: session.userId,
+          calculationStartedAt: new Date(),
+          calculationCompletedAt: new Date(),
+          createdById: session.userId,
+        },
+      })
+      return success({
+        blocked: true,
+        readyForCalculation: false,
+        periodBlockers: readiness.periodBlockers,
+        periodWarnings: readiness.periodWarnings,
+        selectedEmployeeCount: readiness.selectedEmployeeCount,
+        readyEmployeeCount: readiness.readyEmployeeCount,
+        warningEmployeeCount: readiness.warningEmployeeCount,
+        blockedEmployeeCount: readiness.blockedEmployeeCount,
+      })
+    }
+
     const ctx = await buildCalculationContext(id, session.userId)
     if (!ctx) return notFound()
     if (ctx.employees.length === 0) return badRequest('No selected employees')
-
-    // Check readiness across all employees
-    for (const emp of ctx.employees) {
-      const readiness = await checkEmployeeReadiness(emp.id, emp, id, ctx.periodEnd, ctx.payDate)
-      if (readiness.blockers.length > 0) {
-        await createAuditLog({
-          userId: session.userId, action: 'PAYROLL_CALCULATION_BLOCKED',
-          entityType: 'PayrollPeriod', entityId: id,
-          newValue: { employeeId: emp.id, blockers: readiness.blockers },
-        })
-        return success({ blocked: true, employeeId: emp.id, blockers: readiness.blockers })
-      }
-    }
 
     // Calculate
     const results: Awaited<ReturnType<typeof calculateEmployeePayroll>>[] = []

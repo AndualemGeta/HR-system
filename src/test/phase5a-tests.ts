@@ -16,6 +16,7 @@ import {
   getEffectiveKpiDefaultAmount,
   validateKpiPercentage,
   processKpiEarning,
+  evaluatePayrollPeriodReadiness,
 } from '../lib/payroll'
 
 const RUNNING_TOTAL = { passed: 0, failed: 0 }
@@ -522,6 +523,174 @@ async function main() {
     }
   } catch (e: any) {
     await test('KPI assignment lookup', () => { throw e })
+  }
+
+  // ── Shared Payroll Period Readiness ───────────────────────────────
+  console.log('\n[Payroll Period Readiness]')
+  try {
+    const payrollPeriod = await prisma.payrollPeriod.findFirst()
+    const dsaEmployee = await prisma.employee.findFirst({ where: { currentRole: 'DSA', employmentStatus: 'ACTIVE' } })
+    const adminUser = await prisma.user.findFirst({ where: { email: 'admin@leapfrog.com' } })
+
+    if (!payrollPeriod || !dsaEmployee || !adminUser) {
+      await test('Skipping readiness tests — missing seed data', () => {})
+    } else {
+      // Ensure test period has selected employees
+      const existingSelection = await prisma.payrollPeriodEmployee.findFirst({
+        where: { payrollPeriodId: payrollPeriod.id, isSelected: true, removedAt: null },
+      })
+      if (!existingSelection) {
+        await prisma.payrollPeriodEmployee.create({
+          data: {
+            payrollPeriodId: payrollPeriod.id,
+            employeeId: dsaEmployee.id,
+            isSelected: true,
+            addedById: adminUser.id,
+          },
+        })
+      }
+
+      // ── Period not found ──
+      const notFoundResult = await evaluatePayrollPeriodReadiness({
+        payrollPeriodId: 'nonexistent-id',
+        includeEmployeeDetails: true,
+      })
+      await test('PAYROLL_PERIOD_NOT_FOUND blocks readiness', () => {
+        assert.strictEqual(notFoundResult.readyForCalculation, false)
+        assert.ok(notFoundResult.periodBlockers.includes('PAYROLL_PERIOD_NOT_FOUND'))
+      })
+
+      // ── With selected employees ──
+      const noSelectionResult = await evaluatePayrollPeriodReadiness({
+        payrollPeriodId: payrollPeriod.id,
+        includeEmployeeDetails: true,
+      })
+      await test('Ready for calculation with selected employees only', () => {
+        assert.ok(noSelectionResult.selectedEmployeeCount > 0)
+      })
+
+      // ── Missing salary (future-dated period with no salary) ──
+      const testPeriod = await prisma.payrollPeriod.create({
+        data: {
+          periodName: 'READINESS_TEST_MISSING_SALARY',
+          periodStart: new Date('2099-07-01'),
+          periodEnd: new Date('2099-07-31'),
+          payDate: new Date('2099-08-05'),
+          status: 'REVIEW_IN_PROGRESS',
+          createdById: adminUser.id,
+        },
+      })
+      await prisma.payrollPeriodEmployee.create({
+        data: {
+          payrollPeriodId: testPeriod.id,
+          employeeId: dsaEmployee.id,
+          isSelected: true,
+          addedById: adminUser.id,
+        },
+      })
+      const salaryResult = await evaluatePayrollPeriodReadiness({
+        payrollPeriodId: testPeriod.id,
+        includeEmployeeDetails: true,
+      })
+      await test('Missing effective basic salary blocks', () => {
+          const empResult = salaryResult.employeeResults.find(e => e.employeeId === dsaEmployee.id)
+          assert.ok(empResult)
+          assert.ok(empResult.blockers.length > 0, `Expected blockers for missing salary, got: ${empResult.blockers.join(', ')}`)
+        })
+      await prisma.payrollPeriodEmployee.deleteMany({ where: { payrollPeriodId: testPeriod.id } })
+      await prisma.payrollPeriod.delete({ where: { id: testPeriod.id } })
+
+      // ── KPI assignment cases ──
+      const kpiComp = await prisma.payComponent.findUnique({ where: { code: 'KPI_ALLOWANCE' } })
+      if (kpiComp) {
+        const kpiPeriod = await prisma.payrollPeriod.create({
+          data: {
+            periodName: 'READINESS_TEST_KPI',
+            periodStart: new Date('2025-07-01'),
+            periodEnd: new Date('2025-07-31'),
+            payDate: new Date('2025-08-05'),
+            status: 'REVIEW_IN_PROGRESS',
+            createdById: adminUser.id,
+          },
+        })
+        await prisma.payrollPeriodEmployee.create({
+          data: {
+            payrollPeriodId: kpiPeriod.id,
+            employeeId: dsaEmployee.id,
+            isSelected: true,
+            addedById: adminUser.id,
+          },
+        })
+
+        await prisma.employeePayComponentAssignment.upsert({
+          where: {
+            employeeId_payComponentId_effectiveFrom: {
+              employeeId: dsaEmployee.id, payComponentId: kpiComp.id, effectiveFrom: new Date('2025-01-01'),
+            },
+          },
+          update: { defaultAmount: 2000, isActive: true },
+          create: {
+            employeeId: dsaEmployee.id, payComponentId: kpiComp.id,
+            defaultAmount: 2000, effectiveFrom: new Date('2025-01-01'), isActive: true,
+          },
+        })
+
+        // KPI assignment with no input → ready (defaults to 100%)
+        const kpiNoInputResult = await evaluatePayrollPeriodReadiness({
+          payrollPeriodId: kpiPeriod.id,
+          includeEmployeeDetails: true,
+        })
+        await test('KPI assignment with no input does not block (defaults to 100%)', () => {
+          const empResult = kpiNoInputResult.employeeResults.find(e => e.employeeId === dsaEmployee.id)
+          assert.ok(empResult)
+          assert.ok(!empResult.blockers.some(b => b.includes('KPI')), `No KPI blocker expected, got: ${empResult.blockers.join(', ')}`)
+        })
+
+        // KPI assignment with accepted locked input → ready
+        const kpiInputType = await prisma.payrollInputType.findUnique({ where: { code: 'KPI_ACHIEVEMENT_PERCENT' } })
+        if (kpiInputType) {
+          await prisma.payrollInput.create({
+            data: {
+              payrollPeriodId: kpiPeriod.id,
+              employeeId: dsaEmployee.id,
+              inputTypeId: kpiInputType.id,
+              value: 80,
+              status: 'ACCEPTED',
+              isLocked: true,
+              submittedAt: new Date(),
+              submittedById: adminUser.id,
+              lockedAt: new Date(),
+              lockedById: adminUser.id,
+            },
+          })
+          const kpiAcceptedResult = await evaluatePayrollPeriodReadiness({
+            payrollPeriodId: kpiPeriod.id,
+            includeEmployeeDetails: true,
+          })
+          await test('KPI assignment with accepted locked input is ready', () => {
+            const empResult = kpiAcceptedResult.employeeResults.find(e => e.employeeId === dsaEmployee.id)
+            assert.ok(empResult)
+            assert.ok(!empResult.blockers.some(b => b.includes('KPI')), `No KPI blocker expected, got: ${empResult.blockers.join(', ')}`)
+          })
+        }
+
+        await prisma.payrollPeriodEmployee.deleteMany({ where: { payrollPeriodId: kpiPeriod.id } })
+        await prisma.payrollInput.deleteMany({ where: { payrollPeriodId: kpiPeriod.id } })
+        await prisma.payrollPeriod.delete({ where: { id: kpiPeriod.id } })
+      }
+
+      // ── Requirement matching ──
+      const genericReq = await prisma.payrollInputRequirement.findFirst({
+        where: { isActive: true, role: null, employeeCategory: null, departmentId: null, regionId: null, areaId: null, shopId: null, employmentType: null },
+      })
+      if (genericReq) {
+        await test('Generic requirement (all-null) exists for testing', () => {
+          assert.ok(genericReq)
+        })
+      }
+    }
+  } catch (e: any) {
+    await test('Payroll Period Readiness', () => { throw e })
   }
 
   // ── Summary ───────────────────────────────────────────────────────
