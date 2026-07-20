@@ -301,7 +301,8 @@ export async function calculateEmployeePayroll(
   const netSalary = roundMoney(money(grossSalary).minus(totalDeductions))
   if (netSalary < 0) blockers.push('NEGATIVE_NET_SALARY')
 
-  const employerTotalCost = roundMoney(money(grossSalary).plus(employerPension))
+  const otherEmployerContributions = sumMoney(...lines.filter(l => l.employerAmount > 0 && l.lineType !== 'EMPLOYER_PENSION').map(l => l.employerAmount))
+  const employerTotalCost = roundMoney(money(grossSalary).plus(employerPension).plus(otherEmployerContributions))
 
   // ── Line additions: pension, PAYE ──
   if (pensionRule && employeePension > 0) {
@@ -416,7 +417,7 @@ export async function calculateEmployeePayroll(
     totalDeductions,
     netSalary,
     employerTotalCost,
-    otherEmployerContributions: 0,
+    otherEmployerContributions,
     lines,
     blockers,
     warnings,
