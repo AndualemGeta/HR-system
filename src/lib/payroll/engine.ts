@@ -4,6 +4,7 @@ import { resolveSalary, mapSalarySourceToCalculationSource, calcProratedSalary, 
 import { selectPensionRule, getApprovedPensionRules, calcPension, determinePensionableIncome } from './pension'
 import { selectPayeBracket, getApprovedPayeBrackets, calcPaye } from './tax'
 import { validatePayComponent, processEarningInput, processDeductionInput, getEffectiveKpiDefaultAmount, validateKpiPercentage, processKpiEarning, processRuleDerivedInput } from './components'
+import { resolveSourceAdapters } from './sources'
 import type { CalculationContext, CalculationResult, CalculationLine, PayComponentInfo } from './types'
 
 export async function buildCalculationContext(payrollPeriodId: string): Promise<CalculationContext | null> {
@@ -114,6 +115,9 @@ export async function calculateEmployeePayroll(
       calculationNote: ctx.prorationMethod !== 'NONE' ? `Proration: ${ctx.prorationMethod} (${eligibleDays}/${periodDays})` : null,
     })
   }
+
+  const { allowanceLines, deductionLines, adjustmentLines, commissionLines } = await resolveSourceAdapters(emp.id, ctx.periodStart, ctx.periodEnd)
+  for (const al of [...allowanceLines, ...adjustmentLines, ...commissionLines, ...deductionLines]) lines.push(al)
 
   const acceptedInputs = await prisma.payrollInput.findMany({
     where: { payrollPeriodId: ctx.payrollPeriodId, employeeId: emp.id, status: 'ACCEPTED', isLocked: true },
