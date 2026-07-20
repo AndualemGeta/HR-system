@@ -70,6 +70,8 @@ export function determinePensionableIncome(
       return proratedBasicSalary
     case 'PENSIONABLE_EARNINGS':
       return round2(lines.reduce((sum, l) => sum + (l.pensionableAmount ?? 0), 0))
+    case 'CUSTOM_COMPONENTS':
+      return round2(lines.filter(l => l.pensionableAmount > 0 && l.componentCode !== 'BASIC_SALARY').reduce((sum, l) => sum + (l.pensionableAmount ?? 0), 0))
     default:
       return proratedBasicSalary
   }

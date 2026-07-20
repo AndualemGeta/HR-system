@@ -36,6 +36,7 @@ export interface PayComponentInfo {
 
 export interface PayeBracket {
   id: string
+  scheduleCode: string | null
   minIncome: number
   maxIncome: number | null
   taxRate: number

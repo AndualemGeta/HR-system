@@ -118,14 +118,14 @@ async function main() {
   // ── PAYE ──────────────────────────────────────────────────────────
   console.log('\n[PAYE]')
   const brackets = [
-    { id: 'b1', minIncome: 0, maxIncome: 600, taxRate: 0, deductionAmount: 0 },
-    { id: 'b2', minIncome: 600, maxIncome: 1650, taxRate: 10, deductionAmount: 60 },
-    { id: 'b3', minIncome: 1650, maxIncome: 3200, taxRate: 15, deductionAmount: 142.50 },
-    { id: 'b4', minIncome: 3200, maxIncome: 5250, taxRate: 20, deductionAmount: 302.50 },
-    { id: 'b5', minIncome: 5250, maxIncome: 7800, taxRate: 25, deductionAmount: 565 },
-    { id: 'b6', minIncome: 7800, maxIncome: 10900, taxRate: 30, deductionAmount: 955 },
-    { id: 'b7', minIncome: 10900, maxIncome: 15000, taxRate: 35, deductionAmount: 1500 },
-    { id: 'b8', minIncome: 15000, maxIncome: null, taxRate: 40, deductionAmount: 2250 },
+    { id: 'b1', minIncome: 0, maxIncome: 600, taxRate: 0, deductionAmount: 0, scheduleCode: 'TEST' },
+    { id: 'b2', minIncome: 600, maxIncome: 1650, taxRate: 10, deductionAmount: 60, scheduleCode: 'TEST' },
+    { id: 'b3', minIncome: 1650, maxIncome: 3200, taxRate: 15, deductionAmount: 142.50, scheduleCode: 'TEST' },
+    { id: 'b4', minIncome: 3200, maxIncome: 5250, taxRate: 20, deductionAmount: 302.50, scheduleCode: 'TEST' },
+    { id: 'b5', minIncome: 5250, maxIncome: 7800, taxRate: 25, deductionAmount: 565, scheduleCode: 'TEST' },
+    { id: 'b6', minIncome: 7800, maxIncome: 10900, taxRate: 30, deductionAmount: 955, scheduleCode: 'TEST' },
+    { id: 'b7', minIncome: 10900, maxIncome: 15000, taxRate: 35, deductionAmount: 1500, scheduleCode: 'TEST' },
+    { id: 'b8', minIncome: 15000, maxIncome: null, taxRate: 40, deductionAmount: 2250, scheduleCode: 'TEST' },
   ]
 
   await test('Empty brackets returns null with MISSING_PAYE_SCHEDULE', () => {
@@ -156,8 +156,8 @@ async function main() {
   })
   await test('Schedule gap detected', () => {
     const gapBrackets = [
-      { id: 'b1', minIncome: 0, maxIncome: 1000, taxRate: 10, deductionAmount: 0 },
-      { id: 'b2', minIncome: 2000, maxIncome: null, taxRate: 20, deductionAmount: 100 },
+      { id: 'b1', minIncome: 0, maxIncome: 1000, taxRate: 10, deductionAmount: 0, scheduleCode: 'TEST' },
+      { id: 'b2', minIncome: 2000, maxIncome: null, taxRate: 20, deductionAmount: 100, scheduleCode: 'TEST' },
     ]
     const { bracket, blockers } = selectPayeBracket(1500, gapBrackets)
     assert.strictEqual(bracket, null)
@@ -165,8 +165,8 @@ async function main() {
   })
   await test('Multiple matching brackets returns null', () => {
     const overlapping = [
-      { id: 'b1', minIncome: 0, maxIncome: 5000, taxRate: 10, deductionAmount: 0 },
-      { id: 'b2', minIncome: 0, maxIncome: 5000, taxRate: 15, deductionAmount: 50 },
+      { id: 'b1', minIncome: 0, maxIncome: 5000, taxRate: 10, deductionAmount: 0, scheduleCode: 'TEST' },
+      { id: 'b2', minIncome: 0, maxIncome: 5000, taxRate: 15, deductionAmount: 50, scheduleCode: 'TEST' },
     ]
     const { bracket, blockers } = selectPayeBracket(3000, overlapping)
     assert.strictEqual(bracket, null)

@@ -13,6 +13,11 @@ export function selectPayeBracket(taxableIncome: number, brackets: PayeBracket[]
     blockers.push('MISSING_PAYE_SCHEDULE')
     return { bracket: null, blockers }
   }
+  const codes = new Set(brackets.map(b => b.scheduleCode).filter(Boolean))
+  if (codes.size > 1) {
+    blockers.push('MULTIPLE_PAYE_SCHEDULE_CODES')
+    return { bracket: null, blockers }
+  }
   const matching = brackets.filter(b => {
     if (b.maxIncome === null) return taxableIncome >= b.minIncome
     return taxableIncome >= b.minIncome && taxableIncome < b.maxIncome
@@ -41,6 +46,7 @@ export async function getApprovedPayeBrackets(payDate: Date): Promise<PayeBracke
   })
   return brackets.map(b => ({
     id: b.id,
+    scheduleCode: b.scheduleCode,
     minIncome: Number(b.minIncome),
     maxIncome: b.maxIncome ? Number(b.maxIncome) : null,
     taxRate: Number(b.taxRate),
