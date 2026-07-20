@@ -577,6 +577,10 @@ enum AuditAction {
   PAYROLL_CALCULATION_REOPEN
   PAYROLL_CALCULATION_VALIDATE
   PAYROLL_CALCULATION_EXPORT
+  KPI_ASSIGNMENT_CREATE
+  KPI_ASSIGNMENT_CHANGE
+  KPI_ASSIGNMENT_CLOSE
+  KPI_ASSIGNMENT_DEACTIVATE
   OTHER
 }
 
@@ -1851,6 +1855,7 @@ model PayrollPeriod {
   periodEnd       DateTime
   payDate         DateTime
   status          PayrollPeriodStatus         @default(DRAFT)
+  prorationMethod String                      @default("NONE")
   createdById     String?
   createdAt       DateTime                    @default(now())
   updatedAt       DateTime                    @updatedAt

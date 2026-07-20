@@ -76,7 +76,7 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
       })
     }
 
-    const ctx = await buildCalculationContext(id, session.userId)
+    const ctx = await buildCalculationContext(id)
     if (!ctx) return notFound()
     if (ctx.employees.length === 0) return badRequest('No selected employees')
 

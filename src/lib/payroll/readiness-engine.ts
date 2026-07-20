@@ -1,5 +1,5 @@
 import { prisma } from '@/lib/prisma'
-import { resolveSalary } from './salary'
+import { resolveSalary, resolveProrationPolicy } from './salary'
 import { selectPensionRule, getApprovedPensionRules } from './pension'
 import { getApprovedPayeBrackets } from './tax'
 import { validatePayComponent, getEffectiveKpiDefaultAmount } from './components'
@@ -344,7 +344,28 @@ export async function evaluatePayrollPeriodReadiness(options: {
       empBlockers.push('MISSING_PAYMENT_METHOD')
     }
 
-    // ── 5. Required input checks ───────────────────────────────────────────
+    // ── 5. Proration readiness ──────────────────────────────────────────────
+    const prorationMethod = await resolveProrationPolicy(payrollPeriodId)
+    if (prorationMethod === 'WORKING_DAYS') {
+      const attendance = await prisma.payrollAttendanceInput.findFirst({
+        where: { employeeId: emp.id, payrollPeriodStart: period.periodStart, payrollPeriodEnd: period.periodEnd },
+      })
+      const wd = attendance?.workingDays ? Number(attendance.workingDays) : 0
+      if (wd <= 0) {
+        empBlockers.push('MISSING_ATTENDANCE_INPUT')
+      }
+    } else if (prorationMethod === 'MANUAL') {
+      const manualInput = allInputs.find(
+        inp => inp.employeeId === emp.id && inp.inputType.code === 'MANUAL_PRORATION'
+      )
+      if (!manualInput || manualInput.status !== 'ACCEPTED' || !manualInput.isLocked) {
+        empBlockers.push('MISSING_MANUAL_PRORATION_INPUT')
+      }
+    } else if (prorationMethod !== 'NONE' && prorationMethod !== 'CALENDAR_DAYS') {
+      empBlockers.push('INVALID_PRORATION_POLICY')
+    }
+
+    // ── 6. Required input checks ───────────────────────────────────────────
     const empInputs = inputsByEmployee.get(emp.id) || []
     const empInputsByType = new Map(empInputs.map(i => [i.inputTypeId, i]))
     const empWaivers = waiversByEmployee.get(emp.id) || []
@@ -396,6 +417,21 @@ export async function evaluatePayrollPeriodReadiness(options: {
 
       if (inp.inputType.calculationMode === 'METRIC_ONLY' && inp.amount && Number(inp.amount) > 0) {
         empBlockers.push(`NON_AMOUNT_INPUT_REQUIRES_RULE:${inp.inputType.code}`)
+      }
+
+      if (inp.inputType.calculationMode === 'RULE_DERIVED' && inp.inputType.payComponent) {
+        const effectiveRule = await prisma.payRule.findFirst({
+          where: {
+            componentId: inp.inputType.payComponent.id,
+            status: 'ACTIVE',
+            effectiveFrom: { lte: period.payDate },
+            AND: [{ OR: [{ effectiveTo: null }, { effectiveTo: { gte: period.payDate } }] }],
+          },
+          orderBy: { priority: 'asc', effectiveFrom: 'desc' },
+        })
+        if (!effectiveRule) {
+          empBlockers.push(`MISSING_EFFECTIVE_PAY_RULE:${inp.inputType.code}`)
+        }
       }
 
       if (inp.inputType.payComponent) {

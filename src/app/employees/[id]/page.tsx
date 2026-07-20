@@ -1,8 +1,22 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
+import KpiAssignmentModal from '@/components/kpi-assignment-modal'
+import ReasonDialog from '@/components/ui/ReasonDialog'
+import ConfirmDialog from '@/components/ui/ConfirmDialog'
+
+interface KpiAssignment {
+  id: string; payComponentCode: string; defaultAmount: number
+  effectiveFrom: string; effectiveTo: string | null; isActive: boolean
+  createdAt: string; updatedAt: string
+}
+interface KpiData {
+  employeeId: string
+  currentAssignment: KpiAssignment | null
+  assignments: KpiAssignment[]
+}
 
 interface Employee {
   id: string; employeeId: string; fullName: string; firstName: string; middleName: string; lastName: string
@@ -38,6 +52,11 @@ export default function EmployeeDetailPage() {
   const [requiredDocStatus, setRequiredDocStatus] = useState<RequiredDocStatus[]>([])
   const [docCompletionPct, setDocCompletionPct] = useState(100)
   const [docBlockers, setDocBlockers] = useState<string[]>([])
+  const [kpiData, setKpiData] = useState<KpiData | null>(null)
+  const [kpiModal, setKpiModal] = useState<{ mode: 'CREATE' | 'CHANGE_AMOUNT' | 'CLOSE' | 'DEACTIVATE'; assignmentId?: string; currentAmount?: number } | null>(null)
+  const [docDeact, setDocDeact] = useState<{ docId: string } | null>(null)
+  const [onboardingConfirm, setOnboardingConfirm] = useState(false)
+  const [onboardingLoading, setOnboardingLoading] = useState(false)
 
   useEffect(() => {
     if (!params.id) return
@@ -49,7 +68,8 @@ export default function EmployeeDetailPage() {
       fetch(`/api/employees/${params.id}/onboarding`).then(r => r.json()),
       fetch(`/api/employees/${params.id}/documents`).then(r => r.json()),
       fetch(`/api/employees/${params.id}/required-documents`).then(r => r.json()),
-    ]).then(([meJson, empJson, assignJson, shJson, obJson, docJson, reqDocJson]) => {
+      fetch(`/api/employees/${params.id}/pay-component-assignments`).then(r => r.json()),
+    ]).then(([meJson, empJson, assignJson, shJson, obJson, docJson, reqDocJson, kpiJson]) => {
       const me = meJson.data || meJson
       setPerms(me.permissions || [])
       if (!empJson.data?.id) { router.push('/employees'); return }
@@ -64,46 +84,58 @@ export default function EmployeeDetailPage() {
         setDocCompletionPct(reqDocJson.data.completionPercentage || 0)
         setDocBlockers(reqDocJson.data.blockers || [])
       }
+      if (kpiJson.data) setKpiData(kpiJson.data)
     }).catch(() => router.push('/login'))
     .finally(() => setLoading(false))
   }, [params.id, router])
+
+  const refreshKpi = useCallback(() => {
+    fetch(`/api/employees/${params.id}/pay-component-assignments`).then(r => r.json()).then(j => { if (j.data) setKpiData(j.data) })
+  }, [params.id])
 
   async function downloadDocument(docId: string) {
     window.open(`/api/employees/${params.id}/documents/${docId}/download`, '_blank')
   }
 
-  async function deactivateDocument(docId: string) {
-    const reason = prompt('Deactivation reason (required):')
-    if (reason === null || !reason.trim()) return
+  const [docDeactError, setDocDeactError] = useState<string | null>(null)
+  const [docDeactLoading, setDocDeactLoading] = useState(false)
+
+  async function deactivateDocumentWithReason(docId: string, reason: string) {
+    setDocDeactLoading(true)
+    setDocDeactError(null)
     const res = await fetch(`/api/employees/${params.id}/documents/${docId}/deactivate`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ reason: reason.trim() }),
+      body: JSON.stringify({ reason }),
     })
     if (res.ok) {
       window.location.reload()
     } else {
       const json = await res.json()
-      alert(json.error || 'Failed to deactivate document')
+      setDocDeactError(json.error || 'Failed to deactivate document')
+      setDocDeactLoading(false)
     }
   }
 
-  async function completeOnboarding() {
-    const reason = prompt('Override reason (leave blank if no override needed):')
-    if (reason === null) return
-    const res = await fetch(`/api/employees/${params.id}/onboarding/complete`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ override: reason.length > 0, overrideReason: reason }),
-    })
-    const json = await res.json()
-    const data = json.data || json
-    if (!data.canComplete && data.blockers?.length > 0) {
-      alert(`Onboarding blocked:\n${data.blockers.join('\n')}\n\nUse override reason to bypass.`)
-      return
+  async function completeOnboarding(reason: string) {
+    setOnboardingLoading(true)
+    try {
+      const res = await fetch(`/api/employees/${params.id}/onboarding/complete`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ override: reason.length > 0, overrideReason: reason }),
+      })
+      const json = await res.json()
+      const data = json.data || json
+      if (!data.canComplete && data.blockers?.length > 0) {
+        setOnboardingConfirm(false)
+        setOnboardingLoading(false)
+        return
+      }
+      window.location.reload()
+    } catch {
+      setOnboardingLoading(false)
     }
-    alert('Onboarding completed successfully!')
-    window.location.reload()
   }
 
   if (loading) return <div style={{ padding: '2rem', textAlign: 'center' }}>Loading...</div>
@@ -212,6 +244,54 @@ export default function EmployeeDetailPage() {
                 <InfoRow label="Started" value={new Date(activeAssignments[0].startDate).toLocaleDateString()} />
               </>
             )}
+            <hr style={{ border: 'none', borderTop: '1px solid #e5e7eb', margin: '0.75rem 0' }} />
+            <h3 style={{ margin: '0 0 0.5rem', fontSize: '1rem' }}>KPI Entitlement</h3>
+            {!kpiData || !kpiData.currentAssignment ? (
+              <p style={{ fontSize: '0.85rem', color: '#888' }}>No KPI entitlement</p>
+            ) : (
+              <>
+                <InfoRow label="KPI Default Amount" value={`ETB ${kpiData.currentAssignment.defaultAmount.toLocaleString()}`} />
+                <InfoRow label="KPI Effective From" value={new Date(kpiData.currentAssignment.effectiveFrom + 'T00:00:00').toLocaleDateString()} />
+                <InfoRow label="KPI Effective To" value={kpiData.currentAssignment.effectiveTo ? new Date(kpiData.currentAssignment.effectiveTo + 'T00:00:00').toLocaleDateString() : '—'} />
+                <InfoRow label="KPI Status" value={kpiData.currentAssignment.isActive ? 'Active' : 'Inactive'} />
+              </>
+            )}
+            {kpiData && kpiData.assignments.some(a => new Date(a.effectiveFrom + 'T00:00:00') > new Date() && a.isActive && !a.effectiveTo) && (
+              <div style={{ marginTop: '0.5rem', padding: '0.4rem', background: '#fef3c7', borderRadius: 4, fontSize: '0.8rem' }}>
+                <strong>Future Assignment:</strong> ETB {kpiData.assignments.filter(a => new Date(a.effectiveFrom + 'T00:00:00') > new Date() && a.isActive && !a.effectiveTo).map(a => a.defaultAmount.toLocaleString())} starting {kpiData.assignments.filter(a => new Date(a.effectiveFrom + 'T00:00:00') > new Date() && a.isActive && !a.effectiveTo).map(a => new Date(a.effectiveFrom + 'T00:00:00').toLocaleDateString()).join(', ')}
+              </div>
+            )}
+            {kpiData && kpiData.assignments.length > 0 && (
+              <details style={{ marginTop: '0.5rem', fontSize: '0.85rem' }}>
+                <summary style={{ cursor: 'pointer', color: '#2563eb' }}>View History ({kpiData.assignments.length})</summary>
+                <div style={{ marginTop: '0.5rem', maxHeight: 200, overflowY: 'auto' }}>
+                  {kpiData.assignments.map(a => {
+                    const isFuture = new Date(a.effectiveFrom + 'T00:00:00') > new Date()
+                    return (
+                      <div key={a.id} style={{ padding: '0.3rem 0', borderBottom: '1px solid #f0f0f0', fontSize: '0.8rem' }}>
+                        <strong>{!a.isActive ? 'Deactivated' : isFuture ? 'Future' : a.effectiveTo ? 'Closed' : 'Active'}</strong> · ETB {a.defaultAmount.toLocaleString()} · {new Date(a.effectiveFrom + 'T00:00:00').toLocaleDateString()}{a.effectiveTo ? ` → ${new Date(a.effectiveTo + 'T00:00:00').toLocaleDateString()}` : ' → Open'}
+                      </div>
+                    )
+                  })}
+                </div>
+              </details>
+            )}
+            {perms.includes('salary.update') && (
+              <div style={{ marginTop: '0.5rem', display: 'flex', flexWrap: 'wrap', gap: '0.35rem' }}>
+                {(!kpiData || !kpiData.currentAssignment) && (
+                  <button onClick={() => setKpiModal({ mode: 'CREATE' })} style={btn}>Add KPI</button>
+                )}
+                {kpiData?.currentAssignment && (
+                  <button onClick={() => setKpiModal({ mode: 'CHANGE_AMOUNT', assignmentId: kpiData.currentAssignment!.id, currentAmount: kpiData.currentAssignment!.defaultAmount })} style={btn}>Change Amount</button>
+                )}
+                {kpiData?.currentAssignment && !kpiData.currentAssignment.effectiveTo && (
+                  <button onClick={() => setKpiModal({ mode: 'CLOSE', assignmentId: kpiData.currentAssignment!.id })} style={btn}>Close</button>
+                )}
+                {kpiData?.currentAssignment && (
+                  <button onClick={() => setKpiModal({ mode: 'DEACTIVATE', assignmentId: kpiData.currentAssignment!.id })} style={{ ...btn, background: '#dc2626' }}>Deactivate</button>
+                )}
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -310,7 +390,7 @@ export default function EmployeeDetailPage() {
                           <button onClick={() => downloadDocument(d.id)} style={{ fontSize: '0.8rem', padding: '0.2rem 0.5rem', background: '#2563eb', color: '#fff', border: 'none', borderRadius: 3, cursor: 'pointer' }}>Download</button>
                         )}
                         {perms.includes('document.deactivate') && (
-                          <button onClick={() => deactivateDocument(d.id)} style={{ fontSize: '0.8rem', padding: '0.2rem 0.5rem', background: '#dc2626', color: '#fff', border: 'none', borderRadius: 3, cursor: 'pointer' }}>Deactivate</button>
+                          <button onClick={() => setDocDeact({ docId: d.id })} style={{ fontSize: '0.8rem', padding: '0.2rem 0.5rem', background: '#dc2626', color: '#fff', border: 'none', borderRadius: 3, cursor: 'pointer' }}>Deactivate</button>
                         )}
                       </div>
                     )}
@@ -354,12 +434,50 @@ export default function EmployeeDetailPage() {
 
           {perms.includes('onboarding.complete') && (
             <div style={{ marginTop: '1rem' }}>
-              <button onClick={completeOnboarding} style={{ background: '#16a34a', color: '#fff', padding: '0.5rem 1.5rem', border: 'none', borderRadius: 4, cursor: 'pointer', fontSize: '0.9rem' }}>
+              <button onClick={() => setOnboardingConfirm(true)} style={{ background: '#16a34a', color: '#fff', padding: '0.5rem 1.5rem', border: 'none', borderRadius: 4, cursor: 'pointer', fontSize: '0.9rem' }}>
                 Complete Onboarding
               </button>
             </div>
           )}
         </div>
+      )}
+
+      {kpiModal && (
+        <KpiAssignmentModal
+          mode={kpiModal.mode}
+          employeeId={params.id as string}
+          assignmentId={kpiModal.assignmentId}
+          currentAmount={kpiModal.currentAmount}
+          onClose={() => setKpiModal(null)}
+          onSuccess={() => { setKpiModal(null); refreshKpi() }}
+        />
+      )}
+
+      {docDeact && (
+        <ReasonDialog
+          open
+          title="Deactivate Document"
+          message="Are you sure you want to deactivate this document?"
+          reasonLabel="Deactivation reason"
+          confirmLabel="Deactivate"
+          danger
+          onSubmit={reason => deactivateDocumentWithReason(docDeact.docId, reason)}
+          onCancel={() => { setDocDeact(null); setDocDeactError(null); setDocDeactLoading(false) }}
+          loading={docDeactLoading}
+          apiError={docDeactError}
+        />
+      )}
+
+      {onboardingConfirm && (
+        <ReasonDialog
+          open
+          title="Complete Onboarding"
+          message="Provide a reason if overriding incomplete items, or leave blank to complete as-is."
+          reasonLabel="Override reason (optional)"
+          confirmLabel={onboardingLoading ? 'Processing...' : 'Complete'}
+          onSubmit={reason => completeOnboarding(reason)}
+          onCancel={() => { setOnboardingConfirm(false); setOnboardingLoading(false) }}
+        />
       )}
     </div>
   )
@@ -367,3 +485,4 @@ export default function EmployeeDetailPage() {
 
 const th: React.CSSProperties = { textAlign: 'left', padding: '0.5rem', fontSize: '0.85rem', fontWeight: 600, borderBottom: '2px solid #e5e7eb' }
 const td: React.CSSProperties = { padding: '0.5rem', fontSize: '0.9rem' }
+const btn: React.CSSProperties = { fontSize: '0.75rem', padding: '0.25rem 0.5rem', background: '#2563eb', color: '#fff', border: 'none', borderRadius: 3, cursor: 'pointer' }

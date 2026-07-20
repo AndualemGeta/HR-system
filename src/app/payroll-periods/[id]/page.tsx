@@ -212,6 +212,9 @@ export default function PayrollPeriodDetailPage() {
             {has('payrollPreparationSummary.view') && (
               <a href={`/payroll-periods/${id}/preparation-summary`} style={{ background: '#8b5cf6', color: '#fff', padding: '0.35rem 0.75rem', borderRadius: 4, textDecoration: 'none', fontSize: '0.85rem' }}>Summary</a>
             )}
+            {has('salary.view') && (
+              <a href={`/payroll-periods/${id}/kpi-inputs`} style={{ background: '#f59e0b', color: '#fff', padding: '0.35rem 0.75rem', borderRadius: 4, textDecoration: 'none', fontSize: '0.85rem' }}>KPI %</a>
+            )}
           </div>
         </div>
       </div>

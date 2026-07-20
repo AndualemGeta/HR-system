@@ -24,7 +24,8 @@ export default function NewEmployeePage() {
     currentRole: '', currentLevel: '',
     currentDepartmentId: '', currentDivisionId: '', currentRegionId: '',
     currentAreaId: '', currentShopId: '', currentClusterId: '',
-    directManagerId: '', accountingReportingManagerId: '', basicSalary: '',
+    directManagerId: '', accountingReportingManagerId: '', basicSalary: '', salaryEffectiveDate: '',
+    kpiDefaultAmount: '', kpiEffectiveFrom: '',
   })
 
   useEffect(() => {
@@ -67,6 +68,9 @@ export default function NewEmployeePage() {
     const payload: Record<string, unknown> = { ...form, employeeCategory: category }
     if (!payload.basicSalary) delete payload.basicSalary
     else payload.basicSalary = parseFloat(payload.basicSalary as string)
+    if (!payload.kpiDefaultAmount) delete payload.kpiDefaultAmount
+    else payload.kpiDefaultAmount = parseFloat(payload.kpiDefaultAmount as string)
+    if (!payload.kpiEffectiveFrom) delete payload.kpiEffectiveFrom
     if (!payload.dateOfBirth) delete payload.dateOfBirth
     if (!payload.hireDate) delete payload.hireDate
     if (!payload.notes) delete payload.notes
@@ -295,8 +299,15 @@ export default function NewEmployeePage() {
           <legend style={{ fontWeight: 600 }}>Compensation</legend>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
             <Field label="Basic Salary" value={form.basicSalary} onChange={v => set('basicSalary', v)} type="number" />
-            <Field label="Notes" value={form.notes} onChange={v => set('notes', v)} />
+            <Field label="Salary Effective Date" value={form.salaryEffectiveDate} onChange={v => set('salaryEffectiveDate', v)} type="date" />
           </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginTop: '0.75rem', borderTop: '1px solid #e5e7eb', paddingTop: '0.75rem' }}>
+            <Field label="KPI Default Amount" value={form.kpiDefaultAmount} onChange={v => set('kpiDefaultAmount', v)} type="number" />
+            <Field label="KPI Effective From" value={form.kpiEffectiveFrom} onChange={v => set('kpiEffectiveFrom', v)} type="date" />
+          </div>
+          <p style={{ margin: '0.5rem 0 0', fontSize: '0.8rem', color: '#888' }}>
+            KPI fields must be supplied together. Missing payroll percentage defaults to 100%.
+          </p>
         </fieldset>
 
         <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end' }}>

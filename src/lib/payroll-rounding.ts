@@ -1,13 +1,15 @@
+import { roundMoney, sumMoney } from './money'
+
 export function round2(value: number): number {
-  return Math.round(value * 100) / 100
+  return roundMoney(value)
 }
 
 export function round4(value: number): number {
-  return Math.round(value * 10000) / 10000
+  return Number(value.toFixed(4))
 }
 
 export function sum(...values: number[]): number {
-  return values.reduce((acc, v) => acc + (v ?? 0), 0)
+  return sumMoney(...values)
 }
 
 export function max0(value: number): number {

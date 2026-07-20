@@ -1,12 +1,12 @@
 import { prisma } from '@/lib/prisma'
-import { round2 } from '@/lib/payroll-rounding'
-import { resolveSalary, mapSalarySourceToCalculationSource } from './salary'
+import { roundMoney, sumMoney, money, validateReconciliation } from '@/lib/money'
+import { resolveSalary, mapSalarySourceToCalculationSource, calcProratedSalary, resolveProrationPolicy } from './salary'
 import { selectPensionRule, getApprovedPensionRules, calcPension, determinePensionableIncome } from './pension'
 import { selectPayeBracket, getApprovedPayeBrackets, calcPaye } from './tax'
-import { validatePayComponent, processEarningInput, processDeductionInput, getEffectiveKpiDefaultAmount, validateKpiPercentage, processKpiEarning } from './components'
+import { validatePayComponent, processEarningInput, processDeductionInput, getEffectiveKpiDefaultAmount, validateKpiPercentage, processKpiEarning, processRuleDerivedInput } from './components'
 import type { CalculationContext, CalculationResult, CalculationLine, PayComponentInfo } from './types'
 
-export async function buildCalculationContext(payrollPeriodId: string, sessionUserId: string): Promise<CalculationContext | null> {
+export async function buildCalculationContext(payrollPeriodId: string): Promise<CalculationContext | null> {
   const period = await prisma.payrollPeriod.findUnique({ where: { id: payrollPeriodId } })
   if (!period) return null
 
@@ -24,6 +24,8 @@ export async function buildCalculationContext(payrollPeriodId: string, sessionUs
     },
   })
 
+  const prorationMethod = await resolveProrationPolicy(payrollPeriodId)
+
   return {
     payrollPeriodId,
     periodStart: period.periodStart,
@@ -34,7 +36,7 @@ export async function buildCalculationContext(payrollPeriodId: string, sessionUs
       ...pe.employee,
       basicSalary: pe.employee.basicSalary ? Number(pe.employee.basicSalary) : null,
     })),
-    prorationMethod: 'NONE',
+    prorationMethod,
   }
 }
 
@@ -47,14 +49,55 @@ export async function calculateEmployeePayroll(
   const lines: CalculationLine[] = []
 
   const salary = await resolveSalary(emp.id, ctx.periodEnd)
-  if (!salary.basicSalary || salary.basicSalary <= 0) {
+  const basicSalary = salary.basicSalary || 0
+  if (basicSalary <= 0) {
     blockers.push('MISSING_EFFECTIVE_BASIC_SALARY')
   }
 
-  const proratedBasicSalary = salary.basicSalary || 0
+  // ── Proration ──
+  const periodDays = Math.ceil((ctx.periodEnd.getTime() - ctx.periodStart.getTime()) / (1000 * 60 * 60 * 24)) + 1
+  let eligibleDays = periodDays
+
+  if (ctx.prorationMethod === 'WORKING_DAYS') {
+    const attendance = await prisma.payrollAttendanceInput.findFirst({
+      where: { employeeId: emp.id, payrollPeriodStart: ctx.periodStart, payrollPeriodEnd: ctx.periodEnd },
+    })
+    const wd = attendance?.workingDays ? Number(attendance.workingDays) : 0
+    if (wd > 0) {
+      eligibleDays = wd
+    } else {
+      blockers.push('MISSING_ATTENDANCE_INPUT')
+    }
+    if (eligibleDays <= 0 || eligibleDays > periodDays) {
+      blockers.push('INVALID_WORKING_DAYS')
+    }
+  }
+
+  if (ctx.prorationMethod === 'MANUAL') {
+    const manualInput = await prisma.payrollInput.findFirst({
+      where: { payrollPeriodId: ctx.payrollPeriodId, employeeId: emp.id, inputType: { code: 'MANUAL_PRORATION' } },
+    })
+    if (manualInput && manualInput.status === 'ACCEPTED' && manualInput.isLocked) {
+      eligibleDays = Number(manualInput.value) || 1
+    } else {
+      blockers.push('MISSING_MANUAL_PRORATION_INPUT')
+    }
+    if (eligibleDays <= 0 || eligibleDays > periodDays) {
+      blockers.push('INVALID_PRORATION_VALUE')
+    }
+  }
+
+  const proratedBasicSalary = calcProratedSalary(basicSalary, ctx.prorationMethod, periodDays, eligibleDays)
+  if (proratedBasicSalary.warning) warnings.push(proratedBasicSalary.warning)
+  const pbs = proratedBasicSalary.prorated
+
+  if (ctx.prorationMethod !== 'NONE' && !['CALENDAR_DAYS', 'WORKING_DAYS', 'MANUAL'].includes(ctx.prorationMethod)) {
+    blockers.push('INVALID_PRORATION_POLICY')
+  }
+
   const salSource = mapSalarySourceToCalculationSource(salary.salarySource)
 
-  if (proratedBasicSalary > 0) {
+  if (pbs > 0) {
     lines.push({
       componentId: null,
       componentCode: 'BASIC_SALARY',
@@ -65,14 +108,14 @@ export async function calculateEmployeePayroll(
       quantity: null,
       rate: null,
       baseAmount: null,
-      grossAmount: proratedBasicSalary,
-      taxableAmount: proratedBasicSalary,
+      grossAmount: pbs,
+      taxableAmount: pbs,
       nonTaxableAmount: 0,
-      pensionableAmount: proratedBasicSalary,
+      pensionableAmount: pbs,
       deductionAmount: 0,
       employerAmount: 0,
       calculationOrder: 10,
-      calculationNote: null,
+      calculationNote: ctx.prorationMethod !== 'NONE' ? `Proration: ${ctx.prorationMethod} (${eligibleDays}/${periodDays})` : null,
     })
   }
 
@@ -81,8 +124,41 @@ export async function calculateEmployeePayroll(
     include: { inputType: { include: { payComponent: true } } },
   })
 
+  const processedComponentCodes = new Set<string>()
+
   for (const inp of acceptedInputs) {
-    if (inp.inputType.calculationMode === 'METRIC_ONLY') continue
+    if (inp.inputType.calculationMode === 'RULE_DERIVED') {
+      const comp = inp.inputType.payComponent
+      if (!comp) {
+        blockers.push(`UNMAPPED_PAYROLL_INPUT_TYPE:${inp.inputType.code}`)
+        continue
+      }
+      const ruleLine = await processRuleDerivedInput(
+        { id: inp.id, value: inp.value ? String(inp.value) : undefined, amount: inp.amount ? Number(inp.amount) : undefined },
+        comp,
+        ctx.payDate,
+      )
+      if (!ruleLine) {
+        blockers.push(`MISSING_EFFECTIVE_PAY_RULE:${comp.code}`)
+        continue
+      }
+      if (ruleLine.blocker) {
+        blockers.push(ruleLine.blocker)
+        continue
+      }
+      if (ruleLine.line) {
+        lines.push(ruleLine.line)
+        if (comp.code) processedComponentCodes.add(comp.code)
+      }
+      continue
+    }
+
+    if (inp.inputType.calculationMode === 'METRIC_ONLY') {
+      if (inp.amount && Number(inp.amount) > 0) {
+        blockers.push(`NON_AMOUNT_INPUT_REQUIRES_RULE:${inp.inputType.code}`)
+      }
+      continue
+    }
 
     const comp = inp.inputType.payComponent
     if (!comp) {
@@ -117,13 +193,20 @@ export async function calculateEmployeePayroll(
 
     if (pc.isDeduction) {
       if (amount < 0) blockers.push(`NEGATIVE_INPUT_AMOUNT:${comp.code}`)
-      else lines.push(processDeductionInput(amount, pc, inp.id))
+      else {
+        lines.push(processDeductionInput(amount, pc, inp.id))
+        processedComponentCodes.add(comp.code)
+      }
     } else {
       if (amount < 0) blockers.push(`NEGATIVE_INPUT_AMOUNT:${comp.code}`)
-      else lines.push(processEarningInput(amount, pc, inp.id))
+      else {
+        lines.push(processEarningInput(amount, pc, inp.id))
+        processedComponentCodes.add(comp.code)
+      }
     }
   }
 
+  // ── KPI processing ──
   const kpiInputType = await prisma.payrollInputType.findUnique({
     where: { code: 'KPI_ACHIEVEMENT_PERCENT' },
     include: { payComponent: true },
@@ -168,19 +251,34 @@ export async function calculateEmployeePayroll(
           blockers.push(`${percentageErr}:${kpiComp.code}`)
         } else {
           lines.push(processKpiEarning(kpiAssignment.defaultAmount, kpiPercentage, kpiPc))
+          processedComponentCodes.add(kpiComp.code)
         }
       }
     }
   }
 
-  const grossSalary = round2(lines.reduce((s, l) => s + l.grossAmount, 0))
-  const grossTaxable = round2(lines.reduce((s, l) => s + l.taxableAmount, 0))
-  const grossNonTaxable = round2(lines.reduce((s, l) => s + l.nonTaxableAmount, 0))
-  const preTaxDeductions = round2(lines.filter(l => l.calculationNote === 'Pre-tax deduction').reduce((s, l) => s + l.deductionAmount, 0))
-  const postTaxDeductions = round2(lines.filter(l => l.calculationNote === 'Post-tax deduction').reduce((s, l) => s + l.deductionAmount, 0))
+  // ── Duplicate component code from input + other-source detection ──
+  const seenCodes = new Map<string, string[]>()
+  for (const line of lines) {
+    const code = line.componentCode
+    if (!seenCodes.has(code)) seenCodes.set(code, [])
+    seenCodes.get(code)!.push(line.sourceType)
+  }
+  for (const [code, sources] of seenCodes) {
+    if (new Set(sources).size > 1) {
+      blockers.push(`DUPLICATE_COMPONENT_SOURCE:${code}`)
+    }
+  }
+
+  // ── Totals (decimal-safe) ──
+  const grossSalary = sumMoney(...lines.map(l => l.grossAmount))
+  const grossTaxable = sumMoney(...lines.map(l => l.taxableAmount))
+  const grossNonTaxable = sumMoney(...lines.map(l => l.nonTaxableAmount))
+  const preTaxDeductions = sumMoney(...lines.filter(l => l.calculationNote === 'Pre-tax deduction').map(l => l.deductionAmount))
+  const postTaxDeductions = sumMoney(...lines.filter(l => l.calculationNote === 'Post-tax deduction').map(l => l.deductionAmount))
 
   const payeBrackets = await getApprovedPayeBrackets(ctx.payDate)
-  const taxableIncome = round2(grossTaxable - preTaxDeductions)
+  const taxableIncome = roundMoney(money(grossTaxable).minus(preTaxDeductions))
   const { bracket, blockers: bracketBlockers } = selectPayeBracket(taxableIncome, payeBrackets)
   blockers.push(...bracketBlockers)
   const payeTax = bracket ? calcPaye(taxableIncome, bracket) : 0
@@ -193,18 +291,19 @@ export async function calculateEmployeePayroll(
   blockers.push(...pensionBlockers)
 
   const pensionableIncome = pensionRule
-    ? determinePensionableIncome(proratedBasicSalary, lines, pensionRule.pensionBaseType)
+    ? determinePensionableIncome(pbs, lines, pensionRule.pensionBaseType)
     : 0
   const { employeePension, employerPension } = pensionRule
     ? calcPension(pensionableIncome, pensionRule)
     : { employeePension: 0, employerPension: 0 }
 
-  const totalDeductions = round2(employeePension + payeTax + preTaxDeductions + postTaxDeductions)
-  const netSalary = round2(grossSalary - totalDeductions)
+  const totalDeductions = sumMoney(employeePension, payeTax, preTaxDeductions, postTaxDeductions)
+  const netSalary = roundMoney(money(grossSalary).minus(totalDeductions))
   if (netSalary < 0) blockers.push('NEGATIVE_NET_SALARY')
 
-  const employerTotalCost = round2(grossSalary + employerPension)
+  const employerTotalCost = roundMoney(money(grossSalary).plus(employerPension))
 
+  // ── Line additions: pension, PAYE ──
   if (pensionRule && employeePension > 0) {
     lines.push({
       componentId: null,
@@ -268,12 +367,42 @@ export async function calculateEmployeePayroll(
     })
   }
 
+  // ── Reconciliation ──
+  const reconIssues: string[] = []
+  const grossFromLines = sumMoney(...lines.map(l => l.grossAmount))
+  const grossRecon = validateReconciliation('Gross salary', grossFromLines, grossSalary)
+  if (grossRecon) reconIssues.push(grossRecon)
+
+  const taxableFromLines = sumMoney(...lines.map(l => l.taxableAmount))
+  const taxableRecon = validateReconciliation('Taxable earnings', taxableFromLines, grossTaxable)
+  if (taxableRecon) reconIssues.push(taxableRecon)
+
+  const deductionFromLines = sumMoney(...lines.filter(l => l.deductionAmount > 0).map(l => l.deductionAmount))
+  const deductionRecon = validateReconciliation('Total deductions', deductionFromLines, totalDeductions)
+  if (deductionRecon) reconIssues.push(deductionRecon)
+
+  const netCheck = roundMoney(money(grossSalary).minus(totalDeductions))
+  const netRecon = validateReconciliation('Net salary', netCheck, netSalary)
+  if (netRecon) reconIssues.push(netRecon)
+
+  const employerLineTotal = sumMoney(...lines.map(l => l.employerAmount))
+  const employerTotal = roundMoney(money(grossSalary).plus(employerLineTotal))
+  const employerRecon = validateReconciliation('Employer total cost', employerTotal, employerTotalCost)
+  if (employerRecon) reconIssues.push(employerRecon)
+
+  if (reconIssues.length > 0) {
+    blockers.push('PAYROLL_RECONCILIATION_FAILED')
+    for (const issue of reconIssues) {
+      blockers.push(`RECON_MISMATCH:${issue}`)
+    }
+  }
+
   return {
     employeeId: emp.id,
-    basicSalary: proratedBasicSalary,
+    basicSalary,
     salarySource: salary.salarySource,
     salaryEffectiveDate: salary.salaryEffectiveDate,
-    proratedBasicSalary,
+    proratedBasicSalary: pbs,
     grossTaxableEarnings: grossTaxable,
     grossNonTaxableEarnings: grossNonTaxable,
     pensionableIncome,

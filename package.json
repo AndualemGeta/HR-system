@@ -20,6 +20,9 @@
     "test:phase4c2-e2e": "tsx src/test/phase4c2-e2e-tests.ts",
     "test:phase5a": "tsx src/test/phase5a-tests.ts",
     "test:phase5a-e2e": "tsx src/test/run-phase5a-e2e.ts",
+    "test:kpi-assignment": "tsx src/test/run-kpi-assignment-e2e.ts",
+    "test:kpi-assignment:http": "tsx src/test/kpi-assignment-tests.ts",
+    "test:ui-e2e": "playwright test",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:seed": "tsx prisma/seed.ts",
@@ -36,6 +39,7 @@
   "dependencies": {
     "@prisma/client": "^5.22.0",
     "bcryptjs": "^2.4.3",
+    "decimal.js": "^10.6.0",
     "exceljs": "^4.4.0",
     "jose": "^5.9.6",
     "lucide-react": "^0.468.0",
@@ -46,6 +50,7 @@
     "zod": "^3.24.1"
   },
   "devDependencies": {
+    "@playwright/test": "^1.61.1",
     "@types/bcryptjs": "^2.4.6",
     "@types/node": "^22.10.2",
     "@types/papaparse": "^5.3.15",

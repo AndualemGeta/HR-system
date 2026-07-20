@@ -1,11 +1,11 @@
 import { NextRequest } from 'next/server'
-import { z } from 'zod'
 import { prisma } from '@/lib/prisma'
 import { withAuth, badRequest, success, forbidden } from '@/lib/api'
 import { createAuditLog } from '@/lib/audit'
 import { userHasPermission } from '@/lib/rbac'
 import { buildEmployeeScopeWhere } from '@/lib/rbac'
 import { PAGINATION_DEFAULT_PAGE, PAGINATION_DEFAULT_LIMIT, PAGINATION_MAX_LIMIT, EMPLOYEE_ID_PREFIX } from '@/lib/constants'
+import { employeeCreateSchema } from '@/lib/date-validator'
 
 const onboardingItemDefs = [
   { key: 'id_collected', label: 'ID collected' },
@@ -20,34 +20,6 @@ const onboardingItemDefs = [
   { key: 'start_date_confirmed', label: 'Start date confirmed' },
   { key: 'documents_uploaded', label: 'Documents uploaded' },
 ]
-
-const createSchema = z.object({
-  firstName: z.string().min(1, 'First name is required'),
-  middleName: z.string().optional(),
-  lastName: z.string().optional(),
-  email: z.string().email().optional().or(z.literal('')),
-  phoneNumber: z.string().optional(),
-  gender: z.string().optional(),
-  dateOfBirth: z.string().optional(),
-  address: z.string().optional(),
-  notes: z.string().optional(),
-  hireDate: z.string().optional(),
-  employmentType: z.string().optional(),
-  employmentStatus: z.string().optional().default('DRAFT'),
-  employeeCategory: z.string().optional(),
-  currentRole: z.string().optional(),
-  currentLevel: z.string().optional(),
-  currentDepartmentId: z.string().optional(),
-  currentDivisionId: z.string().optional(),
-  currentRegionId: z.string().optional(),
-  currentAreaId: z.string().optional(),
-  currentShopId: z.string().optional(),
-  currentClusterId: z.string().optional(),
-  directManagerId: z.string().optional(),
-  accountingReportingManagerId: z.string().optional(),
-  basicSalary: z.number().positive().optional(),
-  salaryEffectiveDate: z.string().optional(),
-})
 
 async function getNextEmployeeId(): Promise<string> {
   const last = await prisma.employee.findFirst({
@@ -125,15 +97,15 @@ export const GET = withAuth(async (req: NextRequest) => {
 
 export const POST = withAuth(async (req: NextRequest, ctx) => {
   const body = await req.json().catch(() => ({}))
-  const parsed = createSchema.safeParse(body)
+  const parsed = employeeCreateSchema.safeParse(body)
   if (!parsed.success) return badRequest('Invalid input', parsed.error.flatten())
 
   const data = parsed.data
 
-  // If salary fields are present, require salary.update
-  if (data.basicSalary !== undefined || data.salaryEffectiveDate !== undefined) {
+  // If salary or KPI fields are present, require salary.update
+  if (data.basicSalary !== undefined || data.salaryEffectiveDate !== undefined || data.kpiDefaultAmount !== undefined || data.kpiEffectiveFrom !== undefined) {
     if (!(await userHasPermission(ctx.userId, 'salary.update'))) {
-      return forbidden('Salary update permission required to set salary fields')
+      return forbidden('Salary update permission required to set salary or KPI fields')
     }
   }
 
@@ -184,37 +156,74 @@ export const POST = withAuth(async (req: NextRequest, ctx) => {
   }
   if (catErrors.length > 0) return badRequest(catErrors.join('; '))
 
-  const employee = await prisma.employee.create({
-    data: {
-      employeeId,
-      firstName: data.firstName,
-      middleName: data.middleName || null,
-      lastName: data.lastName || null,
-      fullName,
-      email: data.email || null,
-      phoneNumber: data.phoneNumber || null,
-      gender: data.gender || 'NOT_SPECIFIED',
-      dateOfBirth: data.dateOfBirth ? new Date(data.dateOfBirth) : null,
-      address: data.address || null,
-      notes: data.notes || null,
-      hireDate: data.hireDate ? new Date(data.hireDate) : null,
-      employmentType: data.employmentType ? (data.employmentType as never) : null,
-      employmentStatus: status,
-      employeeCategory: cat,
-      currentRole: role ? (role as never) : 'OTHER',
-      currentLevel: data.currentLevel ? (data.currentLevel as never) : 'TO_BE_DEFINED',
-      currentDepartmentId: data.currentDepartmentId || null,
-      currentDivisionId: data.currentDivisionId || null,
-      currentRegionId: data.currentRegionId || null,
-      currentAreaId: data.currentAreaId || null,
-      currentShopId: data.currentShopId || null,
-      currentClusterId: data.currentClusterId || null,
-      directManagerId,
-      accountingReportingManagerId,
-      basicSalary: data.basicSalary || null,
-      salaryEffectiveDate: data.basicSalary && data.hireDate ? new Date(data.hireDate) : null,
-      createdById: ctx.userId,
-    },
+  const employee = await prisma.$transaction(async (tx) => {
+    const emp = await tx.employee.create({
+      data: {
+        employeeId,
+        firstName: data.firstName,
+        middleName: data.middleName || null,
+        lastName: data.lastName || null,
+        fullName,
+        email: data.email || null,
+        phoneNumber: data.phoneNumber || null,
+        gender: data.gender || 'NOT_SPECIFIED',
+        dateOfBirth: data.dateOfBirth ? new Date(data.dateOfBirth) : null,
+        address: data.address || null,
+        notes: data.notes || null,
+        hireDate: data.hireDate ? new Date(data.hireDate) : null,
+        employmentType: data.employmentType ? (data.employmentType as never) : null,
+        employmentStatus: status,
+        employeeCategory: cat,
+        currentRole: role ? (role as never) : 'OTHER',
+        currentLevel: data.currentLevel ? (data.currentLevel as never) : 'TO_BE_DEFINED',
+        currentDepartmentId: data.currentDepartmentId || null,
+        currentDivisionId: data.currentDivisionId || null,
+        currentRegionId: data.currentRegionId || null,
+        currentAreaId: data.currentAreaId || null,
+        currentShopId: data.currentShopId || null,
+        currentClusterId: data.currentClusterId || null,
+        directManagerId,
+        accountingReportingManagerId,
+        basicSalary: data.basicSalary || null,
+        salaryEffectiveDate: data.salaryEffectiveDate ? new Date(data.salaryEffectiveDate) : null,
+        createdById: ctx.userId,
+      },
+    })
+
+    // Create EmployeeSalary history record when basicSalary is supplied
+    if (data.basicSalary && data.salaryEffectiveDate) {
+      await tx.employeeSalary.create({
+        data: {
+          employeeId: emp.id,
+          basicSalary: data.basicSalary,
+          effectiveDate: new Date(data.salaryEffectiveDate),
+          reason: 'Initial salary on employee creation',
+          createdById: ctx.userId,
+        },
+      })
+    }
+
+    // Create KPI assignment if both KPI fields supplied
+    if (data.kpiDefaultAmount !== undefined && data.kpiEffectiveFrom !== undefined) {
+      const kpiComponent = await tx.payComponent.findUnique({ where: { code: 'KPI_ALLOWANCE' } })
+      if (!kpiComponent) throw new Error('KPI component not found — cannot create KPI assignment')
+      if (!kpiComponent.isActive) throw new Error('KPI component is inactive')
+      if (kpiComponent.componentType !== 'KPI') throw new Error('Component is not a KPI type')
+
+      await tx.employeePayComponentAssignment.create({
+        data: {
+          employeeId: emp.id,
+          payComponentId: kpiComponent.id,
+          defaultAmount: data.kpiDefaultAmount,
+          effectiveFrom: new Date(data.kpiEffectiveFrom),
+          isActive: true,
+          createdById: ctx.userId,
+          updatedById: ctx.userId,
+        },
+      })
+    }
+
+    return emp
   })
 
   // Auto-create onboarding checklist

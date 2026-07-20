@@ -1,5 +1,5 @@
 import { prisma } from '@/lib/prisma'
-import { round2 } from '@/lib/payroll-rounding'
+import { roundMoney } from '@/lib/money'
 import type { PayComponentInfo, KpiDefaultAmountResult, CalculationLine } from './types'
 
 export function mapComponentTypeToLineType(componentType: string): string {
@@ -37,10 +37,10 @@ export function processEarningInput(
   component: { id: string; code: string; name: string; componentType: string; taxablePercent: number; isPensionable: boolean; pensionablePercent: number; affectsGross: boolean; affectsNet: boolean; affectsEmployerCost: boolean; calculationOrder: number },
   sourceId: string,
 ): CalculationLine {
-  const taxableAmount = round2(amount * Number(component.taxablePercent) / 100)
-  const nonTaxableAmount = round2(amount - taxableAmount)
+  const taxableAmount = roundMoney(amount * Number(component.taxablePercent) / 100)
+  const nonTaxableAmount = roundMoney(amount - taxableAmount)
   const pensionableAmount = component.isPensionable
-    ? round2(amount * Number(component.pensionablePercent) / 100)
+    ? roundMoney(amount * Number(component.pensionablePercent) / 100)
     : 0
   return {
     componentId: component.id,
@@ -126,10 +126,10 @@ export function processKpiEarning(
   percentage: number,
   pc: PayComponentInfo,
 ): CalculationLine {
-  const earned = round2(defaultAmount * percentage / 100)
-  const taxableAmount = round2(earned * Number(pc.taxablePercent) / 100)
-  const nonTaxableAmount = round2(earned - taxableAmount)
-  const pensionableAmount = pc.isPensionable ? round2(earned * Number(pc.pensionablePercent) / 100) : 0
+  const earned = roundMoney(defaultAmount * percentage / 100)
+  const taxableAmount = roundMoney(earned * Number(pc.taxablePercent) / 100)
+  const nonTaxableAmount = roundMoney(earned - taxableAmount)
+  const pensionableAmount = pc.isPensionable ? roundMoney(earned * Number(pc.pensionablePercent) / 100) : 0
   return {
     componentId: pc.id,
     componentCode: pc.code,
@@ -148,5 +148,48 @@ export function processKpiEarning(
     employerAmount: pc.affectsEmployerCost ? earned : 0,
     calculationOrder: pc.calculationOrder ?? 40,
     calculationNote: pc.affectsNet ? null : 'Does not affect net salary',
+  }
+}
+
+export async function processRuleDerivedInput(
+  input: { id: string; value?: string | null | number; amount?: string | number | null },
+  component: { id: string; code: string; name: string },
+  payDate: Date,
+): Promise<{ line: CalculationLine | null; blocker: string | null }> {
+  const rule = await prisma.payRule.findFirst({
+    where: {
+      componentId: component.id,
+      status: 'ACTIVE',
+      effectiveFrom: { lte: payDate },
+      AND: [{ OR: [{ effectiveTo: null }, { effectiveTo: { gte: payDate } }] }],
+    },
+    orderBy: { priority: 'asc', effectiveFrom: 'desc' },
+  })
+  if (!rule) return { line: null, blocker: `MISSING_EFFECTIVE_PAY_RULE:${component.code}` }
+
+  const value = input.value ? Number(input.value) : (input.amount ? Number(input.amount) : 0)
+  const rate = Number(rule.percentageRate || rule.baseAmount || 0)
+  const computedAmount = roundMoney(value * rate)
+  return {
+    line: {
+      componentId: component.id,
+      componentCode: component.code,
+      componentName: component.name,
+      lineType: 'ALLOWANCE',
+      sourceType: 'PAY_RULE',
+      sourceId: rule.id,
+      quantity: null,
+      rate,
+      baseAmount: value,
+      grossAmount: computedAmount,
+      taxableAmount: computedAmount,
+      nonTaxableAmount: 0,
+      pensionableAmount: 0,
+      deductionAmount: 0,
+      employerAmount: 0,
+      calculationOrder: 50,
+      calculationNote: `Rule-derived: ${rule.name}`,
+    },
+    blocker: null,
   }
 }
