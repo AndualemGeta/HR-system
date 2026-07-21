@@ -176,11 +176,11 @@ async function main() {
     // Bracket: 5250-7800, rate 25%, deduction 565
     // taxableIncome = 7000
     // PAYE = 7000 * 25/100 - 565 = 1750 - 565 = 1185
-    const paye = calcPaye(7000, { id: 'b5', minIncome: 5250, maxIncome: 7800, taxRate: 25, deductionAmount: 565 })
+    const paye = calcPaye(7000, { id: 'b5', minIncome: 5250, maxIncome: 7800, taxRate: 25, deductionAmount: 565, scheduleCode: 'TEST' })
     assert.strictEqual(paye, 1185)
   })
   await test('PAYE cannot be negative', () => {
-    const paye = calcPaye(100, { id: 'b1', minIncome: 0, maxIncome: 600, taxRate: 0, deductionAmount: 50 })
+    const paye = calcPaye(100, { id: 'b1', minIncome: 0, maxIncome: 600, taxRate: 0, deductionAmount: 50, scheduleCode: 'TEST' })
     assert.strictEqual(paye, 0) // 0% rate, Math.max(0, -50) = 0
   })
 
