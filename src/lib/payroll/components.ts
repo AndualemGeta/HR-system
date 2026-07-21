@@ -125,6 +125,7 @@ export function processKpiEarning(
   defaultAmount: number,
   percentage: number,
   pc: PayComponentInfo,
+  sourceId?: string,
 ): CalculationLine {
   const earned = roundMoney(calcPercent(defaultAmount, percentage))
   const taxableAmount = roundMoney(calcPercent(earned, pc.taxablePercent))
@@ -135,8 +136,8 @@ export function processKpiEarning(
     componentCode: pc.code,
     componentName: pc.name,
     lineType: 'EARNING',
-    sourceType: 'PAY_RULE',
-    sourceId: null,
+    sourceType: 'EMPLOYEE_PAY_COMPONENT_ASSIGNMENT',
+    sourceId: sourceId ?? null,
     quantity: null,
     rate: percentage,
     baseAmount: defaultAmount,

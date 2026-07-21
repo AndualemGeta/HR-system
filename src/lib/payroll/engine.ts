@@ -250,7 +250,7 @@ export async function calculateEmployeePayroll(
         if (percentageErr) {
           blockers.push(`${percentageErr}:${kpiComp.code}`)
         } else {
-          lines.push(processKpiEarning(kpiAssignment.defaultAmount, kpiPercentage, kpiPc))
+          lines.push(processKpiEarning(kpiAssignment.defaultAmount, kpiPercentage, kpiPc, kpiAssignment.assignmentId))
           processedComponentCodes.add(kpiComp.code)
         }
       }
