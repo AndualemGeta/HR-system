@@ -101,4 +101,32 @@ test.describe('KPI Assignment UI', () => {
       if (empId) await cleanupEmployee(empId)
     }
   })
+
+  test('can close existing KPI assignment and see history', async ({ page }) => {
+    let empId = ''
+
+    try {
+      await loginAs(page, 'admin@leapfrog.com', 'Test123!')
+      const emp = await createEmployeeViaApi(page)
+      empId = emp.id
+
+      await createKpiAssignmentViaApi(page, emp.id)
+
+      await page.goto(`/employees/${emp.id}`)
+      await page.waitForLoadState('networkidle')
+      await page.waitForTimeout(500)
+
+      const closeBtn = page.locator('button:has-text("Close")')
+      await expect(closeBtn).toBeVisible({ timeout: 10000 })
+      await closeBtn.click()
+
+      await expect(page.locator('text=Are you sure')).toBeVisible()
+      await page.click('button:has-text("Confirm")')
+      await page.waitForTimeout(1000)
+
+      await expect(page.locator('text=Closed Assignments')).toBeVisible()
+    } finally {
+      if (empId) await cleanupEmployee(empId)
+    }
+  })
 })
