@@ -1,0 +1,5 @@
+-- AlterEnum
+ALTER TYPE "CalculationSourceType" ADD VALUE 'ALLOWANCE';
+ALTER TYPE "CalculationSourceType" ADD VALUE 'DEDUCTION';
+ALTER TYPE "CalculationSourceType" ADD VALUE 'COMMISSION';
+ALTER TYPE "CalculationSourceType" ADD VALUE 'EMPLOYEE_PAY_COMPONENT_ASSIGNMENT';

@@ -1,8 +1,8 @@
 import { prisma } from '@/lib/prisma'
 import { roundMoney, calcPercent, money } from '@/lib/money'
-import type { PayComponentInfo, KpiDefaultAmountResult, CalculationLine } from './types'
+import type { PayComponentInfo, KpiDefaultAmountResult, CalculationLine, CalculationLineType } from './types'
 
-export function mapComponentTypeToLineType(componentType: string): string {
+export function mapComponentTypeToLineType(componentType: string): CalculationLineType {
   switch (componentType) {
     case 'KPI': return 'EARNING'
     case 'TRANSPORT': return 'ALLOWANCE'
@@ -11,7 +11,7 @@ export function mapComponentTypeToLineType(componentType: string): string {
     case 'OVERTIME': return 'OVERTIME'
     case 'ADJUSTMENT': return 'ADJUSTMENT'
     case 'DEDUCTION': return 'DEDUCTION'
-    case 'STATUTORY': return 'STATUTORY'
+    case 'STATUTORY': return 'DEDUCTION'
     default: return 'ALLOWANCE'
   }
 }

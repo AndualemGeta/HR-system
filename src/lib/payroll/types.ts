@@ -55,12 +55,16 @@ export interface PensionRuleInfo {
   applicableEmploymentType: string | null
 }
 
+export type CalculationLineType = 'BASIC_SALARY' | 'EARNING' | 'ALLOWANCE' | 'COMMISSION' | 'BONUS' | 'OVERTIME' | 'ADJUSTMENT' | 'EMPLOYEE_PENSION' | 'EMPLOYER_PENSION' | 'PAYE_TAX' | 'DEDUCTION' | 'EMPLOYER_CONTRIBUTION'
+
+export type CalculationSourceType = 'EMPLOYEE_SALARY' | 'PAYROLL_INPUT' | 'PAY_RULE' | 'PAYROLL_ADJUSTMENT' | 'ATTENDANCE' | 'STATUTORY_RULE' | 'SYSTEM' | 'ALLOWANCE' | 'DEDUCTION' | 'COMMISSION' | 'ADJUSTMENT' | 'EMPLOYEE_PAY_COMPONENT_ASSIGNMENT'
+
 export interface CalculationLine {
   componentId: string | null
   componentCode: string
   componentName: string
-  lineType: string
-  sourceType: string
+  lineType: CalculationLineType
+  sourceType: CalculationSourceType
   sourceId: string | null
   quantity: number | null
   rate: number | null
