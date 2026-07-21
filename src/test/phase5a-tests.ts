@@ -423,7 +423,7 @@ async function main() {
     assert.strictEqual(line.baseAmount, 2000)
     assert.strictEqual(line.rate, 100)
     assert.strictEqual(line.lineType, 'EARNING')
-    assert.strictEqual(line.sourceType, 'PAY_RULE')
+    assert.strictEqual(line.sourceType, 'EMPLOYEE_PAY_COMPONENT_ASSIGNMENT')
   })
 
   await test('80% pays 80% of the default KPI amount', () => {
