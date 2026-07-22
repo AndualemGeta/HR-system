@@ -93,5 +93,9 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     }))
 
     return success(result)
-  } catch (err) { console.error(err); return internalError() }
+  } catch (err) {
+    console.error('eligible-employees error:', err)
+    const message = err instanceof Error ? err.message : 'Internal server error'
+    return internalError(message)
+  }
 }

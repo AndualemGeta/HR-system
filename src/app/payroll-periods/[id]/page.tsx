@@ -287,7 +287,7 @@ export default function PayrollPeriodDetailPage() {
               </tr>
             </thead>
             <tbody>
-              {dashboard.departments.map(d => (
+              {(dashboard.departments || []).map(d => (
                 <tr key={d.department} style={{ borderBottom: '1px solid #e5e7eb' }}>
                   <td style={{ padding: '0.4rem', fontSize: '0.85rem' }}>{d.department}</td>
                   <td style={{ padding: '0.4rem', fontSize: '0.85rem' }}>{d.submitted}</td>
@@ -309,7 +309,7 @@ export default function PayrollPeriodDetailPage() {
               </tr>
             </thead>
             <tbody>
-              {dashboard.shops.map(s => (
+              {(dashboard.shops || []).map(s => (
                 <tr key={s.shop} style={{ borderBottom: '1px solid #e5e7eb' }}>
                   <td style={{ padding: '0.4rem', fontSize: '0.85rem' }}>{s.shop}</td>
                   <td style={{ padding: '0.4rem', fontSize: '0.85rem' }}>{s.submitted}</td>
@@ -330,7 +330,7 @@ export default function PayrollPeriodDetailPage() {
               </tr>
             </thead>
             <tbody>
-              {dashboard.recentSubmissions.map((r, i) => (
+              {(dashboard.recentSubmissions || []).map((r, i) => (
                 <tr key={i} style={{ borderBottom: '1px solid #e5e7eb' }}>
                   <td style={{ padding: '0.4rem', fontSize: '0.85rem' }}>{r.employeeName}</td>
                   <td style={{ padding: '0.4rem', fontSize: '0.85rem' }}>{r.inputType}</td>
@@ -351,7 +351,7 @@ export default function PayrollPeriodDetailPage() {
               </tr>
             </thead>
             <tbody>
-              {dashboard.rejectedItems.map((r, i) => (
+              {(dashboard.rejectedItems || []).map((r, i) => (
                 <tr key={i} style={{ borderBottom: '1px solid #e5e7eb' }}>
                   <td style={{ padding: '0.4rem', fontSize: '0.85rem' }}>{r.employeeName}</td>
                   <td style={{ padding: '0.4rem', fontSize: '0.85rem' }}>{r.inputType}</td>
