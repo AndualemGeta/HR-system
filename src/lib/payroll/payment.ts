@@ -117,7 +117,7 @@ export async function createPaymentBatch(
           paymentBatchId: b.id,
           employeeId: emp.employeeId,
           paymentMethod: emp.paymentMethod as 'BANK' | 'MPESA' | 'MANUAL' | 'HOLD',
-          beneficiaryName: profile?.beneficiaryName || undefined,
+          beneficiaryName: undefined,
           bankName: profile?.bankName || undefined,
           bankAccountNumber: profile?.bankAccountNumber || undefined,
           mpesaAccount: profile?.mpesaAccount || undefined,

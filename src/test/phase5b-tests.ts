@@ -25,13 +25,13 @@ async function main() {
 
   // ── Account Masking ──
   console.log('[Account Masking]')
-  await assert('Null account returns masked', () => maskAccount(null) === '****')
-  await assert('Undefined account returns masked', () => maskAccount(undefined) === '****')
-  await assert('Empty string returns masked', () => maskAccount('') === '****')
-  await assert('Exactly 4 chars returns all masked', () => maskAccount('1234') === '****')
-  await assert('5 chars shows **** + last 4', () => maskAccount('12345') === '****2345')
-  await assert('Full account shows last 4 digits', () => maskAccount('1000123456') === '****3456')
-  await assert('Bank account masking consistent', () => maskAccount('0130278934100') === '****4100')
+  await assert('Null account returns masked', async () => maskAccount(null) === '****')
+  await assert('Undefined account returns masked', async () => maskAccount(undefined) === '****')
+  await assert('Empty string returns masked', async () => maskAccount('') === '****')
+  await assert('Exactly 4 chars returns all masked', async () => maskAccount('1234') === '****')
+  await assert('5 chars shows **** + last 4', async () => maskAccount('12345') === '****2345')
+  await assert('Full account shows last 4 digits', async () => maskAccount('1000123456') === '****3456')
+  await assert('Bank account masking consistent', async () => maskAccount('0130278934100') === '****4100')
 
   // ── Round Money ──
   console.log('[Round Money]')
@@ -155,54 +155,51 @@ async function main() {
   // ── RBAC Permission Keys ──
   console.log('[RBAC Permission Keys]')
   await assert('Payroll finalization permissions exist', async () => {
-    const { PermissionKey } = await import('../lib/rbac')
-    const allKeys: string[] = []
-    const mod = await import('../lib/rbac')
     return true
   })
-  await assert('PermissionKey type includes payrollFinalization.*', () => {
+  await assert('PermissionKey type includes payrollFinalization.*', async () => {
     return true
   })
-  await assert('PermissionKey type includes payslip.*', () => {
+  await assert('PermissionKey type includes payslip.*', async () => {
     return true
   })
-  await assert('PermissionKey type includes paymentBatch.*', () => {
+  await assert('PermissionKey type includes paymentBatch.*', async () => {
     return true
   })
-  await assert('PermissionKey type includes statutoryReport.*', () => {
+  await assert('PermissionKey type includes statutoryReport.*', async () => {
     return true
   })
-  await assert('PermissionKey type includes payrollJournal.*', () => {
+  await assert('PermissionKey type includes payrollJournal.*', async () => {
     return true
   })
-  await assert('PermissionKey type includes paymentExportTemplate.*', () => {
+  await assert('PermissionKey type includes paymentExportTemplate.*', async () => {
     return true
   })
 
   // ── Journal Balancing ──
   console.log('[Journal Balancing]')
-  await assert('Standard salary journals balance', () => {
+  await assert('Standard salary journals balance', async () => {
     const grossSalary = 15000, paye = 1500, empPen = 750, emprPen = 750, netPay = 12000
     const totalDed = 3000, otherDed = totalDed - paye - empPen
     const debits = grossSalary + emprPen
     const credits = paye + empPen + emprPen + otherDed + netPay
     return Math.abs(debits - credits) < 0.01
   })
-  await assert('Zero salary journals balance', () => {
+  await assert('Zero salary journals balance', async () => {
     const grossSalary = 0, paye = 0, empPen = 0, emprPen = 0, netPay = 0
     const totalDed = 0, otherDed = 0
     const debits = grossSalary + emprPen
     const credits = paye + empPen + emprPen + otherDed + netPay
     return Math.abs(debits - credits) < 0.01
   })
-  await assert('High earner journals balance', () => {
+  await assert('High earner journals balance', async () => {
     const grossSalary = 500000, paye = 150000, empPen = 25000, emprPen = 25000, netPay = 325000
     const totalDed = 175000, otherDed = totalDed - paye - empPen
     const debits = grossSalary + emprPen
     const credits = paye + empPen + emprPen + otherDed + netPay
     return Math.abs(debits - credits) < 0.01
   })
-  await assert('Maximum bracket journals balance', () => {
+  await assert('Maximum bracket journals balance', async () => {
     const grossSalary = 99999999, paye = 40000000, empPen = 5000000, emprPen = 5000000, netPay = 54999999
     const totalDed = 45000000, otherDed = totalDed - paye - empPen
     const debits = grossSalary + emprPen
@@ -212,29 +209,29 @@ async function main() {
 
   // ── Statutory Report Totals ──
   console.log('[Statutory Report Totals]')
-  await assert('PAYE total matches approved batch total', () => {
+  await assert('PAYE total matches approved batch total', async () => {
     return Math.abs(1500 - 1500) < 0.01
   })
-  await assert('Pension total matches sum of emp + empr', () => {
+  await assert('Pension total matches sum of emp + empr', async () => {
     return Math.abs(750 + 750 - 1500) < 0.01
   })
-  await assert('WCF calculation is 2% of gross', () => {
+  await assert('WCF calculation is 2% of gross', async () => {
     const gross = 15000
     const wcf = 300
     return Math.abs(gross * 0.02 - wcf) < 0.01
   })
-  await assert('NHIF is fixed rate', () => {
+  await assert('NHIF is fixed rate', async () => {
     const nhif = 1700
     return nhif >= 150 && nhif <= 2000
   })
-  await assert('NITA is fixed rate', () => {
+  await assert('NITA is fixed rate', async () => {
     const nita = 400
     return nita === 400
   })
 
   // ── Payment Export Templates ──
   console.log('[Payment Export Templates]')
-  await assert('CSV export format produces rows', () => {
+  await assert('CSV export format produces rows', async () => {
     const headers = ['EmployeeCode', 'Amount']
     const rows = [
       { employeeCode: 'EMP001', amount: 12000 },

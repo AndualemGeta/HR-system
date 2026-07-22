@@ -395,12 +395,12 @@ export default function PayrollDetailPage() {
                       <td key={f} style={tdStyle}>
                         {canEdit ? (
                           <input type="number" step="0.01"
-                            value={(row as Record<string, unknown>)[f] ?? ''}
+                            value={String((row as unknown as Record<string, unknown>)[f] ?? '')}
                             onChange={e => handleCellChange(row.id, f, e.target.value)}
                             style={{ width: '100%', padding: '2px 4px', border: '1px solid #d1d5db', borderRadius: 2, fontSize: '0.85rem', boxSizing: 'border-box', background: isLocked ? '#f3f4f6' : '#fff' }}
                             disabled={isLocked} />
                         ) : (
-                          String((row as Record<string, unknown>)[f] ?? '0')
+                          String((row as unknown as Record<string, unknown>)[f] ?? '0')
                         )}
                       </td>
                     ))}

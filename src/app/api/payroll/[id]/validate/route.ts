@@ -27,12 +27,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
       if (!row.employeeCode) msgs.push('Missing employee code')
       if (!row.employeeName) msgs.push('Missing employee name')
-      if (row.basicSalary == null || row.basicSalary < 0) msgs.push('Invalid basic salary')
-      if (row.grossSalary == null || row.grossSalary < 0) msgs.push('Gross salary not calculated')
-      if (row.netSalary == null || row.netSalary < 0) msgs.push('Net salary not calculated')
+      if (row.basicSalary == null || Number(row.basicSalary) < 0) msgs.push('Invalid basic salary')
+      if (row.grossSalary == null || Number(row.grossSalary) < 0) msgs.push('Gross salary not calculated')
+      if (row.netSalary == null || Number(row.netSalary) < 0) msgs.push('Net salary not calculated')
       if (row.paymentMethod === 'BANK' && !row.bankAccountNumber) msgs.push('Bank account required for BANK payment')
       if (row.paymentMethod === 'MPESA' && !row.mpesaAccount) msgs.push('M-PESA number required for MPESA payment')
-      if (row.employeePension != null && row.employeePension < 0) warns.push('Negative pension value')
+      if (row.employeePension != null && Number(row.employeePension) < 0) warns.push('Negative pension value')
 
       if (msgs.length > 0 || warns.length > 0) {
         employeeMessages[row.id] = {
