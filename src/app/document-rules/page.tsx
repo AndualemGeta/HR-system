@@ -63,6 +63,7 @@ export default function DocumentRulesPage() {
   return (
     <div style={{ maxWidth: 900, margin: '0 auto', padding: '2rem 1rem' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+        <a href="/dashboard" style={{ color: '#2563eb', fontSize: '0.85rem', textDecoration: 'underline' }}>&larr; Dashboard</a>
         <h1 style={{ margin: 0, fontSize: '1.3rem' }}>Document Rules</h1>
         <button onClick={() => { resetForm(); setShowForm(true) }} style={{ background: '#2563eb', color: '#fff', padding: '0.4rem 1rem', border: 'none', borderRadius: 4, cursor: 'pointer', fontSize: '0.9rem' }}>Add Rule</button>
       </div>

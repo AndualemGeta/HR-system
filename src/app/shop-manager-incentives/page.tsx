@@ -72,6 +72,7 @@ export default function ShopManagerIncentivesPage() {
   return (
     <div className="p-6">
       <div className="flex justify-between items-center mb-4">
+        <a href="/dashboard" className="text-blue-600 underline text-sm">&larr; Dashboard</a>
         <h1 className="text-2xl font-bold">Shop Manager Incentives</h1>
         <button onClick={() => router.push('/shop-manager-incentives/new')} className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded">
           <Plus size={16} /> New Period

@@ -68,6 +68,7 @@ export default function NewIncentivePeriodPage() {
 
   return (
     <div className="p-6 max-w-2xl mx-auto">
+      <a href="/shop-manager-incentives" className="text-blue-600 underline text-sm block mb-2">&larr; Back to Incentives</a>
       <h1 className="text-2xl font-bold mb-6">New Incentive Period</h1>
 
       {errors.form && <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-2 rounded mb-4">{errors.form}</div>}

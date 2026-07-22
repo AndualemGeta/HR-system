@@ -73,6 +73,7 @@ export default function NewRulePage() {
 
   return (
     <div style={{ maxWidth: 800, margin: '0 auto', padding: '2rem 1rem' }}>
+      <a href="/salary-structure/rules" style={{ color: '#2563eb', fontSize: '0.85rem', textDecoration: 'underline', display: 'inline-block', marginBottom: '0.5rem' }}>&larr; Back to Rules</a>
       <h1 style={{ marginBottom: '1.5rem' }}>New Pay Rule</h1>
 
       {error && <p style={{ color: 'red', marginBottom: '0.5rem' }}>{error}</p>}

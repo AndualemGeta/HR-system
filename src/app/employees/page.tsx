@@ -47,6 +47,7 @@ export default function EmployeesPage() {
   return (
     <div style={{ maxWidth: 1000, margin: '0 auto', padding: '2rem 1rem' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+        <a href="/dashboard" style={{ color: '#2563eb', fontSize: '0.85rem', textDecoration: 'underline' }}>&larr; Dashboard</a>
         <h1 style={{ margin: 0 }}>Employees</h1>
         <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
           {perms.includes('employee.import') && (

@@ -52,6 +52,7 @@ export default function NewShopPage() {
 
   return (
     <div className="p-6 max-w-lg mx-auto">
+      <a href="/shops" className="text-blue-600 underline text-sm block mb-2">&larr; Back to Shops</a>
       <h1 className="text-2xl font-bold mb-4">Create Shop</h1>
       {error && <div className="bg-red-100 text-red-700 p-3 rounded mb-4">{error}</div>}
       <form onSubmit={handleSubmit} className="space-y-3">

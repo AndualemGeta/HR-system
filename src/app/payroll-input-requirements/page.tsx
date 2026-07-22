@@ -38,6 +38,7 @@ export default function PayrollInputRequirementsPage() {
   return (
     <div className="p-6">
       <div className="flex justify-between items-center mb-4">
+        <a href="/dashboard" className="text-blue-600 underline text-sm mr-4">&larr; Dashboard</a>
         <h1 className="text-2xl font-bold">Payroll Input Requirements</h1>
         <button onClick={() => setShowForm(true)} className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded"><Plus size={16} /> New Requirement</button>
       </div>

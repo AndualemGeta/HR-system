@@ -101,7 +101,7 @@ export default function PayrollPeriodDetailPage() {
   const fetchSelected = useCallback(() => {
     return fetch(`/api/payroll-periods/${id}/employees?isSelected=true`).then(r => r.json()).then(j => {
       const raw = j.data || []
-      setSelected(raw.map((r: { employee: { fullName: string; employeeId: string; currentRole: string; currentDepartmentId: string | null } }) => ({
+      setSelected(raw.map((r: { employee: { id: string; fullName: string; employeeId: string; currentRole: string; currentDepartmentId: string | null } }) => ({
         id: r.employee.id,
         employeeId: r.employee.employeeId,
         name: r.employee.fullName,

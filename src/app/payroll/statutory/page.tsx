@@ -24,6 +24,7 @@ export default function StatutoryPage() {
 
   return (
     <div style={{ padding: '2rem', maxWidth: 1000, margin: '0 auto' }}>
+      <a href="/dashboard" style={{ color: '#2563eb', fontSize: '0.85rem', textDecoration: 'underline', display: 'inline-block', marginBottom: '0.5rem' }}>&larr; Dashboard</a>
       <h1 style={{ fontSize: '1.5rem', fontWeight: 700, marginBottom: '1.5rem' }}>Statutory Configuration</h1>
 
       <div style={{ display: 'grid', gap: '1rem', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))' }}>

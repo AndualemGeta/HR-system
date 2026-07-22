@@ -73,6 +73,7 @@ export default function ChangeRequestsPage() {
 
   return (
     <div style={{ maxWidth: 1000, margin: '0 auto', padding: '2rem 1rem' }}>
+      <a href="/dashboard" style={{ color: '#2563eb', fontSize: '0.85rem', textDecoration: 'underline', display: 'inline-block', marginBottom: '0.5rem' }}>&larr; Dashboard</a>
       <h1 style={{ marginBottom: '1rem' }}>Change Requests</h1>
 
       {error && <p style={{ color: 'red', marginBottom: '0.5rem' }}>{error}</p>}

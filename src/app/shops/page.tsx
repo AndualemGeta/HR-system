@@ -80,6 +80,7 @@ export default function ShopsPage() {
 
   return (
     <div className="p-6">
+      <a href="/dashboard" className="text-blue-600 underline text-sm block mb-2">&larr; Dashboard</a>
       <div className="flex justify-between items-center mb-4">
         <h1 className="text-2xl font-bold">Shops</h1>
         <button onClick={() => router.push('/shops/new')} className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded">
