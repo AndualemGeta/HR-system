@@ -7,7 +7,7 @@
     "build": "prisma generate && next build",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
-    "test": "tsx src/test/phase1-tests.ts && tsx src/test/phase2a-tests.ts && tsx src/test/phase2b-tests.ts && tsx src/test/phase3-tests.ts && tsx src/test/phase3_5-tests.ts && tsx src/test/phase4a-tests.ts && tsx src/test/phase4b-tests.ts && tsx src/test/phase4c1-tests.ts && tsx src/test/phase4c2-tests.ts && tsx src/test/phase5a-tests.ts",
+    "test": "tsx src/test/phase1-tests.ts && tsx src/test/phase2a-tests.ts && tsx src/test/phase2b-tests.ts && tsx src/test/phase3-tests.ts && tsx src/test/phase3_5-tests.ts && tsx src/test/phase4a-tests.ts && tsx src/test/phase4b-tests.ts && tsx src/test/phase4c1-tests.ts && tsx src/test/phase4c2-tests.ts && tsx src/test/phase5a-tests.ts && tsx src/test/phase5b-tests.ts",
     "test:phase1": "tsx src/test/phase1-tests.ts",
     "test:phase2a": "tsx src/test/phase2a-tests.ts",
     "test:phase2b": "tsx src/test/phase2b-tests.ts",
