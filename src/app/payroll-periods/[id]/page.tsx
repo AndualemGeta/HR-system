@@ -26,7 +26,7 @@ interface EligibleEmployee {
 }
 
 interface SelectedEmployee {
-  id: string; employeeId: string; name: string; department: string
+  id: string; employeeId: string; name: string; department: string; role: string
 }
 
 interface SubmissionGroup {
@@ -85,11 +85,30 @@ export default function PayrollPeriodDetailPage() {
   const fetchEligible = useCallback(() => {
     const q = new URLSearchParams()
     Object.entries(eligibleFilter).forEach(([k, v]) => { if (v) q.set(k, v) })
-    return fetch(`/api/payroll-periods/${id}/eligible-employees?${q.toString()}`).then(r => r.json()).then(j => setEligible(j.data || []))
+    return fetch(`/api/payroll-periods/${id}/eligible-employees?${q.toString()}`).then(r => r.json()).then(j => {
+      const raw = j.data || []
+      setEligible(raw.map((e: { id: string; employeeId: string; fullName: string; currentRole: string; currentDepartmentId: string | null; payrollReadiness: { overallStatus: string } | null }) => ({
+        id: e.id,
+        employeeId: e.employeeId,
+        name: e.fullName,
+        role: e.currentRole,
+        department: e.currentDepartmentId || '',
+        payrollReady: e.payrollReadiness?.overallStatus === 'READY',
+      })))
+    })
   }, [id, eligibleFilter])
 
   const fetchSelected = useCallback(() => {
-    return fetch(`/api/payroll-periods/${id}/employees?isSelected=true`).then(r => r.json()).then(j => setSelected(j.data || []))
+    return fetch(`/api/payroll-periods/${id}/employees?isSelected=true`).then(r => r.json()).then(j => {
+      const raw = j.data || []
+      setSelected(raw.map((r: { employee: { fullName: string; employeeId: string; currentRole: string; currentDepartmentId: string | null } }) => ({
+        id: r.employee.id,
+        employeeId: r.employee.employeeId,
+        name: r.employee.fullName,
+        role: r.employee.currentRole,
+        department: r.employee.currentDepartmentId || '',
+      })))
+    })
   }, [id])
 
   const fetchSubmissionGroups = useCallback(() => {
