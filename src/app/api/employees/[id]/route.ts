@@ -113,9 +113,11 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 
     const data = parsed.data
 
-    // Block direct sensitive payroll field updates — must use change request approval
+    // Salary field updates require salary.update permission
     if (data.basicSalary !== undefined || data.salaryEffectiveDate !== undefined) {
-      return badRequest('Sensitive payroll fields must be changed through change request approval.')
+      if (!(await userHasPermission(session.userId, 'salary.update'))) {
+        return forbidden()
+      }
     }
 
     const updateData: Record<string, unknown> = {}

@@ -31,6 +31,9 @@ export default function EditEmployeePage() {
     currentAreaId: '', currentShopId: '', currentClusterId: '',
     directManagerId: '', accountingReportingManagerId: '', basicSalary: '', salaryEffectiveDate: '',
   })
+  const [payProfile, setPayProfile] = useState({
+    paymentMethod: '', bankName: '', bankAccountNumber: '', mpesaAccount: '', taxId: '', pensionId: '',
+  })
   const isHO = form.employeeCategory === 'HEAD_OFFICE'
 
   useEffect(() => {
@@ -41,7 +44,8 @@ export default function EditEmployeePage() {
       fetch('/api/employees?limit=200').then(r => r.json()),
       fetch(`/api/employees/${id}`).then(r => r.json()),
       fetch(`/api/employees/${id}/assignments`).then(r => r.json()),
-    ]).then(([meJson, deptJson, empJson, empDetail, assignJson]) => {
+      fetch(`/api/employees/${id}/payroll-profile`).then(r => r.json()),
+    ]).then(([meJson, deptJson, empJson, empDetail, assignJson, ppJson]) => {
       const me = meJson.data || meJson
       const employee = empDetail.data || empDetail
       if (!me.id) { router.push('/login'); return }
@@ -51,6 +55,17 @@ export default function EditEmployeePage() {
       const allManagers = empJson.data?.items || []
       setManagers(allManagers.filter((m: Emp) => m.id !== id))
       setEmpIdStr(employee.employeeId || '')
+      const profile = ppJson.data || ppJson
+      if (profile && profile.id) {
+        setPayProfile({
+          paymentMethod: profile.paymentMethod || '',
+          bankName: profile.bankName || '',
+          bankAccountNumber: profile.bankAccountNumber || '',
+          mpesaAccount: profile.mpesaAccount || '',
+          taxId: profile.taxId || '',
+          pensionId: profile.pensionId || '',
+        })
+      }
       setForm({
         firstName: employee.firstName || '',
         middleName: employee.middleName || '',
@@ -91,19 +106,15 @@ export default function EditEmployeePage() {
     setSaving(true)
 
     const payload: Record<string, unknown> = { ...form }
-    const sensitivePayload: Record<string, unknown> = {}
 
     if (payload.basicSalary) {
       const parsed = parseFloat(payload.basicSalary as string)
       if (isNaN(parsed)) { setError('Invalid salary value'); setSaving(false); return }
-      sensitivePayload.basicSalary = parsed
+      payload.basicSalary = parsed
     }
     if (payload.salaryEffectiveDate) {
-      sensitivePayload.salaryEffectiveDate = payload.salaryEffectiveDate
+      payload.salaryEffectiveDate = payload.salaryEffectiveDate
     }
-    delete payload.basicSalary
-    delete payload.salaryEffectiveDate
-
     if (!payload.dateOfBirth) delete payload.dateOfBirth
     if (!payload.hireDate) delete payload.hireDate
     if (!payload.notes) delete payload.notes
@@ -119,21 +130,17 @@ export default function EditEmployeePage() {
       const json = await res.json()
       if (!res.ok) { setError(json.error || json.message || 'Failed to update'); setSaving(false); return }
 
-      if (Object.keys(sensitivePayload).length > 0) {
-        const empId = params.id as string
-        for (const [field, value] of Object.entries(sensitivePayload)) {
-          const crRes = await fetch('/api/change-requests', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ employeeId: empId, requestedField: field, oldValue: json.data?.[field]?.toString() || '', newValue: String(value), reason: 'Updated during employee edit' }),
-          })
-          if (!crRes.ok) {
-            const crJson = await crRes.json()
-            setError(`Change request for ${field} failed: ${crJson.error || 'Error'}`)
-            setSaving(false)
-            return
-          }
-        }
+      // Save payroll profile
+      const ppRes = await fetch(`/api/employees/${params.id}/payroll-profile`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payProfile),
+      })
+      if (!ppRes.ok) {
+        const ppJson = await ppRes.json()
+        setError(`Payroll profile update failed: ${ppJson.error || 'Error'}`)
+        setSaving(false)
+        return
       }
 
       router.push(`/employees/${params.id}`)
@@ -328,6 +335,21 @@ export default function EditEmployeePage() {
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
             <Field label="Basic Salary" value={form.basicSalary} onChange={v => set('basicSalary', v)} type="number" />
             <Field label="Salary Effective Date" value={form.salaryEffectiveDate} onChange={v => set('salaryEffectiveDate', v)} type="date" />
+          </div>
+        </fieldset>
+
+        <fieldset style={{ border: '1px solid #d1d5db', borderRadius: 6, padding: '1rem' }}>
+          <legend style={{ fontWeight: 600 }}>Payroll Profile</legend>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+            <Select label="Payment Method" value={payProfile.paymentMethod} onChange={v => setPayProfile(p => ({ ...p, paymentMethod: v }))} options={[
+              { value: '', label: '-- Select --' }, { value: 'BANK', label: 'Bank Transfer' },
+              { value: 'MPESA', label: 'M-PESA' }, { value: 'MANUAL', label: 'Manual' }, { value: 'HOLD', label: 'Hold' },
+            ]} />
+            <Field label="Bank Name" value={payProfile.bankName} onChange={v => setPayProfile(p => ({ ...p, bankName: v }))} />
+            <Field label="Bank Account Number" value={payProfile.bankAccountNumber} onChange={v => setPayProfile(p => ({ ...p, bankAccountNumber: v }))} />
+            <Field label="M-PESA Number" value={payProfile.mpesaAccount} onChange={v => setPayProfile(p => ({ ...p, mpesaAccount: v }))} />
+            <Field label="Tax ID" value={payProfile.taxId} onChange={v => setPayProfile(p => ({ ...p, taxId: v }))} />
+            <Field label="Pension ID" value={payProfile.pensionId} onChange={v => setPayProfile(p => ({ ...p, pensionId: v }))} />
           </div>
         </fieldset>
 
