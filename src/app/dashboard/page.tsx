@@ -48,9 +48,7 @@ export default function DashboardPage() {
       title: 'HR',
       links: [
         { label: 'Employees', href: '/employees', permission: 'employee.view' },
-        { label: 'Assignments', href: '/assignments', permission: 'assignment.view' },
         { label: 'Status History', href: '/status-history', permission: 'status.view' },
-        { label: 'Onboarding', href: '/onboarding', permission: 'onboarding.view' },
         { label: 'Organization Chart', href: '/org-chart', permission: 'organization.view' },
       ],
     },
@@ -58,48 +56,12 @@ export default function DashboardPage() {
       title: 'Finance',
       links: [
         { label: 'Salary Records', href: '/salary', permission: 'salary.view' },
-        { label: 'Salary Structure', href: '/salary-structure', permission: 'salaryStructure.view' },
-        { label: 'Rule Approvals', href: '/salary-structure/rule-approvals', permission: 'salaryRuleApproval.view' },
       ],
     },
     {
-      title: 'Data & Approvals',
+      title: 'Payroll',
       links: [
-        { label: 'Data Quality', href: '/data-quality', permission: 'dataQuality.view' },
-        { label: 'Change Requests', href: '/change-requests', permission: 'changeRequest.view' },
-        { label: 'Phase Control', href: '/phase-control', permission: 'phaseControl.view' },
-      ],
-    },
-    {
-      title: 'Payroll Preparation',
-      links: [
-        { label: 'Payroll Periods', href: '/payroll-periods', permission: 'payrollPeriod.view' },
-        { label: 'Payroll Input Types', href: '/payroll-input-types', permission: 'payrollInputType.view' },
-        { label: 'Input Requirements', href: '/payroll-input-requirements', permission: 'payrollInputRequirement.view' },
-      ],
-    },
-    {
-      title: 'Organization Setup',
-      links: [
-        { label: 'Shops', href: '/shops', permission: 'shop.view' },
-        { label: 'Create Shop', href: '/shops/new', permission: 'shop.create' },
-      ],
-    },
-    {
-      title: 'Shop Manager Incentives',
-      links: [
-        { label: 'Incentive Periods', href: '/shop-manager-incentives', permission: 'shopManagerIncentive.view' },
-        { label: 'New Period', href: '/shop-manager-incentives/new', permission: 'shopManagerIncentive.createPeriod' },
-      ],
-    },
-    {
-      title: 'Payroll Output',
-      links: [
-        { label: 'Output Packages', href: '/payroll-output-packages', permission: 'payrollFinalization.view' },
-        { label: 'Payslips', href: '/payslips', permission: 'payslip.viewOwn' },
-        { label: 'Payment Batches', href: '/payment-batches', permission: 'paymentBatch.view' },
-        { label: 'Statutory Reports', href: '/statutory-reports', permission: 'statutoryReport.view' },
-        { label: 'Payroll Journals', href: '/payroll-journals', permission: 'payrollJournal.view' },
+        { label: 'Payroll Periods', href: '/payroll', permission: 'payrollPeriod.view' },
       ],
     },
     {
