@@ -93,6 +93,16 @@ export default function DashboardPage() {
       ],
     },
     {
+      title: 'Payroll Output',
+      links: [
+        { label: 'Output Packages', href: '/payroll-output-packages', permission: 'payrollFinalization.view' },
+        { label: 'Payslips', href: '/payslips', permission: 'payslip.viewOwn' },
+        { label: 'Payment Batches', href: '/payment-batches', permission: 'paymentBatch.view' },
+        { label: 'Statutory Reports', href: '/statutory-reports', permission: 'statutoryReport.view' },
+        { label: 'Payroll Journals', href: '/payroll-journals', permission: 'payrollJournal.view' },
+      ],
+    },
+    {
       title: 'Reports & Audit',
       links: [
         { label: 'Reports', href: '/reports', permission: 'reports.view' },
