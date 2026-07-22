@@ -53,6 +53,13 @@ async function main() {
     'payrollCalculation.review', 'payrollCalculation.validate', 'payrollCalculation.approve',
     'payrollCalculation.return', 'payrollCalculation.reopen', 'payrollCalculation.export',
     'payrollStatutory.view', 'payrollStatutory.manage', 'payrollStatutory.approve',
+    // Phase 5B
+    'payrollFinalization.view', 'payrollFinalization.create', 'payrollFinalization.review', 'payrollFinalization.approve', 'payrollFinalization.cancel',
+    'payslip.viewAll', 'payslip.viewOwn', 'payslip.generate', 'payslip.publish', 'payslip.download',
+    'paymentBatch.view', 'paymentBatch.create', 'paymentBatch.review', 'paymentBatch.approve', 'paymentBatch.release', 'paymentBatch.cancel', 'paymentBatch.export', 'paymentBatch.reconcile',
+    'statutoryReport.view', 'statutoryReport.generate', 'statutoryReport.review', 'statutoryReport.approve', 'statutoryReport.markFiled', 'statutoryReport.export',
+    'payrollJournal.view', 'payrollJournal.generate', 'payrollJournal.approve', 'payrollJournal.export',
+    'paymentExportTemplate.view', 'paymentExportTemplate.manage', 'paymentExportTemplate.approve',
   ]
 
   const permissionMap = new Map<string, string>()
@@ -82,6 +89,13 @@ async function main() {
     'payrollPreparationSummary.view', 'payrollPreparationSummary.export',
     'payrollStatutory.view', 'payrollStatutory.manage', 'payrollStatutory.approve',
     'reports.view', 'audit.view', 'organization.view',
+    // Phase 5B — Finance Payroll (generate, cannot approve own)
+    'payrollFinalization.view', 'payrollFinalization.create',
+    'payslip.viewAll', 'payslip.generate', 'payslip.publish', 'payslip.download',
+    'paymentBatch.view', 'paymentBatch.create', 'paymentBatch.export',
+    'statutoryReport.view', 'statutoryReport.generate', 'statutoryReport.export',
+    'payrollJournal.view', 'payrollJournal.generate', 'payrollJournal.export',
+    'paymentExportTemplate.view',
   ]
   await prisma.role.create({
     data: { name: 'Finance Payroll', permissions: { create: financePermKeys.map(key => ({ permissionId: permissionMap.get(key)! })) } },
@@ -91,15 +105,46 @@ async function main() {
     ...financePermKeys,
     'payrollCalculation.review', 'payrollCalculation.validate', 'payrollCalculation.approve',
     'payrollCalculation.return', 'payrollCalculation.reopen', 'payrollStatutory.approve',
+    // Phase 5B — Finance Director (review, approve, cannot generate)
+    'payrollFinalization.view', 'payrollFinalization.review', 'payrollFinalization.approve', 'payrollFinalization.cancel',
+    'payslip.viewAll', 'payslip.download',
+    'paymentBatch.view', 'paymentBatch.approve',
+    'statutoryReport.view', 'statutoryReport.review', 'statutoryReport.approve', 'statutoryReport.markFiled', 'statutoryReport.export',
+    'payrollJournal.view', 'payrollJournal.approve', 'payrollJournal.export',
+    'paymentExportTemplate.view', 'paymentExportTemplate.approve',
   ]
   await prisma.role.create({
     data: { name: 'Finance Director', permissions: { create: directorPermKeys.map(key => ({ permissionId: permissionMap.get(key)! })) } },
   })
 
+  const treasuryPermKeys = [
+    'employee.view', 'payrollPeriod.view', 'reports.view', 'audit.view',
+    'paymentBatch.view', 'paymentBatch.review', 'paymentBatch.release', 'paymentBatch.reconcile',
+    'paymentBatch.export', 'paymentBatch.cancel',
+    'payrollFinalization.view',
+    'paymentExportTemplate.view',
+  ]
   await prisma.role.create({
-    data: { name: 'Employee', permissions: { create: [{ permissionId: permissionMap.get('employee.view')! }] } },
+    data: { name: 'Treasury Manager', permissions: { create: treasuryPermKeys.map(key => ({ permissionId: permissionMap.get(key)! })) } },
   })
-  console.log('  4 roles created')
+
+  const auditorPermKeys = [
+    'employee.view', 'payrollPeriod.view', 'reports.view', 'audit.view',
+    'payrollFinalization.view',
+    'payslip.viewAll',
+    'paymentBatch.view',
+    'statutoryReport.view',
+    'payrollJournal.view',
+    'paymentExportTemplate.view',
+  ]
+  await prisma.role.create({
+    data: { name: 'Auditor', permissions: { create: auditorPermKeys.map(key => ({ permissionId: permissionMap.get(key)! })) } },
+  })
+
+  await prisma.role.create({
+    data: { name: 'Employee', permissions: { create: [{ permissionId: permissionMap.get('employee.view')! }, { permissionId: permissionMap.get('payslip.viewOwn')! }, { permissionId: permissionMap.get('payslip.download')! }] } },
+  })
+  console.log('  7 roles created')
 
   // ── Users ──
   const passwordHash = await bcrypt.hash('Test123!', 10)
@@ -115,11 +160,19 @@ async function main() {
   await prisma.user.create({
     data: { email: 'finance.director@leapfrog.com', name: 'Finance Director', passwordHash, roles: { create: [{ roleId: directorRole!.id }] } },
   })
+  const treasuryRole = await prisma.role.findUnique({ where: { name: 'Treasury Manager' } })
+  await prisma.user.create({
+    data: { email: 'treasury@leapfrog.com', name: 'Treasury Manager', passwordHash, roles: { create: [{ roleId: treasuryRole!.id }] } },
+  })
+  const auditorRole = await prisma.role.findUnique({ where: { name: 'Auditor' } })
+  await prisma.user.create({
+    data: { email: 'auditor@leapfrog.com', name: 'Auditor User', passwordHash, roles: { create: [{ roleId: auditorRole!.id }] } },
+  })
   const empRole = await prisma.role.findUnique({ where: { name: 'Employee' } })
   await prisma.user.create({
     data: { email: 'employee@leapfrog.com', name: 'Employee User', passwordHash, roles: { create: [{ roleId: empRole!.id }] } },
   })
-  console.log('  4 users created')
+  console.log('  6 users created')
 
   // ── Department (required for employee creation) ──
   await prisma.department.create({
