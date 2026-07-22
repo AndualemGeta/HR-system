@@ -7,13 +7,15 @@ import Link from 'next/link'
 interface PayrollRow {
   id: string; employeeCode: string; employeeName: string
   department: string | null; role: string | null; location: string | null
-  basicSalary: number | null; allowance: number | null; overtime: number | null
-  incentive: number | null; commission: number | null
-  grossSalary: number | null; employeePension: number | null
+  basicSalary: number | null; workingDays: number | null; monthlySalary: number | null
+  allowance: number | null; overtime: number | null; incentive: number | null; commission: number | null
+  grossSalary: number | null; taxableIncome: number | null
+  employeePension: number | null; employerPension: number | null
   incomeTax: number | null; otherDeduction: number | null
   totalDeduction: number | null; netSalary: number | null
   paymentMethod: string | null; bankName: string | null
   bankAccountNumber: string | null; mpesaAccount: string | null
+  hireDate: string | null; pensionEligible: boolean | null
   notes: string | null
   validationStatus: string; validationMessages: string | null
   snapshotJson: string | null; overrideReason: string | null
@@ -89,12 +91,17 @@ export default function PayrollDetailPage() {
   // Totals
   const totals = {
     basicSalary: rows.reduce((s, r) => s + Number(r.basicSalary || 0), 0),
+    workingDays: rows.reduce((s, r) => s + Number(r.workingDays || 0), 0),
+    monthlySalary: rows.reduce((s, r) => s + Number(r.monthlySalary || 0), 0),
     allowance: rows.reduce((s, r) => s + Number(r.allowance || 0), 0),
     overtime: rows.reduce((s, r) => s + Number(r.overtime || 0), 0),
     incentive: rows.reduce((s, r) => s + Number(r.incentive || 0), 0),
     commission: rows.reduce((s, r) => s + Number(r.commission || 0), 0),
+    commissionOt: rows.reduce((s, r) => s + Number(r.commission || 0) + Number(r.overtime || 0), 0),
     grossSalary: rows.reduce((s, r) => s + Number(r.grossSalary || 0), 0),
+    taxableIncome: rows.reduce((s, r) => s + Number(r.taxableIncome || 0), 0),
     employeePension: rows.reduce((s, r) => s + Number(r.employeePension || 0), 0),
+    employerPension: rows.reduce((s, r) => s + Number(r.employerPension || 0), 0),
     incomeTax: rows.reduce((s, r) => s + Number(r.incomeTax || 0), 0),
     otherDeduction: rows.reduce((s, r) => s + Number(r.otherDeduction || 0), 0),
     totalDeduction: rows.reduce((s, r) => s + Number(r.totalDeduction || 0), 0),
@@ -248,7 +255,7 @@ export default function PayrollDetailPage() {
   if (loading) return <div style={{ padding: '2rem', textAlign: 'center' }}>Loading...</div>
   if (!period) return <div style={{ padding: '2rem', textAlign: 'center' }}>Period not found</div>
 
-  const editableFields = ['allowance', 'overtime', 'incentive', 'commission', 'employeePension', 'incomeTax', 'otherDeduction']
+  const editableFields = ['workingDays', 'commission', 'overtime', 'incentive', 'otherDeduction', 'allowance']
 
   return (
     <div style={{ maxWidth: 1200, margin: '0 auto', padding: '2rem 1rem' }}>
@@ -361,12 +368,12 @@ export default function PayrollDetailPage() {
             <thead>
               <tr style={{ background: '#f3f4f6' }}>
                 <th style={thStyle}>Code</th>
-                <th style={{ ...thStyle, minWidth: 180 }}>Name</th>
-                <th style={thStyle}>Dept</th>
-                <th style={thStyle}>Basic</th>
+                <th style={{ ...thStyle, minWidth: 170 }}>Name</th>
+                <th style={thStyle}>Position</th>
+                <th style={thStyle}>Shop/Location</th>
                 {editableFields.map(f => (
-                  <th key={f} style={{ ...thStyle, minWidth: 90, position: 'relative' }}>
-                    {f.charAt(0).toUpperCase() + f.slice(1)}
+                  <th key={f} style={{ ...thStyle, minWidth: 85, position: 'relative' }}>
+                    {f === 'workingDays' ? 'Days' : f === 'commission' ? 'Comm/OT' : f === 'overtime' ? 'OT' : f === 'incentive' ? 'KPI' : f === 'otherDeduction' ? 'Loan' : f === 'allowance' ? 'Allow' : f}
                     {canEdit && isDraft && (
                       <button onClick={() => { setBulkField(f); setBulkValue(''); setBulkModal(true) }}
                         style={{ marginLeft: 2, padding: '0 4px', fontSize: '0.7rem', border: '1px solid #ccc', borderRadius: 2, background: '#fff', cursor: 'pointer' }}
@@ -374,7 +381,10 @@ export default function PayrollDetailPage() {
                     )}
                   </th>
                 ))}
+                <th style={thStyle}>Monthly</th>
                 <th style={thStyle}>Gross</th>
+                <th style={thStyle}>Tax</th>
+                <th style={thStyle}>Pension</th>
                 <th style={thStyle}>Total Ded</th>
                 <th style={thStyle}>Net</th>
                 <th style={thStyle}>Status</th>
@@ -385,26 +395,45 @@ export default function PayrollDetailPage() {
               {filteredRows.map(row => {
                 const valStatus = row.validationStatus
                 const statusBg = valStatus === 'ERROR' ? '#fee' : valStatus === 'WARNING' ? '#fef3c7' : valStatus === 'VALID' ? '#f0fdf4' : 'transparent'
+                const monthlySalary = Number(row.monthlySalary || 0) || Math.round((Number(row.basicSalary || 0) / 30) * Number(row.workingDays || 30) * 100) / 100
+                const commissionOt = Number(row.commission || 0) + Number(row.overtime || 0)
                 return (
                   <tr key={row.id} style={{ background: statusBg, borderBottom: '1px solid #f3f4f6' }}>
                     <td style={tdStyle}>{row.employeeCode}</td>
                     <td style={tdStyle}>{row.employeeName}</td>
-                    <td style={tdStyle}>{row.department || '—'}</td>
-                    <td style={tdStyle}>{row.basicSalary?.toLocaleString() || '0'}</td>
-                    {editableFields.map(f => (
-                      <td key={f} style={tdStyle}>
-                        {canEdit ? (
-                          <input type="number" step="0.01"
-                            value={String((row as unknown as Record<string, unknown>)[f] ?? '')}
-                            onChange={e => handleCellChange(row.id, f, e.target.value)}
-                            style={{ width: '100%', padding: '2px 4px', border: '1px solid #d1d5db', borderRadius: 2, fontSize: '0.85rem', boxSizing: 'border-box', background: isLocked ? '#f3f4f6' : '#fff' }}
-                            disabled={isLocked} />
-                        ) : (
-                          String((row as unknown as Record<string, unknown>)[f] ?? '0')
-                        )}
-                      </td>
-                    ))}
+                    <td style={tdStyle}>{row.role || '—'}</td>
+                    <td style={tdStyle}>{row.location || row.department || '—'}</td>
+                    {editableFields.map(f => {
+                      const displayVal = f === 'commission' ? commissionOt : (row as unknown as Record<string, unknown>)[f]
+                      return (
+                        <td key={f} style={tdStyle}>
+                          {canEdit ? (
+                            <input type="number" step="0.01"
+                              value={String(displayVal ?? '')}
+                              onChange={e => {
+                                if (f === 'commission') {
+                                  // For Comm/OT, we update commission (overtime is separate field)
+                                  handleCellChange(row.id, 'commission', e.target.value)
+                                } else {
+                                  handleCellChange(row.id, f, e.target.value)
+                                }
+                              }}
+                              style={{ width: '100%', padding: '2px 4px', border: '1px solid #d1d5db', borderRadius: 2, fontSize: '0.85rem', boxSizing: 'border-box', background: isLocked ? '#f3f4f6' : '#fff' }}
+                              disabled={isLocked} />
+                          ) : (
+                            String(displayVal ?? '0')
+                          )}
+                        </td>
+                      )
+                    })}
+                    <td style={tdStyle}>{monthlySalary.toLocaleString()}</td>
                     <td style={{ ...tdStyle, fontWeight: 600 }}>{row.grossSalary?.toLocaleString() || '—'}</td>
+                    <td style={tdStyle}>{row.incomeTax?.toLocaleString() || '—'}</td>
+                    <td style={tdStyle}>
+                      {row.pensionEligible === false
+                        ? <span style={{ color: '#9ca3af', fontSize: '0.8rem' }}>Not yet eligible</span>
+                        : Number(row.employeePension || 0).toLocaleString()}
+                    </td>
                     <td style={tdStyle}>{row.totalDeduction?.toLocaleString() || '—'}</td>
                     <td style={{ ...tdStyle, fontWeight: 600, color: (row.netSalary || 0) >= 0 ? '#16a34a' : '#dc2626' }}>{row.netSalary?.toLocaleString() || '—'}</td>
                     <td style={tdStyle}>
@@ -423,11 +452,15 @@ export default function PayrollDetailPage() {
                 <td style={tdStyle}></td>
                 <td style={tdStyle}><strong>Totals ({rows.length} rows)</strong></td>
                 <td style={tdStyle}></td>
-                <td style={tdStyle}>{totals.basicSalary.toLocaleString()}</td>
-                {editableFields.map(f => (
-                  <td key={f} style={tdStyle}>{totals[f as keyof typeof totals].toLocaleString()}</td>
-                ))}
+                <td style={tdStyle}></td>
+                {editableFields.map(f => {
+                  const totalVal = f === 'commission' ? totals.commissionOt : totals[f as keyof typeof totals]
+                  return <td key={f} style={tdStyle}>{Number(totalVal).toLocaleString()}</td>
+                })}
+                <td style={tdStyle}>{totals.monthlySalary.toLocaleString()}</td>
                 <td style={tdStyle}>{totals.grossSalary.toLocaleString()}</td>
+                <td style={tdStyle}>{totals.incomeTax.toLocaleString()}</td>
+                <td style={tdStyle}>{totals.employeePension.toLocaleString()}</td>
                 <td style={tdStyle}>{totals.totalDeduction.toLocaleString()}</td>
                 <td style={tdStyle}>{totals.netSalary.toLocaleString()}</td>
                 <td style={tdStyle}></td>

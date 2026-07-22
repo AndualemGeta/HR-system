@@ -32,29 +32,50 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
     if (employees.length === 0) return badRequest('No active employees found')
 
-    const rows = employees.map(emp => ({
-      payrollPeriodId: id,
-      employeeId: emp.id,
-      employeeCode: emp.employeeId,
-      employeeName: emp.fullName,
-      department: null,
-      role: emp.currentRole || null,
-      location: emp.currentShopId || emp.currentRegionId || null,
-      basicSalary: emp.basicSalary,
-      paymentMethod: emp.payrollProfile?.paymentMethod || null,
-      bankName: emp.payrollProfile?.bankName || null,
-      bankAccountNumber: emp.payrollProfile?.bankAccountNumber || null,
-      mpesaAccount: emp.payrollProfile?.mpesaAccount || null,
-      snapshotJson: JSON.stringify({
-        basicSalary: emp.basicSalary?.toString(),
-        paymentMethod: emp.payrollProfile?.paymentMethod,
-        bankName: emp.payrollProfile?.bankName,
-        bankAccountNumber: emp.payrollProfile?.bankAccountNumber,
-        mpesaAccount: emp.payrollProfile?.mpesaAccount,
-        taxId: emp.payrollProfile?.taxId,
-        pensionId: emp.payrollProfile?.pensionId,
-      }),
-    }))
+    const periodStart = period.periodStart // start of payroll month
+
+    function computePensionEligible(hireDate: Date | null): { eligible: boolean; snapshotDate: Date | null } {
+      if (!hireDate) return { eligible: false, snapshotDate: null }
+      // Registration month = month of hireDate
+      // Pension starts in the 3rd payroll month after hireDate
+      const hireMonth = hireDate.getFullYear() * 12 + hireDate.getMonth()
+      const payrollMonth = periodStart.getFullYear() * 12 + periodStart.getMonth()
+      const eligible = payrollMonth >= hireMonth + 2
+      return { eligible, snapshotDate: hireDate }
+    }
+
+    const rows = employees.map(emp => {
+      const { eligible, snapshotDate } = computePensionEligible(emp.hireDate)
+      return {
+        payrollPeriodId: id,
+        employeeId: emp.id,
+        employeeCode: emp.employeeId,
+        employeeName: emp.fullName,
+        department: null,
+        role: emp.currentRole || null,
+        location: emp.currentShopId || emp.currentRegionId || null,
+        basicSalary: emp.basicSalary,
+        workingDays: 30,
+        hireDate: snapshotDate,
+        pensionEligible: eligible,
+        paymentMethod: emp.payrollProfile?.paymentMethod || null,
+        bankName: emp.payrollProfile?.bankName || null,
+        bankAccountNumber: emp.payrollProfile?.bankAccountNumber || null,
+        mpesaAccount: emp.payrollProfile?.mpesaAccount || null,
+        snapshotJson: JSON.stringify({
+          basicSalary: emp.basicSalary?.toString(),
+          workingDays: 30,
+          hireDate: snapshotDate?.toISOString(),
+          pensionEligible: eligible,
+          paymentMethod: emp.payrollProfile?.paymentMethod,
+          bankName: emp.payrollProfile?.bankName,
+          bankAccountNumber: emp.payrollProfile?.bankAccountNumber,
+          mpesaAccount: emp.payrollProfile?.mpesaAccount,
+          taxId: emp.payrollProfile?.taxId,
+          pensionId: emp.payrollProfile?.pensionId,
+        }),
+      }
+    })
 
     await prisma.mvpPayrollRow.createMany({ data: rows })
 

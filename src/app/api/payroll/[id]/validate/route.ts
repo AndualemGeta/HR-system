@@ -24,15 +24,26 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     for (const row of rows) {
       const msgs: string[] = []
       const warns: string[] = []
+      const basic = Number(row.basicSalary || 0)
+      const workingDays = Number(row.workingDays || 30)
 
       if (!row.employeeCode) msgs.push('Missing employee code')
       if (!row.employeeName) msgs.push('Missing employee name')
-      if (row.basicSalary == null || Number(row.basicSalary) < 0) msgs.push('Invalid basic salary')
-      if (row.grossSalary == null || Number(row.grossSalary) < 0) msgs.push('Gross salary not calculated')
-      if (row.netSalary == null || Number(row.netSalary) < 0) msgs.push('Net salary not calculated')
-      if (row.paymentMethod === 'BANK' && !row.bankAccountNumber) msgs.push('Bank account required for BANK payment')
-      if (row.paymentMethod === 'MPESA' && !row.mpesaAccount) msgs.push('M-PESA number required for MPESA payment')
-      if (row.employeePension != null && Number(row.employeePension) < 0) warns.push('Negative pension value')
+      if (basic <= 0) msgs.push('Basic salary must be greater than zero')
+      if (workingDays <= 0 || workingDays > 31) msgs.push('Working days must be between 1 and 31')
+      if (!row.hireDate) msgs.push('MISSING_PENSION_ELIGIBILITY_DATE: No hire/registration date for employee')
+      if (Number(row.grossSalary) <= 0) msgs.push('Gross salary not calculated or zero')
+      if (Number(row.netSalary) <= 0) warns.push('Net salary is zero or negative')
+      if (Number(row.incomeTax) < 0) msgs.push('Income tax cannot be negative')
+      if (Number(row.employeePension) < 0) warns.push('Employee pension is negative')
+      if (Number(row.otherDeduction) < 0) warns.push('Shortage/loan deduction is negative')
+
+      // Check basic arithmetic
+      const monthlyCalc = Math.round((basic / 30) * workingDays * 100) / 100
+      const monthlySalary = Number(row.monthlySalary || 0)
+      if (monthlySalary > 0 && Math.abs(monthlySalary - monthlyCalc) > 1) {
+        warns.push(`Monthly salary (${monthlySalary}) differs from Basic/30×Days (${monthlyCalc})`)
+      }
 
       if (msgs.length > 0 || warns.length > 0) {
         employeeMessages[row.id] = {
@@ -54,7 +65,6 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       })
     }
 
-    // Recalculate rows to get updated validation statuses
     const updatedRows = await prisma.mvpPayrollRow.findMany({
       where: { payrollPeriodId: id },
       orderBy: { employeeName: 'asc' },

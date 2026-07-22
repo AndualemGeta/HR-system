@@ -6,6 +6,17 @@ import { notFound, success, badRequest, unauthorized, forbidden, internalError }
 import { createAuditLog } from '@/lib/audit'
 import Decimal from 'decimal.js'
 
+// Progressive tax brackets from the company workbook
+// Tax = rate × (income − threshold)+ fixedDeduction (or rate × income − fixedDeduction)
+function calcIncomeTax(taxableIncome: Decimal): Decimal {
+  if (taxableIncome.lte(2000)) return new Decimal(0)
+  if (taxableIncome.lte(4000)) return taxableIncome.mul(0.15).minus(300)
+  if (taxableIncome.lte(7000)) return taxableIncome.mul(0.20).minus(500)
+  if (taxableIncome.lte(10000)) return taxableIncome.mul(0.25).minus(850)
+  if (taxableIncome.lte(14000)) return taxableIncome.mul(0.30).minus(1350)
+  return taxableIncome.mul(0.35).minus(2050)
+}
+
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params
@@ -22,26 +33,55 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
     for (const row of rows) {
       const basic = new Decimal(row.basicSalary || 0)
+      const workingDays = new Decimal(row.workingDays || 30)
       const allowance = new Decimal(row.allowance || 0)
       const overtime = new Decimal(row.overtime || 0)
       const incentive = new Decimal(row.incentive || 0)
       const commission = new Decimal(row.commission || 0)
+      const shortageLoan = new Decimal(row.otherDeduction || 0)
 
-      const grossSalary = basic.plus(allowance).plus(overtime).plus(incentive).plus(commission)
+      // Monthly salary = Basic / 30 × Working days
+      const monthlySalary = basic.div(30).mul(workingDays).toDecimalPlaces(2)
 
-      const empPension = new Decimal(row.employeePension || 0)
-      const incomeTax = new Decimal(row.incomeTax || 0)
-      const otherDed = new Decimal(row.otherDeduction || 0)
-      const totalDeduction = empPension.plus(incomeTax).plus(otherDed)
+      // Commission/OT = Commission + Overtime (combined)
+      const commissionOt = commission.plus(overtime)
 
-      const netSalary = grossSalary.minus(totalDeduction)
+      // Gross = MonthlySalary + Commission/OT + KPI
+      const grossSalary = monthlySalary.plus(commissionOt).plus(incentive)
+
+      // Taxable income = Gross salary
+      const taxableIncome = grossSalary
+
+      // Income tax (progressive brackets)
+      const incomeTax = calcIncomeTax(taxableIncome).toDecimalPlaces(2)
+
+      // Employee pension = Basic × 7% (only if pension eligible)
+      const employeePension = row.pensionEligible
+        ? basic.mul(0.07).toDecimalPlaces(2)
+        : new Decimal(0)
+
+      // Employer pension = Basic × 11% (only if pension eligible)
+      const employerPension = row.pensionEligible
+        ? basic.mul(0.11).toDecimalPlaces(2)
+        : new Decimal(0)
+
+      // Total deduction = Income tax + Employee pension + Shortage/Loan
+      const totalDeduction = incomeTax.plus(employeePension).plus(shortageLoan).toDecimalPlaces(2)
+
+      // Net pay = Gross - Total deduction + Transport/Other allowance
+      const netSalary = grossSalary.minus(totalDeduction).plus(allowance).toDecimalPlaces(2)
 
       await prisma.mvpPayrollRow.update({
         where: { id: row.id },
         data: {
-          grossSalary: grossSalary.toDecimalPlaces(2).toNumber(),
-          totalDeduction: totalDeduction.toDecimalPlaces(2).toNumber(),
-          netSalary: netSalary.toDecimalPlaces(2).toNumber(),
+          monthlySalary: monthlySalary.toNumber(),
+          grossSalary: grossSalary.toNumber(),
+          taxableIncome: taxableIncome.toNumber(),
+          incomeTax: incomeTax.toNumber(),
+          employeePension: employeePension.toNumber(),
+          employerPension: employerPension.toNumber(),
+          totalDeduction: totalDeduction.toNumber(),
+          netSalary: netSalary.toNumber(),
         },
       })
     }
