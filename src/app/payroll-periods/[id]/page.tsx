@@ -129,7 +129,7 @@ export default function PayrollPeriodDetailPage() {
     if (activeTab === 'submissions' && has('payrollInput.view')) {
       fetchSubmissionGroups()
     }
-  }, [activeTab, period, has])
+  }, [activeTab, period, perms])
 
   const handleAction = async (action: string) => {
     setError('')
