@@ -97,7 +97,6 @@ export default function PayrollDetailPage() {
     overtime: rows.reduce((s, r) => s + Number(r.overtime || 0), 0),
     incentive: rows.reduce((s, r) => s + Number(r.incentive || 0), 0),
     commission: rows.reduce((s, r) => s + Number(r.commission || 0), 0),
-    commissionOt: rows.reduce((s, r) => s + Number(r.commission || 0) + Number(r.overtime || 0), 0),
     grossSalary: rows.reduce((s, r) => s + Number(r.grossSalary || 0), 0),
     taxableIncome: rows.reduce((s, r) => s + Number(r.taxableIncome || 0), 0),
     employeePension: rows.reduce((s, r) => s + Number(r.employeePension || 0), 0),
@@ -108,11 +107,15 @@ export default function PayrollDetailPage() {
     netSalary: rows.reduce((s, r) => s + Number(r.netSalary || 0), 0),
   }
 
-  async function handleSnapshot() {
+  async function handleSnapshot(confirmReSnapshot = false) {
     setSnapshotLoading(true)
     setError('')
     try {
-      const res = await fetch(`/api/payroll/${params.id}/snapshot`, { method: 'POST' })
+      const res = await fetch(`/api/payroll/${params.id}/snapshot`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ confirm: confirmReSnapshot }),
+      })
       const json = await res.json()
       if (!res.ok) { setError(json.error || 'Snapshot failed'); return }
       setSuccessMsg(`Snapshotted ${json.data.employeeCount} employees`)
@@ -279,13 +282,13 @@ export default function PayrollDetailPage() {
       {/* Action buttons */}
       <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '1rem' }}>
         {isDraft && rows.length === 0 && (
-          <button onClick={handleSnapshot} disabled={snapshotLoading}
+          <button onClick={() => { handleSnapshot(false).catch(() => {}) }} disabled={snapshotLoading}
             style={{ padding: '0.4rem 0.75rem', background: snapshotLoading ? '#999' : '#2563eb', color: '#fff', border: 'none', borderRadius: 4, cursor: 'pointer', fontSize: '0.85rem' }}>
             {snapshotLoading ? 'Snapshoting...' : 'Snapshot Active Employees'}
           </button>
         )}
         {isDraft && rows.length > 0 && (
-          <button onClick={handleSnapshot} disabled={snapshotLoading}
+          <button onClick={() => { if (window.confirm('Re-snapshot will DELETE all existing rows and re-create them from active employees. Continue?')) { handleSnapshot(true).catch(() => {}) } }} disabled={snapshotLoading}
             style={{ padding: '0.4rem 0.75rem', background: snapshotLoading ? '#999' : '#f59e0b', color: '#fff', border: 'none', borderRadius: 4, cursor: 'pointer', fontSize: '0.85rem' }}>
             {snapshotLoading ? 'Re-snapshotting...' : 'Re-snapshot'}
           </button>
@@ -373,7 +376,7 @@ export default function PayrollDetailPage() {
                 <th style={thStyle}>Shop/Location</th>
                 {editableFields.map(f => (
                   <th key={f} style={{ ...thStyle, minWidth: 85, position: 'relative' }}>
-                    {f === 'workingDays' ? 'Days' : f === 'commission' ? 'Comm/OT' : f === 'overtime' ? 'OT' : f === 'incentive' ? 'KPI' : f === 'otherDeduction' ? 'Loan' : f === 'allowance' ? 'Allow' : f}
+                    {f === 'workingDays' ? 'Days' : f === 'commission' ? 'Commission' : f === 'overtime' ? 'Overtime' : f === 'incentive' ? 'KPI' : f === 'otherDeduction' ? 'Loan' : f === 'allowance' ? 'Allow' : f}
                     {canEdit && isDraft && (
                       <button onClick={() => { setBulkField(f); setBulkValue(''); setBulkModal(true) }}
                         style={{ marginLeft: 2, padding: '0 4px', fontSize: '0.7rem', border: '1px solid #ccc', borderRadius: 2, background: '#fff', cursor: 'pointer' }}
@@ -396,7 +399,6 @@ export default function PayrollDetailPage() {
                 const valStatus = row.validationStatus
                 const statusBg = valStatus === 'ERROR' ? '#fee' : valStatus === 'WARNING' ? '#fef3c7' : valStatus === 'VALID' ? '#f0fdf4' : 'transparent'
                 const monthlySalary = Number(row.monthlySalary || 0) || Math.round((Number(row.basicSalary || 0) / 30) * Number(row.workingDays || 30) * 100) / 100
-                const commissionOt = Number(row.commission || 0) + Number(row.overtime || 0)
                 return (
                   <tr key={row.id} style={{ background: statusBg, borderBottom: '1px solid #f3f4f6' }}>
                     <td style={tdStyle}>{row.employeeCode}</td>
@@ -404,20 +406,13 @@ export default function PayrollDetailPage() {
                     <td style={tdStyle}>{row.role || '—'}</td>
                     <td style={tdStyle}>{row.location || row.department || '—'}</td>
                     {editableFields.map(f => {
-                      const displayVal = f === 'commission' ? commissionOt : (row as unknown as Record<string, unknown>)[f]
+                      const displayVal = (row as unknown as Record<string, unknown>)[f]
                       return (
                         <td key={f} style={tdStyle}>
                           {canEdit ? (
                             <input type="number" step="0.01"
                               value={String(displayVal ?? '')}
-                              onChange={e => {
-                                if (f === 'commission') {
-                                  // For Comm/OT, we update commission (overtime is separate field)
-                                  handleCellChange(row.id, 'commission', e.target.value)
-                                } else {
-                                  handleCellChange(row.id, f, e.target.value)
-                                }
-                              }}
+                              onChange={e => handleCellChange(row.id, f, e.target.value)}
                               style={{ width: '100%', padding: '2px 4px', border: '1px solid #d1d5db', borderRadius: 2, fontSize: '0.85rem', boxSizing: 'border-box', background: isLocked ? '#f3f4f6' : '#fff' }}
                               disabled={isLocked} />
                           ) : (
@@ -454,8 +449,7 @@ export default function PayrollDetailPage() {
                 <td style={tdStyle}></td>
                 <td style={tdStyle}></td>
                 {editableFields.map(f => {
-                  const totalVal = f === 'commission' ? totals.commissionOt : totals[f as keyof typeof totals]
-                  return <td key={f} style={tdStyle}>{Number(totalVal).toLocaleString()}</td>
+                  return <td key={f} style={tdStyle}>{Number(totals[f as keyof typeof totals] || 0).toLocaleString()}</td>
                 })}
                 <td style={tdStyle}>{totals.monthlySalary.toLocaleString()}</td>
                 <td style={tdStyle}>{totals.grossSalary.toLocaleString()}</td>

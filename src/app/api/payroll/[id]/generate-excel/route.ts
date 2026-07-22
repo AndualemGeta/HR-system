@@ -80,9 +80,16 @@ async function writePayrollSheet(ws: ExcelJS.Worksheet, rows: Array<Record<strin
   // Title row
   ws.mergeCells('A1:S1')
   const title = ws.getCell('A1')
-  title.value = `Salary For The Month Of ${periodName}`
+  title.value = `MVP Payroll Preview Export — ${periodName}`
   title.font = { bold: true, size: 14 }
   title.alignment = { horizontal: 'center', vertical: 'middle' }
+
+  // Subtitle — preview notice
+  ws.mergeCells('A2:S2')
+  const subtitle = ws.getCell('A2')
+  subtitle.value = 'PREVIEW — Not yet production-ready. Formulas match workbook spec but output is not final.'
+  subtitle.font = { italic: true, size: 9, color: { argb: 'FF888888' } }
+  subtitle.alignment = { horizontal: 'center' }
 
   // Column headers (row 3)
   const headerRow = ws.addRow(COL_HEADERS)
@@ -153,6 +160,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const period = await prisma.mvpPayrollPeriod.findUnique({ where: { id } })
     if (!period) return notFound()
     if (period.status !== 'READY' && period.status !== 'LOCKED') return badRequest('Period must be READY or LOCKED')
+
+    // Require all rows to be validated with zero blockers before export
+    const errorRows = await prisma.mvpPayrollRow.count({ where: { payrollPeriodId: id, validationStatus: 'ERROR' } })
+    if (errorRows > 0) return badRequest(`Cannot export: ${errorRows} row(s) have validation errors. Fix blockers first.`)
+    const pendingRows = await prisma.mvpPayrollRow.count({ where: { payrollPeriodId: id, validationStatus: 'PENDING' } })
+    if (pendingRows > 0) return badRequest(`Cannot export: ${pendingRows} row(s) have not been validated. Run validation first.`)
 
     const rows = await prisma.mvpPayrollRow.findMany({
       where: { payrollPeriodId: id },

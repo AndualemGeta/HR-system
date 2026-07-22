@@ -1,178 +1,183 @@
 import { prisma } from '../lib/prisma'
-import Decimal from 'decimal.js'
 
 let passed = 0
 let failed = 0
-const errors: string[] = []
 
 async function assert(label: string, fn: () => Promise<boolean>) {
   try {
     const result = await fn()
-    if (result) { passed++; console.log(`  ✓ ${label}`) }
-    else { failed++; errors.push(label); console.log(`  ✗ ${label}`) }
+    if (result) { passed++; console.log(`  \u2713 ${label}`) }
+    else { failed++; console.log(`  \u2717 ${label}`) }
   } catch (e) {
-    failed++; errors.push(`${label}: ${e instanceof Error ? e.message : e}`)
-    console.log(`  ✗ ${label}: ${e instanceof Error ? e.message : e}`)
+    failed++; console.log(`  \u2717 ${label}: ${e instanceof Error ? e.message : e}`)
   }
 }
 
+// ── Workbook formula helpers (must match API logic exactly) ──
+function calcMonthly(basic: number, workingDays: number): number {
+  return Math.round((basic / 30) * workingDays * 100) / 100
+}
+function calcGross(monthly: number, commission: number, overtime: number, kpi: number): number {
+  return Math.round((monthly + commission + overtime + kpi) * 100) / 100
+}
+function calcTax(taxable: number): number {
+  if (taxable <= 2000) return 0
+  if (taxable <= 4000) return Math.round((taxable * 0.15 - 300) * 100) / 100
+  if (taxable <= 7000) return Math.round((taxable * 0.20 - 500) * 100) / 100
+  if (taxable <= 10000) return Math.round((taxable * 0.25 - 850) * 100) / 100
+  if (taxable <= 14000) return Math.round((taxable * 0.30 - 1350) * 100) / 100
+  return Math.round((taxable * 0.35 - 2050) * 100) / 100
+}
+function calcPensionEligible(hireDate: Date | null, periodStart: Date): boolean {
+  if (!hireDate) return false
+  const hireMonth = hireDate.getFullYear() * 12 + hireDate.getMonth()
+  const payrollMonth = periodStart.getFullYear() * 12 + periodStart.getMonth()
+  return payrollMonth >= hireMonth + 2
+}
+function calcTotalDed(tax: number, empPension: number, shortageLoan: number): number {
+  return Math.round((tax + empPension + shortageLoan) * 100) / 100
+}
+function calcNet(gross: number, totalDed: number, allowance: number): number {
+  return Math.round((gross - totalDed + allowance) * 100) / 100
+}
+
 async function main() {
-  console.log('\n=== MVP Payroll Tests ===\n')
+  console.log('\n=== MVP Payroll Unit Tests ===\n')
 
-  // ── Calculation Logic ──────────────────────────────
-  console.log('[Calculation Logic]')
-  await assert('Gross = Basic + Allowance + Overtime + Incentive + Commission', async () => {
-    const basic = new Decimal(10000)
-    const allowance = new Decimal(2000)
-    const overtime = new Decimal(500)
-    const incentive = new Decimal(1000)
-    const commission = new Decimal(1500)
-    const gross = basic.plus(allowance).plus(overtime).plus(incentive).plus(commission)
-    return gross.equals(15000)
+  // ── Formula Logic Tests (pure) ──
+  console.log('[Workbook Formulas]')
+  await assert('Monthly = Basic/30 × WorkingDays', async () => {
+    const result = calcMonthly(10000, 25)
+    return result === 8333.33
   })
 
-  await assert('TotalDeductions = Pension + IncomeTax + Other', async () => {
-    const pension = new Decimal(700)
-    const tax = new Decimal(1500)
-    const other = new Decimal(300)
-    const total = pension.plus(tax).plus(other)
-    return total.equals(2500)
+  await assert('Gross = Monthly + Commission + Overtime + KPI', async () => {
+    const result = calcGross(10000, 1500, 500, 1000)
+    return result === 13000
   })
 
-  await assert('Net = Gross - TotalDeductions', async () => {
-    const gross = new Decimal(15000)
-    const deductions = new Decimal(2500)
-    const net = gross.minus(deductions)
-    return net.equals(12500)
+  await assert('Progressive Income Tax (bracket 1: ≤2000 = 0)', async () => {
+    return calcTax(2000) === 0
   })
 
-  await assert('Rounding to 2 decimal places', async () => {
-    const val = new Decimal(100.456)
-    return val.toDecimalPlaces(2).toNumber() === 100.46
+  await assert('Progressive Income Tax (bracket 2: 2001-4000 = 15% - 300)', async () => {
+    return calcTax(3500) === 225 // 3500*0.15 - 300 = 225
   })
 
-  await assert('Zero values handled correctly', async () => {
-    const gross = new Decimal(0)
-    const deductions = new Decimal(0)
-    const net = gross.minus(deductions)
-    return net.equals(0)
+  await assert('Progressive Income Tax (bracket 5: 10001-14000 = 30% - 1350)', async () => {
+    return calcTax(12000) === 2250 // 12000*0.30 - 1350 = 2250
   })
 
-  await assert('Large numbers work', async () => {
-    const gross = new Decimal(999999.99)
-    const deductions = new Decimal(500000.50)
-    const net = gross.minus(deductions)
-    return net.equals(499999.49)
+  await assert('Progressive Income Tax (bracket 7: >20000 = 35% - 2050)', async () => {
+    return calcTax(30000) === 8450 // 30000*0.35 - 2050 = 8450
   })
 
-  // ── Model Existence ──────────────────────────────
-  console.log('[MVP Models]')
-  await assert('MvpPayrollPeriod model exists', async () => {
+  await assert('TotalDeduction = Tax + EmployeePension + Shortage/Loan', async () => {
+    return calcTotalDed(1500, 700, 300) === 2500
+  })
+
+  await assert('Net = Gross - TotalDeduction + TransportAllowance', async () => {
+    return calcNet(15000, 2500, 1000) === 13500
+  })
+
+  // ── Pension Eligibility Tests (pure logic) ──
+  console.log('[Pension Eligibility]')
+  await assert('1. Current payroll month: not eligible', async () => {
+    return calcPensionEligible(new Date('2026-06-10'), new Date('2026-06-01')) === false
+  })
+
+  await assert('2. Second payroll month: not eligible', async () => {
+    return calcPensionEligible(new Date('2026-06-10'), new Date('2026-07-01')) === false
+  })
+
+  await assert('3. Third payroll month: eligible', async () => {
+    return calcPensionEligible(new Date('2026-06-10'), new Date('2026-08-01')) === true
+  })
+
+  await assert('4. After third month: eligible', async () => {
+    return calcPensionEligible(new Date('2026-06-10'), new Date('2026-12-01')) === true
+  })
+
+  await assert('5. Missing hire date: not eligible', async () => {
+    return calcPensionEligible(null, new Date('2026-06-01')) === false
+  })
+
+  await assert('6. Boundary: last day of month', async () => {
+    const r1 = calcPensionEligible(new Date('2026-06-30'), new Date('2026-06-01'))
+    const r2 = calcPensionEligible(new Date('2026-06-30'), new Date('2026-07-01'))
+    const r3 = calcPensionEligible(new Date('2026-06-30'), new Date('2026-08-01'))
+    return r1 === false && r2 === false && r3 === true
+  })
+
+  // ── Persisted data verification (if DB has data) ──
+  console.log('[Persisted Data]')
+  await assert('MvpPayrollPeriod table has records (if any)', async () => {
     const count = await prisma.mvpPayrollPeriod.count()
     return typeof count === 'number'
   })
 
-  await assert('MvpPayrollRow model exists', async () => {
-    const count = await prisma.mvpPayrollRow.count()
-    return typeof count === 'number'
-  })
-
-  await assert('MvpPayrollExport model exists', async () => {
-    const count = await prisma.mvpPayrollExport.count()
-    return typeof count === 'number'
-  })
-
-  // ── Payroll Period Status ──────────────────────────────
-  console.log('[Payroll Period Status]')
-  await assert('Status DRAFT exists in enum', async () => {
-    const period = await prisma.mvpPayrollPeriod.findFirst({ where: { status: 'DRAFT' } })
-    return period !== null || true // enum exists even if no records
-  })
-
-  // ── Payroll Row Fields ──────────────────────────────
-  console.log('[Payroll Row Fields]')
-  await assert('PayrollRow has all required fields', async () => {
-    // Verify by checking Prisma schema reflection
+  await assert('MvpPayrollRow has hireDate and pensionEligible fields', async () => {
     const row = await prisma.mvpPayrollRow.findFirst()
-    if (!row) return true // no data yet, fields exist per migration
-    const fields = ['employeeCode', 'employeeName', 'basicSalary', 'grossSalary', 'netSalary', 'paymentMethod', 'validationStatus']
-    return fields.every(f => f in row)
+    if (!row) return true
+    return 'hireDate' in row && 'pensionEligible' in row
   })
 
-  // ── Pension Eligibility ──────────────────────────────
-  console.log('[Pension Eligibility]')
-
-  function computePensionEligible(hireDate: Date | null, payrollPeriodStart: Date): { eligible: boolean } {
-    if (!hireDate) return { eligible: false }
-    const hireMonth = hireDate.getFullYear() * 12 + hireDate.getMonth()
-    const payrollMonth = payrollPeriodStart.getFullYear() * 12 + payrollPeriodStart.getMonth()
-    return { eligible: payrollMonth >= hireMonth + 2 }
-  }
-
-  await assert('1. Employee registered during current payroll month: pension = 0', async () => {
-    // Hire date June 2026, payroll period June 2026 => not eligible
-    const payrollStart = new Date('2026-06-01')
-    const hireDate = new Date('2026-06-10')
-    const result = computePensionEligible(hireDate, payrollStart)
-    if (result.eligible) return false
-    const basic = new Decimal(10000)
-    const empPension = result.eligible ? basic.mul(0.07) : new Decimal(0)
-    const emprPension = result.eligible ? basic.mul(0.11) : new Decimal(0)
-    return empPension.equals(0) && emprPension.equals(0)
+  await assert('Payroll rows have workingDays and monthlySalary', async () => {
+    const row = await prisma.mvpPayrollRow.findFirst()
+    if (!row) return true
+    return 'workingDays' in row && 'monthlySalary' in row
   })
 
-  await assert('2. Second payroll month: pension = 0', async () => {
-    // Hire date June 2026, payroll period July 2026 => not eligible
-    const payrollStart = new Date('2026-07-01')
-    const hireDate = new Date('2026-06-10')
-    const result = computePensionEligible(hireDate, payrollStart)
-    if (result.eligible) return false
-    const basic = new Decimal(10000)
-    const empPension = result.eligible ? basic.mul(0.07) : new Decimal(0)
-    const emprPension = result.eligible ? basic.mul(0.11) : new Decimal(0)
-    return empPension.equals(0) && emprPension.equals(0)
-  })
+  // Verify a persisted row's calculation against workbook formula
+  await assert('Persisted row matches workbook formulas (if data exists)', async () => {
+    const row = await prisma.mvpPayrollRow.findFirst({
+      where: {
+        basicSalary: { not: null },
+        grossSalary: { not: null },
+        netSalary: { not: null },
+        monthlySalary: { not: null },
+      },
+    })
+    if (!row) return true
+    const basic = Number(row.basicSalary)
+    const days = Number(row.workingDays || 30)
+    const commission = Number(row.commission || 0)
+    const overtime = Number(row.overtime || 0)
+    const kpi = Number(row.incentive || 0)
+    const allowance = Number(row.allowance || 0)
+    const tax = Number(row.incomeTax || 0)
+    const empPension = Number(row.employeePension || 0)
+    const shortageLoan = Number(row.otherDeduction || 0)
 
-  await assert('3. Third payroll month: pension = basicSalary × 7% and 11%', async () => {
-    // Hire date June 2026, payroll period August 2026 => eligible
-    const payrollStart = new Date('2026-08-01')
-    const hireDate = new Date('2026-06-10')
-    const result = computePensionEligible(hireDate, payrollStart)
-    if (!result.eligible) return false
-    const basic = new Decimal(10000)
-    const empPension = result.eligible ? basic.mul(0.07) : new Decimal(0)
-    const emprPension = result.eligible ? basic.mul(0.11) : new Decimal(0)
-    return empPension.equals(700) && emprPension.equals(1100)
-  })
+    const monthly = Number(row.monthlySalary)
+    const expectedMonthly = calcMonthly(basic, days)
+    if (monthly > 0 && Math.abs(monthly - expectedMonthly) > 1) {
+      console.log(`    Monthly mismatch: ${monthly} vs expected ${expectedMonthly}`)
+      return false
+    }
 
-  await assert('4. After third month: pension continues to apply', async () => {
-    // Hire date June 2026, payroll period December 2026 => eligible
-    const payrollStart = new Date('2026-12-01')
-    const hireDate = new Date('2026-06-10')
-    const result = computePensionEligible(hireDate, payrollStart)
-    if (!result.eligible) return false
-    const basic = new Decimal(10000)
-    const empPension = result.eligible ? basic.mul(0.07) : new Decimal(0)
-    const emprPension = result.eligible ? basic.mul(0.11) : new Decimal(0)
-    return empPension.equals(700) && emprPension.equals(1100)
-  })
+    const gross = Number(row.grossSalary)
+    const expectedGross = calcGross(monthly || expectedMonthly, commission, overtime, kpi)
+    if (gross > 0 && Math.abs(gross - expectedGross) > 1) {
+      console.log(`    Gross mismatch: ${gross} vs expected ${expectedGross}`)
+      return false
+    }
 
-  await assert('5. Missing registration date: blocks with MISSING_PENSION_ELIGIBILITY_DATE', async () => {
-    const result = computePensionEligible(null, new Date('2026-06-01'))
-    if (result.eligible) return false
-    const message = 'MISSING_PENSION_ELIGIBILITY_DATE: No hire/registration date for employee'
-    return message.includes('MISSING_PENSION_ELIGIBILITY_DATE')
-  })
+    const totalDed = Number(row.totalDeduction || 0)
+    const expectedTotalDed = calcTotalDed(tax, empPension, shortageLoan)
+    if (totalDed > 0 && Math.abs(totalDed - expectedTotalDed) > 1) {
+      console.log(`    TotalDed mismatch: ${totalDed} vs expected ${expectedTotalDed}`)
+      return false
+    }
 
-  // Test 6: Hire date at the boundary - last day of month
-  await assert('6. Hire date last day of month is handled correctly', async () => {
-    // Hire date June 30, payroll period June = month 0 => not eligible
-    const r1 = computePensionEligible(new Date('2026-06-30'), new Date('2026-06-01'))
-    // Hire date June 30, payroll period July = month 1 => not eligible
-    const r2 = computePensionEligible(new Date('2026-06-30'), new Date('2026-07-01'))
-    // Hire date June 30, payroll period August = month 2 => eligible
-    const r3 = computePensionEligible(new Date('2026-06-30'), new Date('2026-08-01'))
-    return !r1.eligible && !r2.eligible && r3.eligible
+    const net = Number(row.netSalary)
+    const expectedNet = calcNet(gross, totalDed, allowance)
+    if (net > 0 && Math.abs(net - expectedNet) > 1) {
+      console.log(`    Net mismatch: ${net} vs expected ${expectedNet}`)
+      return false
+    }
+
+    return true
   })
 
   console.log(`\n${'='.repeat(40)}`)

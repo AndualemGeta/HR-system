@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma'
 import { getSession } from '@/lib/session'
 import { userHasPermission } from '@/lib/rbac'
 import { notFound, success, badRequest, unauthorized, forbidden, internalError } from '@/lib/api'
+import { createAuditLog } from '@/lib/audit'
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -61,6 +62,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       const updateData: Record<string, unknown> = {}
       const allowedFields = ['allowance', 'overtime', 'incentive', 'commission',
         'employeePension', 'incomeTax', 'otherDeduction', 'notes', 'basicSalary',
+        'workingDays',
         'paymentMethod', 'bankName', 'bankAccountNumber', 'mpesaAccount']
       for (const field of allowedFields) {
         if (row[field] !== undefined) {
@@ -68,7 +70,16 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
         }
       }
       if (Object.keys(updateData).length > 0) {
+        const existing = await prisma.mvpPayrollRow.findUnique({ where: { id: row.id } })
         await prisma.mvpPayrollRow.update({ where: { id: row.id }, data: updateData })
+        await createAuditLog({
+          userId: session.userId,
+          action: 'PAYROLL_PERIOD_UPDATE',
+          entityType: 'MvpPayrollRow',
+          entityId: row.id,
+          oldValue: existing ? Object.fromEntries(Object.entries(updateData).map(([k]) => [k, existing[k as keyof typeof existing]])) : undefined,
+          newValue: updateData,
+        })
       }
     }
 

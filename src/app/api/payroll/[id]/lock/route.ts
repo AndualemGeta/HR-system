@@ -16,6 +16,13 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     if (!period) return notFound()
     if (period.status !== 'READY') return badRequest('Period must be READY before locking')
 
+    // Require all rows to be validated with zero blockers
+    const errorRows = await prisma.mvpPayrollRow.count({ where: { payrollPeriodId: id, validationStatus: 'ERROR' } })
+    if (errorRows > 0) return badRequest(`Cannot lock: ${errorRows} row(s) have validation errors. Run validation first.`)
+
+    const pendingRows = await prisma.mvpPayrollRow.count({ where: { payrollPeriodId: id, validationStatus: 'PENDING' } })
+    if (pendingRows > 0) return badRequest(`Cannot lock: ${pendingRows} row(s) have not been validated. Run validation first.`)
+
     const updated = await prisma.mvpPayrollPeriod.update({
       where: { id },
       data: { status: 'LOCKED', lockedById: session.userId, lockedAt: new Date() },

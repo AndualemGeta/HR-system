@@ -16,19 +16,47 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     if (!period) return notFound()
     if (period.status !== 'DRAFT') return badRequest('Only draft periods can accept snapshots')
 
+    // Parse body for re-snapshot confirmation
+    const body = await req.json().catch(() => ({}))
+    const confirm = body.confirm === true
+
     // Check if rows already exist
     const existingCount = await prisma.mvpPayrollRow.count({ where: { payrollPeriodId: id } })
-    if (existingCount > 0) return badRequest('Rows already exist. Remove them first to re-snapshot.')
+    if (existingCount > 0) {
+      if (!confirm) return badRequest('Rows already exist. Send { "confirm": true } to re-snapshot (existing rows will be deleted and re-created).')
+      // Delete existing rows for re-snapshot
+      await prisma.mvpPayrollRow.deleteMany({ where: { payrollPeriodId: id } })
+    }
 
-    // Get active employees
-    const employees = await prisma.employee.findMany({
-      where: {
-        employmentStatus: { in: ['ACTIVE', 'ON_PROBATION'] },
-      },
-      include: {
-        payrollProfile: true,
-      },
-    })
+    // Resolve department, region, area, shop names for correct worksheet assignment
+    const [allDepts, allLocations] = await Promise.all([
+      prisma.department.findMany(),
+      prisma.location.findMany(),
+    ])
+    const deptMap = new Map(allDepts.map(d => [d.id, d.name]))
+    const locMap = new Map(allLocations.map(l => [l.id, l.name]))
+
+    function resolveLocation(emp: typeof employees[0]): { department: string | null; location: string | null } {
+      const deptName = emp.currentDepartmentId ? (deptMap.get(emp.currentDepartmentId) || null) : null
+      // Build location string: prefer Shop > Area > Region
+      const shopName = emp.currentShopId ? (locMap.get(emp.currentShopId) || null) : null
+      const areaName = emp.currentAreaId ? (locMap.get(emp.currentAreaId) || null) : null
+      const regionName = emp.currentRegionId ? (locMap.get(emp.currentRegionId) || null) : null
+      const location = shopName || areaName || regionName
+      return { department: deptName, location }
+    }
+
+    const [activeEmployees, onProbationEmployees] = await Promise.all([
+      prisma.employee.findMany({
+        where: { employmentStatus: 'ACTIVE' },
+        include: { payrollProfile: true },
+      }),
+      prisma.employee.findMany({
+        where: { employmentStatus: 'ON_PROBATION' },
+        include: { payrollProfile: true },
+      }),
+    ])
+    const employees = [...activeEmployees, ...onProbationEmployees]
 
     if (employees.length === 0) return badRequest('No active employees found')
 
@@ -36,8 +64,6 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
     function computePensionEligible(hireDate: Date | null): { eligible: boolean; snapshotDate: Date | null } {
       if (!hireDate) return { eligible: false, snapshotDate: null }
-      // Registration month = month of hireDate
-      // Pension starts in the 3rd payroll month after hireDate
       const hireMonth = hireDate.getFullYear() * 12 + hireDate.getMonth()
       const payrollMonth = periodStart.getFullYear() * 12 + periodStart.getMonth()
       const eligible = payrollMonth >= hireMonth + 2
@@ -46,14 +72,15 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
     const rows = employees.map(emp => {
       const { eligible, snapshotDate } = computePensionEligible(emp.hireDate)
+      const { department, location } = resolveLocation(emp)
       return {
         payrollPeriodId: id,
         employeeId: emp.id,
         employeeCode: emp.employeeId,
         employeeName: emp.fullName,
-        department: null,
+        department,
         role: emp.currentRole || null,
-        location: emp.currentShopId || emp.currentRegionId || null,
+        location,
         basicSalary: emp.basicSalary,
         workingDays: 30,
         hireDate: snapshotDate,
@@ -65,6 +92,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         snapshotJson: JSON.stringify({
           basicSalary: emp.basicSalary?.toString(),
           workingDays: 30,
+          department,
+          location,
           hireDate: snapshotDate?.toISOString(),
           pensionEligible: eligible,
           paymentMethod: emp.payrollProfile?.paymentMethod,

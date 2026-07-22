@@ -12,12 +12,19 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     if (!session) return unauthorized()
     if (!(await userHasPermission(session.userId, 'payrollPeriod.update'))) return forbidden()
 
-    const period = await prisma.mvpPayrollPeriod.findUnique({ where: { id }, include: { _count: { select: { rows: true } } } })
+    const period = await prisma.mvpPayrollPeriod.findUnique({
+      where: { id },
+      include: { _count: { select: { rows: true } } },
+    })
     if (!period) return notFound()
     if (period.status !== 'DRAFT') return badRequest('Period must be in DRAFT status')
 
     const rowCount = period._count.rows
     if (rowCount === 0) return badRequest('No employee rows to prepare. Run snapshot first.')
+
+    // Require all rows to be validated with zero blockers
+    const errorRows = await prisma.mvpPayrollRow.count({ where: { payrollPeriodId: id, validationStatus: 'ERROR' } })
+    if (errorRows > 0) return badRequest(`Cannot mark READY: ${errorRows} row(s) have validation errors. Fix blockers first.`)
 
     const updated = await prisma.mvpPayrollPeriod.update({
       where: { id },
