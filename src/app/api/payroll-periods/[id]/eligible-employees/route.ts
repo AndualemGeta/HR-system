@@ -26,7 +26,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 
     const scopeWhere = await buildEmployeeScopeWhere(session.userId)
 
-    const excludedStatuses = ['TERMINATED', 'RESIGNED', 'EXITED', 'INACTIVE', 'DRAFT']
+    const excludedStatuses: ('TERMINATED' | 'RESIGNED' | 'EXITED' | 'DRAFT')[] = ['TERMINATED', 'RESIGNED', 'EXITED', 'DRAFT']
 
     const where: Record<string, unknown> = {
       ...scopeWhere,
