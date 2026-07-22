@@ -480,7 +480,7 @@ export async function evaluatePayrollPeriodReadiness(options: {
     }
 
     // ── 8. Pension rule (per employee, role-specific) ─────────────────────
-    const { rule: empPensionRule, blockers: empPensionBlockers } = selectPensionRule(pensionRules, {
+    const { blockers: empPensionBlockers } = selectPensionRule(pensionRules, {
       employmentType: emp.employmentType,
       role: emp.currentRole,
     })

@@ -13,8 +13,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     if (!(await userHasPermission(session.userId, 'payrollPeriod.markReadyForCalculation'))) return forbidden()
     const period = await prisma.payrollPeriod.findUnique({ where: { id } })
     if (!period) return notFound('Payroll period not found')
-    if (period.status !== 'REVIEW_IN_PROGRESS' && period.status !== 'READY_FOR_REVIEW') {
-      return badRequest('Period must be in review to mark ready for calculation.')
+    if (period.status !== 'INPUT_COLLECTION_CLOSED' && period.status !== 'REVIEW_IN_PROGRESS' && period.status !== 'READY_FOR_REVIEW') {
+      return badRequest(`Period status is ${period.status}, expected INPUT_COLLECTION_CLOSED, REVIEW_IN_PROGRESS or READY_FOR_REVIEW`)
     }
     const readiness = await evaluatePayrollPeriodReadiness({ payrollPeriodId: id, userId: session.userId, includeEmployeeDetails: true })
     if (!readiness.readyForCalculation) {

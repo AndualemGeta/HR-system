@@ -263,11 +263,15 @@ async function getNextEmployeeId(): Promise<string> {
 async function main() {
   console.log('Seeding Leapfrog HR database...')
 
+  if (process.env.NODE_ENV === 'production') {
+    console.error('Destructive seed is not allowed in production.')
+    process.exit(1)
+  }
+
   if (process.env.ALLOW_DESTRUCTIVE_SEED !== 'true') {
-    // Check if data already exists — if so, skip destructive seed
     const existingUsers = await prisma.user.count()
     if (existingUsers > 0) {
-      console.log('Database already seeded. Set ALLOW_DESTRUCTIVE_SEED=true to re-seed from scratch.')
+      console.log('Database already seeded. Set ALLOW_DESTRUCTIVE_SEED=true to re-seed from scratch. WARNING: This will DELETE all existing data.')
       return
     }
   }

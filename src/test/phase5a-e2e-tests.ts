@@ -205,15 +205,15 @@ async function main() {
   }
 
   // Authenticate via real login endpoint
-  const payroll = await login('finance.payroll@leapfrog.com', 'test123')
+  const payroll = await login('finance.payroll@leapfrog.com', 'Test123!')
   payrollOfficerToken = payroll.token
   payrollOfficerId = payroll.userId
 
-  const fd = await login('finance.director@leapfrog.com', 'test123')
+  const fd = await login('finance.director@leapfrog.com', 'Test123!')
   financeDirectorToken = fd.token
   financeDirectorId = fd.userId
 
-  const empLogin = await login('employee@leapfrog.com', 'test123')
+  const empLogin = await login('employee@leapfrog.com', 'Test123!')
   employeeToken = empLogin.token
 
   // Create isolated test employees
@@ -368,9 +368,6 @@ async function main() {
     return res.status === 200
   })
 
-  // Transition to READY_FOR_CALCULATION (direct DB — no API endpoint for this status transition)
-  await prisma.payrollPeriod.update({ where: { id: periodId }, data: { status: 'READY_FOR_CALCULATION' } })
-
   // ─── Blocked Calculation ──────────────────────────────────
   console.log('[Blocked Calculation]')
 
@@ -391,26 +388,33 @@ async function main() {
     return rowCount === 0 && lineCount === 0
   })
 
-  // Now satisfy the DSA requirement so calculation can proceed
-  if (dsaInput) {
-    await prisma.payrollInput.upsert({
-      where: { id: dsaInput.id },
-      update: { isLocked: true, status: 'ACCEPTED', amount: 1000 },
-      create: {
-        payrollPeriodId: periodId, employeeId: dsaEmployee.id,
-        inputTypeId, amount: 1000, status: 'ACCEPTED', isLocked: true,
-      },
+  // Now satisfy all requirements so calculation can proceed
+  // Create a transport input for the non-DSA employee to avoid transport requirement blocking
+  const transportTypeId = await ensureInputType('E2E_TRANSPORT', 'E2E Transport', payComponentId)
+  const transportInputRes = await api('POST', `/api/payroll-periods/${periodId}/inputs`, {
+    employeeId: nonDsaEmployee.id,
+    inputTypeCode: 'E2E_TRANSPORT',
+    amount: 500,
+  }, employeeToken)
+  if (transportInputRes.status === 201 || transportInputRes.status === 200) {
+    const ti = await prisma.payrollInput.findFirst({
+      where: { payrollPeriodId: periodId, employeeId: nonDsaEmployee.id, inputType: { code: 'E2E_TRANSPORT' } },
     })
+    if (ti) {
+      await api('POST', `/api/payroll-periods/${periodId}/inputs/${ti.id}/accept`, undefined, payrollOfficerToken)
+      await api('POST', `/api/payroll-periods/${periodId}/inputs/${ti.id}/lock`, undefined, payrollOfficerToken)
+    }
   }
-
-  // Remove non-DSA employee to avoid transport requirement blocking
-  await prisma.payrollPeriodEmployee.deleteMany({
-    where: { payrollPeriodId: periodId, employeeId: nonDsaEmployee.id },
-  }).catch(() => {})
 
   await assert('After satisfying requirements, all employees ready', async () => {
     const res = await api('GET', `/api/payroll-periods/${periodId}/calculation-readiness`, undefined, payrollOfficerToken)
     return res.data?.blockedEmployees === 0 && res.data?.readyEmployees > 0
+  })
+
+  // Transition to READY_FOR_CALCULATION via API
+  await assert('Mark ready for calculation API succeeds', async () => {
+    const res = await api('POST', `/api/payroll-periods/${periodId}/mark-ready-for-calculation`, undefined, payrollOfficerToken)
+    return res.status === 200
   })
 
   // ─── Full Calculation ─────────────────────────────────────
@@ -532,8 +536,11 @@ async function main() {
   })
 
   // Second calculation
+  await assert('Mark ready for calculation again', async () => {
+    const res = await api('POST', `/api/payroll-periods/${periodId}/mark-ready-for-calculation`, undefined, payrollOfficerToken)
+    return res.status === 200
+  })
   await assert('Second calculation creates version 2', async () => {
-    await prisma.payrollPeriod.update({ where: { id: periodId }, data: { status: 'READY_FOR_CALCULATION' } })
     const res = await api('POST', `/api/payroll-periods/${periodId}/calculate`, undefined, payrollOfficerToken)
     return res.data?.version === 2 && !!res.data?.batchId
   })

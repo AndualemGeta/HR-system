@@ -4,7 +4,7 @@ import { loginAs, createEmployeeViaApi, cleanupEmployee } from './fixtures'
 test.describe('Payroll Period List UI', () => {
 
   test('payroll officer can view payroll periods', async ({ page }) => {
-    await loginAs(page, 'finance.payroll@leapfrog.com', 'test123')
+    await loginAs(page, 'finance.payroll@leapfrog.com', 'Test123!')
     await page.goto('/payroll-periods')
     await page.waitForLoadState('networkidle')
     await expect(page.locator('text=Payroll Periods')).toBeVisible()

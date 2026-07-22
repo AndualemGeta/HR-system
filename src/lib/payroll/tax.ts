@@ -13,9 +13,14 @@ export function selectPayeBracket(taxableIncome: number, brackets: PayeBracket[]
     blockers.push('MISSING_PAYE_SCHEDULE')
     return { bracket: null, blockers }
   }
-  const codes = new Set(brackets.map(b => b.scheduleCode).filter(Boolean))
+  const codes = new Set(brackets.map(b => b.scheduleCode))
   if (codes.size > 1) {
     blockers.push('MULTIPLE_PAYE_SCHEDULE_CODES')
+    return { bracket: null, blockers }
+  }
+  const highest = brackets[brackets.length - 1]
+  if (highest.maxIncome !== null) {
+    blockers.push('HIGHEST_BRACKET_NOT_OPEN_ENDED')
     return { bracket: null, blockers }
   }
   const matching = brackets.filter(b => {
@@ -44,6 +49,14 @@ export async function getApprovedPayeBrackets(payDate: Date): Promise<PayeBracke
     },
     orderBy: { minIncome: 'asc' },
   })
+
+  // Collect distinct schedule codes (including null)
+  const scheduleCodes = [...new Set(brackets.map(b => b.scheduleCode))]
+  if (scheduleCodes.length > 1) {
+    // Multiple schedules active — return empty, caller will see MULTIPLE_PAYE_SCHEDULE_CODES
+    return []
+  }
+
   return brackets.map(b => ({
     id: b.id,
     scheduleCode: b.scheduleCode,

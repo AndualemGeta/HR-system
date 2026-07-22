@@ -1,5 +1,5 @@
 import { prisma } from '@/lib/prisma'
-import { round2 } from '@/lib/payroll-rounding'
+import { roundMoney, money } from '@/lib/money'
 import type { CalculationContext, CalculationResult } from './types'
 
 export async function persistPayrollCalculation(
@@ -126,14 +126,14 @@ export async function persistPayrollCalculation(
         })
       }
 
-      grossTotal = round2(grossTotal + r.grossSalary)
-      taxTotal = round2(taxTotal + r.taxableIncome)
-      empPensionTotal = round2(empPensionTotal + r.employeePension)
-      emprPensionTotal = round2(emprPensionTotal + r.employerPension)
-      payeTotal = round2(payeTotal + r.payeTax)
-      netTotal = round2(netTotal + r.netSalary)
-      employerCostTotal = round2(employerCostTotal + r.employerTotalCost)
-      otherDedTotal = round2(otherDedTotal + r.postTaxDeductions)
+      grossTotal = roundMoney(money(grossTotal).plus(r.grossSalary))
+      taxTotal = roundMoney(money(taxTotal).plus(r.taxableIncome))
+      empPensionTotal = roundMoney(money(empPensionTotal).plus(r.employeePension))
+      emprPensionTotal = roundMoney(money(emprPensionTotal).plus(r.employerPension))
+      payeTotal = roundMoney(money(payeTotal).plus(r.payeTax))
+      netTotal = roundMoney(money(netTotal).plus(r.netSalary))
+      employerCostTotal = roundMoney(money(employerCostTotal).plus(r.employerTotalCost))
+      otherDedTotal = roundMoney(money(otherDedTotal).plus(r.postTaxDeductions))
     }
 
     await tx.payrollPreparationBatch.update({

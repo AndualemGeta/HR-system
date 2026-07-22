@@ -17,6 +17,15 @@ const updateSchema = z.object({
   defaultAmount: z.number().nullable().optional(),
   requiresApproval: z.boolean().optional(),
   isActive: z.boolean().optional(),
+}).superRefine((data, ctx) => {
+  const mode = data.calculationMode
+  const vt = data.valueType
+  if (mode === 'DIRECT_AMOUNT' && vt && vt !== 'AMOUNT') {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'DIRECT_AMOUNT mode normally requires AMOUNT valueType', path: ['calculationMode'] })
+  }
+  if (mode === 'METRIC_ONLY' && vt && !['NUMBER', 'PERCENTAGE', 'BOOLEAN'].includes(vt)) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'METRIC_ONLY mode requires NUMBER, PERCENTAGE or BOOLEAN valueType', path: ['calculationMode'] })
+  }
 })
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {

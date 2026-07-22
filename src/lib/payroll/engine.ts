@@ -258,14 +258,15 @@ export async function calculateEmployeePayroll(
   }
 
   // ── Duplicate component code from input + other-source detection ──
-  const seenCodes = new Map<string, string[]>()
+  const seenCodes = new Map<string, Set<string>>()
   for (const line of lines) {
-    const code = line.componentCode
-    if (!seenCodes.has(code)) seenCodes.set(code, [])
-    seenCodes.get(code)!.push(line.sourceType)
+    const key = `${line.componentCode}:${line.sourceType}:${line.sourceId ?? 'null'}`
+    if (!seenCodes.has(line.componentCode)) seenCodes.set(line.componentCode, new Set())
+    seenCodes.get(line.componentCode)!.add(key)
   }
-  for (const [code, sources] of seenCodes) {
-    if (new Set(sources).size > 1) {
+  for (const [code, entries] of seenCodes) {
+    // More than one distinct source+id pair for the same component = duplicate
+    if (entries.size > 1) {
       blockers.push(`DUPLICATE_COMPONENT_SOURCE:${code}`)
     }
   }

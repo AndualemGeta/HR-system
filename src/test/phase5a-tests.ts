@@ -166,7 +166,7 @@ async function main() {
   await test('Multiple matching brackets returns null', () => {
     const overlapping = [
       { id: 'b1', minIncome: 0, maxIncome: 5000, taxRate: 10, deductionAmount: 0, scheduleCode: 'TEST' },
-      { id: 'b2', minIncome: 0, maxIncome: 5000, taxRate: 15, deductionAmount: 50, scheduleCode: 'TEST' },
+      { id: 'b2', minIncome: 0, maxIncome: null, taxRate: 15, deductionAmount: 50, scheduleCode: 'TEST' },
     ]
     const { bracket, blockers } = selectPayeBracket(3000, overlapping)
     assert.strictEqual(bracket, null)

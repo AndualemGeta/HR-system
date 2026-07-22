@@ -10,7 +10,7 @@ interface InputType {
 
 const CALCULATION_MODES = ['DIRECT_AMOUNT', 'METRIC_ONLY', 'RULE_DERIVED'] as const
 
-const defaultForm = { code: '', name: '', category: 'EARNING', valueType: 'AMOUNT', defaultAmount: '', requiresApproval: false, calculationMode: 'DIRECT_AMOUNT' }
+const defaultForm = { code: '', name: '', category: 'ALLOWANCE', valueType: 'AMOUNT', defaultAmount: '', requiresApproval: false, calculationMode: 'DIRECT_AMOUNT' }
 
 export default function PayrollInputTypesPage() {
   const [types, setTypes] = useState<InputType[]>([])
@@ -162,9 +162,14 @@ export default function PayrollInputTypesPage() {
             <div style={{ marginBottom: '0.75rem' }}>
               <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 500, marginBottom: '0.25rem' }}>Category</label>
               <select value={form.category} onChange={e => setForm(f => ({ ...f, category: e.target.value }))} style={{ padding: '0.4rem 0.5rem', border: '1px solid #d1d5db', borderRadius: 4, width: '100%', boxSizing: 'border-box', fontSize: '0.9rem' }}>
-                <option value="EARNING">Earning</option>
+                <option value="ALLOWANCE">Allowance</option>
                 <option value="DEDUCTION">Deduction</option>
-                <option value="CONTRIBUTION">Contribution</option>
+                <option value="COMMISSION">Commission</option>
+                <option value="KPI">KPI</option>
+                <option value="TRANSPORT">Transport</option>
+                <option value="OVERTIME">Overtime</option>
+                <option value="BONUS">Bonus</option>
+                <option value="ADJUSTMENT">Adjustment</option>
                 <option value="OTHER">Other</option>
               </select>
             </div>
@@ -172,8 +177,9 @@ export default function PayrollInputTypesPage() {
               <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 500, marginBottom: '0.25rem' }}>Value Type</label>
               <select value={form.valueType} onChange={e => setForm(f => ({ ...f, valueType: e.target.value }))} style={{ padding: '0.4rem 0.5rem', border: '1px solid #d1d5db', borderRadius: 4, width: '100%', boxSizing: 'border-box', fontSize: '0.9rem' }}>
                 <option value="AMOUNT">Amount</option>
+                <option value="NUMBER">Number</option>
                 <option value="PERCENTAGE">Percentage</option>
-                <option value="QUANTITY">Quantity</option>
+                <option value="BOOLEAN">Boolean</option>
                 <option value="TEXT">Text</option>
               </select>
             </div>

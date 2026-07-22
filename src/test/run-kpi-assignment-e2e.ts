@@ -33,7 +33,7 @@ async function main() {
     await waitForServer(BASE)
     console.log('Server is ready.')
 
-    const testProc = spawn('npx', ['tsx', 'src/test/kpi-assignment-e2e-tests.ts'], {
+    const testProc = spawn('npx', ['tsx', 'src/test/kpi-assignment-tests.ts'], {
       stdio: 'inherit',
       env: { ...process.env, TEST_BASE_URL: BASE },
     })

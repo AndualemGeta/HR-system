@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma'
 import { userHasPermission } from '@/lib/rbac'
 import { success, unauthorized, forbidden, notFound, badRequest, internalError } from '@/lib/api'
 import { createAuditLog } from '@/lib/audit'
+import { validatePayeSchedule } from '@/lib/payroll-paye-validation'
 import { z } from 'zod'
 
 const updateSchema = z.object({
@@ -49,6 +50,23 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     if (d.effectiveStartDate !== undefined) updateData.effectiveStartDate = new Date(d.effectiveStartDate)
     if (d.effectiveEndDate !== undefined) updateData.effectiveEndDate = d.effectiveEndDate ? new Date(d.effectiveEndDate) : null
     const bracket = await prisma.payeTaxBracket.update({ where: { id }, data: updateData })
+
+    // If the bracket belongs to an approved schedule, re-validate after update
+    const scheduleCode = bracket.scheduleCode ?? existing.scheduleCode
+    if (scheduleCode) {
+      const approved = await prisma.payeTaxBracket.findFirst({
+        where: { scheduleCode, approvalStatus: 'APPROVED' },
+      })
+      if (approved) {
+        const validation = await validatePayeSchedule(scheduleCode)
+        if (!validation.valid) {
+          // Rollback: revert the update if schedule is now invalid
+          await prisma.payeTaxBracket.update({ where: { id }, data: { name: existing.name, minIncome: existing.minIncome, maxIncome: existing.maxIncome, taxRate: existing.taxRate, deductionAmount: existing.deductionAmount } })
+          return badRequest('Update would make the approved schedule invalid', { errors: validation.errors.map(e => e.message) })
+        }
+      }
+    }
+
     await createAuditLog({ userId: session.userId, action: 'PAYROLL_STATUTORY_PAYE_UPDATE', entityType: 'PayeTaxBracket', entityId: id, newValue: updateData, oldValue: { name: existing.name } })
     return success(bracket)
   } catch (e) { console.error(e); return internalError() }
