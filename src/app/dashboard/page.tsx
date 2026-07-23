@@ -20,15 +20,18 @@ interface NavSection {
 export default function DashboardPage() {
   const router = useRouter()
   const [user, setUser] = useState<UserData | null>(null)
+  const [mvpMode, setMvpMode] = useState(false)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    fetch('/api/auth/me')
-      .then(res => {
-        if (!res.ok) throw new Error('Not authenticated')
-        return res.json()
+    Promise.all([
+      fetch('/api/auth/me').then(r => { if (!r.ok) throw new Error(); return r.json() }),
+      fetch('/api/mvp-mode').then(r => r.json()),
+    ])
+      .then(([userJson, modeJson]) => {
+        setUser(userJson.data)
+        setMvpMode(modeJson.mvpMode)
       })
-      .then(json => setUser(json.data))
       .catch(() => router.push('/login'))
       .finally(() => setLoading(false))
   }, [router])
@@ -43,13 +46,43 @@ export default function DashboardPage() {
 
   const has = (p: PermissionKey) => user.permissions.includes(p)
 
-  const sections: NavSection[] = [
+  const mvpSections: NavSection[] = [
+    {
+      title: 'HR',
+      links: [
+        { label: 'Employees', href: '/employees', permission: 'employee.view' },
+        { label: 'Employee Import', href: '/employees/import', permission: 'employee.import' },
+      ],
+    },
+    {
+      title: 'Payroll',
+      links: [
+        { label: 'Payroll Periods', href: '/payroll', permission: 'payrollPeriod.view' },
+      ],
+    },
+    {
+      title: 'Reports & Audit',
+      links: [
+        { label: 'Payroll History', href: '/payroll', permission: 'payrollPeriod.view' },
+        { label: 'Audit Logs', href: '/audit-logs', permission: 'audit.view' },
+      ],
+    },
+    {
+      title: 'Administration',
+      links: [
+        { label: 'Users & Roles', href: '/users', permission: 'user.view' },
+      ],
+    },
+  ]
+
+  const fullSections: NavSection[] = [
     {
       title: 'HR',
       links: [
         { label: 'Employees', href: '/employees', permission: 'employee.view' },
         { label: 'Status History', href: '/status-history', permission: 'status.view' },
         { label: 'Organization Chart', href: '/org-chart', permission: 'organization.view' },
+        { label: 'Employee Import', href: '/employees/import', permission: 'employee.import' },
       ],
     },
     {
@@ -79,6 +112,7 @@ export default function DashboardPage() {
     },
   ]
 
+  const sections = mvpMode ? mvpSections : fullSections
   const visibleSections = sections
     .map(s => ({ ...s, links: s.links.filter(l => !l.permission || has(l.permission)) }))
     .filter(s => s.links.length > 0)
@@ -87,7 +121,10 @@ export default function DashboardPage() {
     <div style={{ maxWidth: 800, margin: '0 auto', padding: '2rem 1rem' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
         <div>
-          <h1 style={{ margin: 0 }}>Dashboard</h1>
+          <h1 style={{ margin: 0 }}>
+            Dashboard
+            {mvpMode && <span style={{ marginLeft: '0.5rem', fontSize: '0.75rem', padding: '0.15rem 0.5rem', borderRadius: 4, background: '#dbeafe', color: '#1e40af', fontWeight: 600, verticalAlign: 'middle' }}>MVP</span>}
+          </h1>
           <p style={{ margin: '0.25rem 0 0', color: '#666', fontSize: '0.85rem' }}>
             {user.name} &mdash; {user.email}
             {user.employeeId && <span> &mdash; Employee ID linked</span>}
