@@ -1,4 +1,5 @@
 import { prisma } from './prisma'
+import { isValidPayrollGroup } from './payroll-group'
 import type { EmployeeCategory, EmploymentStatus, EmploymentType, EmployeeRole, EmployeeLevel } from '@prisma/client'
 
 export const SYSTEM_FIELDS = [
@@ -516,6 +517,10 @@ export async function validateRow(data: ImportRowData, rowIndex: number, existin
   if (!data.costCenter) warnings.push('Cost center is missing')
   if (!data.hireDate) warnings.push('Hire date is missing')
   if (!data.level) warnings.push('Level is missing')
+
+  if (data.payrollGroup && !isValidPayrollGroup(data.payrollGroup)) {
+    errors.push(`Invalid payroll group: "${data.payrollGroup}". Accepted: HO_AA_SHOP, DSA, EBU_DEPARTMENT, ALELETU, CHACHA, LEGETAFO, HMARIAM, SIRTI, MENDIDA, SENDAFA, SHENO`)
+  }
 
   let status: ValidationResult['status'] = 'VALID'
   if (errors.length > 0) status = 'ERROR'

@@ -39,14 +39,20 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const fileName = `payroll_${period.periodName}_${Date.now()}.xlsx`
     const filePath = path.join(exportDir, fileName)
 
-    const result = await generateExcel({
-      rows: rows.map(r => r as unknown as Parameters<typeof generateExcel>[0]['rows'][number]),
-      periodLabel,
-      generatedById: session.userId,
-      filePath,
-    })
+    let result
+    try {
+      result = await generateExcel({
+        rows: rows.map(r => r as unknown as Parameters<typeof generateExcel>[0]['rows'][number]),
+        periodLabel,
+        generatedById: session.userId,
+        filePath,
+      })
+    } catch (err) {
+      await fs.unlink(filePath).catch(() => {})
+      const message = err instanceof Error ? err.message : String(err)
+      return badRequest(message)
+    }
 
-    // Export verification
     const verification = await verifyExport(filePath, rows.map(r => ({
       employeeCode: r.employeeCode,
       employeeName: r.employeeName,
@@ -54,10 +60,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       grossSalary: Number(r.grossSalary || 0),
       totalDeduction: Number(r.totalDeduction || 0),
       netSalary: Number(r.netSalary || 0),
-    })))
+    })), result.manifest)
 
     if (!verification.valid) {
-      // Delete invalid file
       await fs.unlink(filePath).catch(() => {})
       return badRequest(`Export verification failed: ${verification.errors.join('; ')}`)
     }
@@ -88,7 +93,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
     return success({
       export: exportRecord,
-      downloadUrl: `/api/payroll/${id}/download-excel/${exportRecord.id}`,
+      downloadUrl: `/api/payroll/${id}/download-excel?exportId=${exportRecord.id}`,
       verification: { errors: verification.errors, warnings: verification.warnings },
     })
   } catch (err) {

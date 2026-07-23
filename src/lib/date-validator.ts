@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { payrollGroupOptionalSchema } from '@/lib/payroll-group'
 
 const DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/
 
@@ -48,7 +49,7 @@ export const employeeCreateSchema = z.object({
   mpesaAccount: z.string().optional(),
   taxId: z.string().optional(),
   pensionId: z.string().optional(),
-  payrollGroup: z.string().optional(),
+  payrollGroup: payrollGroupOptionalSchema,
 }).superRefine((data, ctx) => {
   if (data.basicSalary !== undefined && !data.salaryEffectiveDate) {
     ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'salaryEffectiveDate is required when basicSalary is supplied', path: ['salaryEffectiveDate'] })

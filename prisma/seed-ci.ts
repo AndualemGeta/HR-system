@@ -141,10 +141,36 @@ async function main() {
     data: { name: 'Auditor', permissions: { create: auditorPermKeys.map(key => ({ permissionId: permissionMap.get(key)! })) } },
   })
 
+  // MVP-specific roles for E2E tests
+  const mvpHrPermKeys = [
+    'employee.view', 'employee.create', 'employee.update', 'employee.delete',
+    'salary.view', 'salary.update',
+    'payrollPeriod.view', 'payrollPeriod.create', 'payrollPeriod.update', 'payrollPeriod.open', 'payrollPeriod.close', 'payrollPeriod.cancel',
+    'payrollPeriod.review',
+    'reports.view', 'audit.view',
+    'organization.view',
+    'user.view', 'role.view',
+    'employee.import', 'employee.importPreview', 'employee.importConfirm',
+  ]
+  const mvpHRRole = await prisma.role.create({
+    data: { name: 'MVP HR', permissions: { create: mvpHrPermKeys.map(key => ({ permissionId: permissionMap.get(key)! })) } },
+  })
+
+  const mvpFinancePermKeys = [
+    'employee.view',
+    'salary.view',
+    'payrollPeriod.view', 'payrollPeriod.close',
+    'reports.view', 'audit.view',
+    'organization.view',
+  ]
+  const mvpFinanceRole = await prisma.role.create({
+    data: { name: 'MVP Finance', permissions: { create: mvpFinancePermKeys.map(key => ({ permissionId: permissionMap.get(key)! })) } },
+  })
+
   await prisma.role.create({
     data: { name: 'Employee', permissions: { create: [{ permissionId: permissionMap.get('employee.view')! }, { permissionId: permissionMap.get('payslip.viewOwn')! }, { permissionId: permissionMap.get('payslip.download')! }] } },
   })
-  console.log('  7 roles created')
+  console.log('  9 roles created')
 
   // ── Users ──
   const passwordHash = await bcrypt.hash('Test123!', 10)
@@ -172,7 +198,15 @@ async function main() {
   await prisma.user.create({
     data: { email: 'employee@leapfrog.com', name: 'Employee User', passwordHash, roles: { create: [{ roleId: empRole!.id }] } },
   })
-  console.log('  6 users created')
+  const mvpHRRoleRef = await prisma.role.findUnique({ where: { name: 'MVP HR' } })
+  await prisma.user.create({
+    data: { email: 'mvp.hr@leapfrog.com', name: 'MVP HR User', passwordHash, roles: { create: [{ roleId: mvpHRRoleRef!.id }] } },
+  })
+  const mvpFinanceRoleRef = await prisma.role.findUnique({ where: { name: 'MVP Finance' } })
+  await prisma.user.create({
+    data: { email: 'mvp.finance@leapfrog.com', name: 'MVP Finance User', passwordHash, roles: { create: [{ roleId: mvpFinanceRoleRef!.id }] } },
+  })
+  console.log('  8 users created')
 
   // ── Department (required for employee creation) ──
   await prisma.department.create({

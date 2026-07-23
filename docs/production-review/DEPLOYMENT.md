@@ -10,11 +10,18 @@
 
 ```
 DATABASE_URL=postgresql://user:password@host:5432/leapfrog_hr
-SESSION_SECRET=<random-64-char-hex>
-PAYROLL_EXPORT_DIR=/path/to/persistent/storage (optional, defaults to ./uploads/payroll-exports)
-MVP_MODE=true (hides phase 5A/5B routes)
+AUTH_SECRET=<random-64-char-hex>
+MVP_MODE=true                                            # Required for production-review deployment
+PAYROLL_EXPORT_DIR=/path/to/persistent/storage           # Must use persistent storage
 TEST_BASE_URL=http://127.0.0.1:3000
 ```
+
+### Important Notes on Environment Variables
+
+- **AUTH_SECRET**: Replaces the old `SESSION_SECRET`. Generate with `openssl rand -hex 32`.
+- **MVP_MODE**: Must be `true` for the production-review deployment. This hides Phase 5A/5B routes and blocks non-MVP APIs.
+- **PAYROLL_EXPORT_DIR**: Must point to persistent storage (mounted volume in production). The company payroll template is mandatory — there is no generic export fallback. If the template is missing or corrupt, exports will fail with a clear error.
+- **Company Payroll Template**: The file `templates/payroll/Salary_June_2026_reference.xlsx` is mandatory. It contains 11 payroll-group sheets with pre-defined headers, styles, and layout. Export generation requires this file and will fail with an explicit error if it is missing, unreadable, or missing required worksheets.
 
 ## Installation
 

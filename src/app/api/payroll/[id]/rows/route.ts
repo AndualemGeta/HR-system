@@ -4,6 +4,7 @@ import { getSession } from '@/lib/session'
 import { userHasPermission } from '@/lib/rbac'
 import { notFound, success, badRequest, unauthorized, forbidden, internalError } from '@/lib/api'
 import { createAuditLog } from '@/lib/audit'
+import { isValidPayrollGroup } from '@/lib/payroll-group'
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -70,6 +71,11 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
         'taxId', 'pensionId', 'region', 'area', 'shop']
       for (const field of allowedFields) {
         if (row[field] !== undefined) {
+          if (field === 'payrollGroup' && row[field] !== null) {
+            if (!isValidPayrollGroup(String(row[field]))) {
+              return badRequest(`Invalid payroll group: "${row[field]}". Accepted: HO_AA_SHOP, DSA, EBU_DEPARTMENT, ALELETU, CHACHA, LEGETAFO, HMARIAM, SIRTI, MENDIDA, SENDAFA, SHENO`)
+            }
+          }
           updateData[field] = row[field] === '' ? null : row[field]
         }
       }

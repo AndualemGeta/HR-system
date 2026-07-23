@@ -5,6 +5,7 @@ import { getSession } from '@/lib/session'
 import { userHasPermission, canViewEmployee } from '@/lib/rbac'
 import { notFound, badRequest, success, unauthorized, forbidden, internalError } from '@/lib/api'
 import { createAuditLog } from '@/lib/audit'
+import { payrollGroupOptionalSchema } from '@/lib/payroll-group'
 
 const updateSchema = z.object({
   paymentMethod: z.string().optional(),
@@ -13,7 +14,7 @@ const updateSchema = z.object({
   mpesaAccount: z.string().optional(),
   taxId: z.string().optional(),
   pensionId: z.string().optional(),
-  payrollGroup: z.string().optional(),
+  payrollGroup: payrollGroupOptionalSchema,
 })
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {

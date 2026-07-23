@@ -22,8 +22,33 @@ const ADVANCED_ROUTES = [
   '/payroll-periods',
 ]
 
+const ADVANCED_API_ROUTES = [
+  '/api/payroll-calculation',
+  '/api/payroll-input-types',
+  '/api/payroll-input-requirements',
+  '/api/payroll-journals',
+  '/api/payroll-output-packages',
+  '/api/payslips',
+  '/api/payment-batches',
+  '/api/statutory-reports',
+  '/api/salary-structure',
+  '/api/shop-manager-incentives',
+  '/api/shops',
+  '/api/assignments',
+  '/api/onboarding',
+  '/api/change-requests',
+  '/api/data-quality',
+  '/api/document-rules',
+  '/api/phase-control',
+  '/api/payroll-periods',
+]
+
 function isAdvancedRoute(pathname: string): boolean {
   return ADVANCED_ROUTES.some(route => pathname === route || pathname.startsWith(route + '/'))
+}
+
+function isAdvancedApiRoute(pathname: string): boolean {
+  return ADVANCED_API_ROUTES.some(route => pathname === route || pathname.startsWith(route + '/'))
 }
 
 export function middleware(request: NextRequest) {
@@ -32,7 +57,12 @@ export function middleware(request: NextRequest) {
 
   const { pathname } = request.nextUrl
 
-  // Always allow API routes and static assets
+  // Block advanced API routes
+  if (pathname.startsWith('/api/') && isAdvancedApiRoute(pathname)) {
+    return NextResponse.json({ error: 'This API is not available in MVP mode' }, { status: 404 })
+  }
+
+  // Allow other API routes and static assets
   if (pathname.startsWith('/api/') || pathname.startsWith('/_next/') || pathname === '/') {
     return NextResponse.next()
   }

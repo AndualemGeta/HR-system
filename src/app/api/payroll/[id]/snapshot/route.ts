@@ -6,7 +6,7 @@ import { notFound, success, badRequest, unauthorized, forbidden, internalError }
 import { createAuditLog } from '@/lib/audit'
 import type { EmploymentStatus } from '@prisma/client'
 
-const EXCLUDED_STATUSES: EmploymentStatus[] = ['RESIGNED', 'TERMINATED', 'EXITED', 'SUSPENDED']
+const SNAPSHOT_STATUSES: EmploymentStatus[] = ['ACTIVE', 'ON_PROBATION']
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -129,7 +129,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
     const employees = await prisma.employee.findMany({
       where: {
-        employmentStatus: { notIn: EXCLUDED_STATUSES },
+        employmentStatus: { in: SNAPSHOT_STATUSES },
       },
       include: { payrollProfile: true },
     })
