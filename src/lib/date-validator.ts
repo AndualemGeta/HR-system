@@ -42,6 +42,13 @@ export const employeeCreateSchema = z.object({
   salaryEffectiveDate: dateString.optional(),
   kpiDefaultAmount: z.number().min(0).optional(),
   kpiEffectiveFrom: dateString.optional(),
+  paymentMethod: z.string().optional(),
+  bankName: z.string().optional(),
+  bankAccountNumber: z.string().optional(),
+  mpesaAccount: z.string().optional(),
+  taxId: z.string().optional(),
+  pensionId: z.string().optional(),
+  payrollGroup: z.string().optional(),
 }).superRefine((data, ctx) => {
   if (data.basicSalary !== undefined && !data.salaryEffectiveDate) {
     ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'salaryEffectiveDate is required when basicSalary is supplied', path: ['salaryEffectiveDate'] })

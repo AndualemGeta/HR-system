@@ -15,8 +15,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
     const period = await prisma.mvpPayrollPeriod.findUnique({ where: { id } })
     if (!period) return notFound()
-    if (period.status === 'LOCKED') return badRequest('Period is LOCKED. Reopen to DRAFT before calculating.')
-    if (period.status !== 'DRAFT' && period.status !== 'READY') return badRequest('Period must be DRAFT or READY')
+    if (period.status !== 'DRAFT') return badRequest('Calculate is only allowed in DRAFT status. Current status: ' + period.status)
 
     const rows = await prisma.mvpPayrollRow.findMany({ where: { payrollPeriodId: id } })
     if (rows.length === 0) return badRequest('No rows to calculate')

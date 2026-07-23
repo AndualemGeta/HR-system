@@ -203,6 +203,22 @@ export const POST = withAuth(async (req: NextRequest, ctx) => {
       })
     }
 
+    // Create payroll profile if any payroll field is present
+    if (data.paymentMethod || data.bankName || data.bankAccountNumber || data.mpesaAccount || data.taxId || data.pensionId || data.payrollGroup) {
+      await tx.employeePayrollProfile.create({
+        data: {
+          employeeId: emp.id,
+          paymentMethod: data.paymentMethod || null,
+          bankName: data.bankName || null,
+          bankAccountNumber: data.bankAccountNumber || null,
+          mpesaAccount: data.mpesaAccount || null,
+          taxId: data.taxId || null,
+          pensionId: data.pensionId || null,
+          payrollGroup: data.payrollGroup ? (data.payrollGroup as import('@prisma/client').$Enums.PayrollGroup) : undefined,
+        },
+      })
+    }
+
     // Create KPI assignment if both KPI fields supplied
     if (data.kpiDefaultAmount !== undefined && data.kpiEffectiveFrom !== undefined) {
       const kpiComponent = await tx.payComponent.findUnique({ where: { code: 'KPI_ALLOWANCE' } })

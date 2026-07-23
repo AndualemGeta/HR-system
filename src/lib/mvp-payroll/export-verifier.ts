@@ -1,4 +1,5 @@
 import ExcelJS from 'exceljs'
+import Decimal from 'decimal.js'
 import { ALL_REQUIRED_SHEETS, COLUMN_HEADERS_A_S } from './template-map'
 
 export interface VerificationResult {
@@ -7,28 +8,29 @@ export interface VerificationResult {
   warnings: string[]
   sheetCount: number
   employeeCount: number
-  totalGross: number
-  totalDeductions: number
-  totalNet: number
+  totalGross: Decimal
+  totalDeductions: Decimal
+  totalNet: Decimal
   hasExternalLinks: boolean
+}
+
+interface ExpectedRow {
+  employeeCode: string
+  employeeName: string
+  payrollGroup: string | null
+  grossSalary: number
+  totalDeduction: number
+  netSalary: number
 }
 
 export async function verifyExport(
   filePath: string,
-  expectedRows: Array<{
-    employeeCode: string
-    employeeName: string
-    payrollGroup: string | null
-    grossSalary: number
-    totalDeduction: number
-    netSalary: number
-  }>
+  expectedRows: ExpectedRow[]
 ): Promise<VerificationResult> {
   const errors: string[] = []
   const warnings: string[] = []
 
   const wb = await new ExcelJS.Workbook().xlsx.readFile(filePath)
-
   const wsNames = wb.worksheets.map(ws => ws.name)
 
   for (const required of ALL_REQUIRED_SHEETS) {
@@ -86,13 +88,13 @@ export async function verifyExport(
     warnings.push(`Employee count mismatch: export has ${foundEmployees.size}, expected ${expectedRows.length}`)
   }
 
-  const totalGross = expectedRows.reduce((s, r) => s + r.grossSalary, 0)
-  const totalDeductions = expectedRows.reduce((s, r) => s + r.totalDeduction, 0)
-  const totalNet = expectedRows.reduce((s, r) => s + r.netSalary, 0)
+  const expectedGross = expectedRows.reduce((s, r) => s.plus(r.grossSalary), new Decimal(0))
+  const expectedDed = expectedRows.reduce((s, r) => s.plus(r.totalDeduction), new Decimal(0))
+  const expectedNet = expectedRows.reduce((s, r) => s.plus(r.netSalary), new Decimal(0))
 
-  let exportGross = 0
-  let exportDed = 0
-  let exportNet = 0
+  let exportGross = new Decimal(0)
+  let exportDed = new Decimal(0)
+  let exportNet = new Decimal(0)
 
   for (const sheetName of payrollSheetNames) {
     if (!wsNames.includes(sheetName)) continue
@@ -101,23 +103,23 @@ export async function verifyExport(
 
     const lastRow = ws.lastRow
     if (lastRow) {
-      const g = Number(ws.getRow(lastRow.number).getCell(10).value || 0)
-      const d = Number(ws.getRow(lastRow.number).getCell(16).value || 0)
-      const n = Number(ws.getRow(lastRow.number).getCell(18).value || 0)
-      exportGross += g
-      exportDed += d
-      exportNet += n
+      const g = new Decimal(Number(ws.getRow(lastRow.number).getCell(10).value || 0))
+      const d = new Decimal(Number(ws.getRow(lastRow.number).getCell(16).value || 0))
+      const n = new Decimal(Number(ws.getRow(lastRow.number).getCell(18).value || 0))
+      exportGross = exportGross.plus(g)
+      exportDed = exportDed.plus(d)
+      exportNet = exportNet.plus(n)
     }
   }
 
-  if (Math.abs(exportGross - totalGross) > 1) {
-    errors.push(`Gross total mismatch: export=${exportGross}, expected=${totalGross}`)
+  if (exportGross.minus(expectedGross).abs().gt(1)) {
+    errors.push(`Gross total mismatch: export=${exportGross.toFixed(2)}, expected=${expectedGross.toFixed(2)}`)
   }
-  if (Math.abs(exportDed - totalDeductions) > 1) {
-    errors.push(`Deduction total mismatch: export=${exportDed}, expected=${totalDeductions}`)
+  if (exportDed.minus(expectedDed).abs().gt(1)) {
+    errors.push(`Deduction total mismatch: export=${exportDed.toFixed(2)}, expected=${expectedDed.toFixed(2)}`)
   }
-  if (Math.abs(exportNet - totalNet) > 1) {
-    errors.push(`Net total mismatch: export=${exportNet}, expected=${totalNet}`)
+  if (exportNet.minus(expectedNet).abs().gt(1)) {
+    errors.push(`Net total mismatch: export=${exportNet.toFixed(2)}, expected=${expectedNet.toFixed(2)}`)
   }
 
   let hasExternalLinks = false

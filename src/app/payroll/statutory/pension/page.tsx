@@ -143,7 +143,7 @@ function Table({ rules, hasManage, hasApprove, onApprove, onDeactivate }: {
               <td style={tdStyle}>{r.applicableEmploymentType || 'All'}</td>
               <td style={tdStyle}>{new Date(r.effectiveStartDate).toLocaleDateString()}</td>
               <td style={tdStyle}><StatusBadge status={r.approvalStatus} active={r.isActive} /></td>
-              <td style={tdStyle}>{r.isSample ? '📋' : '-'}</td>
+              <td style={tdStyle}>{r.isSample ? 'S' : '-'}</td>
               <td style={tdStyle}>
                 <div style={{ display: 'flex', gap: '0.25rem' }}>
                   {r.approvalStatus !== 'APPROVED' && hasApprove && (

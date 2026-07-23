@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma'
 import { getSession } from '@/lib/session'
 import { userHasPermission } from '@/lib/rbac'
 import { notFound, success, badRequest, unauthorized, forbidden, internalError } from '@/lib/api'
+import { createAuditLog } from '@/lib/audit'
 import { computePayroll } from '@/lib/payroll/mvp-calculations'
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -10,17 +11,17 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const { id } = await params
     const session = await getSession()
     if (!session) return unauthorized()
-    if (!(await userHasPermission(session.userId, 'payrollPeriod.view'))) return forbidden()
+    if (!(await userHasPermission(session.userId, 'payrollPeriod.update'))) return forbidden()
 
     const period = await prisma.mvpPayrollPeriod.findUnique({ where: { id } })
     if (!period) return notFound()
+    if (period.status !== 'DRAFT') return badRequest('Validation is only allowed in DRAFT status. Current status: ' + period.status)
 
     const rows = await prisma.mvpPayrollRow.findMany({ where: { payrollPeriodId: id } })
     if (rows.length === 0) return badRequest('No rows to validate')
 
     const periodStart = period.periodStart
 
-    // Duplicate employee codes
     const dupSet = new Set<string>()
     const dupCodes = new Set<string>()
     for (const row of rows) {
@@ -28,7 +29,6 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       dupSet.add(row.employeeCode)
     }
 
-    // Missing active/probation employees
     const activeEmployeeCodes = await prisma.employee.findMany({
       where: { employmentStatus: { in: ['ACTIVE', 'ON_PROBATION'] } },
       select: { employeeId: true, fullName: true },
@@ -45,7 +45,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     }
 
     if (missingEmployees.length > 0) {
-      globalWarnings.push(`Missing ${missingEmployees.length} active employees (not yet snapshotted): ${missingEmployees.map(e => e.fullName).join(', ')}`)
+      globalBlockers.push(`Missing ${missingEmployees.length} active/on-probation employees (not snapshotted): ${missingEmployees.map(e => e.fullName).join(', ')}`)
     }
 
     for (const row of rows) {
@@ -63,47 +63,26 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       const allowance = Number(row.allowance || 0)
       const shortageLoan = Number(row.otherDeduction || 0)
 
-      // Employee identity
       if (!row.employeeCode) msgs.push('Missing employee code')
       if (!row.employeeName) msgs.push('Missing employee name')
-
-      // Payroll group
       if (!row.payrollGroup) msgs.push('MISSING_PAYROLL_GROUP: Employee has no assigned payroll group')
-
-      // Hire date / pension eligibility
-      if (!row.hireDate) {
-        msgs.push('MISSING_PENSION_ELIGIBILITY_DATE: No hire/registration date for employee')
-      }
-
-      // Numeric field checks
+      if (!row.hireDate) msgs.push('MISSING_PENSION_ELIGIBILITY_DATE: No hire/registration date for employee')
       if (basic <= 0) msgs.push('Basic salary must be greater than zero')
       if (workingDays <= 0 || workingDays > 31) msgs.push('Working days must be between 1 and 31')
-
-      // Uncalculated fields
       if (monthlySalary <= 0) msgs.push('Monthly salary not calculated or zero — run Calculate')
       if (gross <= 0) msgs.push('Gross salary not calculated or zero — run Calculate')
-
-      // Negative income tax
       if (Number(row.incomeTax) < 0) msgs.push('Income tax cannot be negative')
-
-      // Missing snapshot data
       if (!row.snapshotJson) msgs.push('Missing snapshot data — run Snapshot first')
 
-      // Payment method validation (warning for MVP Excel export)
       const pm = row.paymentMethod
-      if (!pm) {
-        warns.push('No payment method set — will default to HOLD')
-      } else if (pm === 'BANK') {
+      if (!pm) warns.push('No payment method set — will default to HOLD')
+      else if (pm === 'BANK') {
         if (!row.bankName) warns.push('BANK payment selected but bank name is missing')
         if (!row.bankAccountNumber) warns.push('BANK payment selected but bank account number is missing')
       } else if (pm === 'MPESA') {
         if (!row.mpesaAccount) warns.push('MPESA payment selected but M-PESA account is missing')
-      } else if (pm === 'CASH') {
-      } else {
-        warns.push(`Unknown payment method: ${pm}`)
-      }
+      } else if (pm !== 'CASH') warns.push(`Unknown payment method: ${pm}`)
 
-      // Tax ID (warning — Finance decision pending)
       const taxId = row.taxId || (() => {
         try {
           const snap = typeof row.snapshotJson === 'string' ? JSON.parse(row.snapshotJson) : row.snapshotJson
@@ -112,9 +91,6 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       })()
       if (!taxId) warns.push('No tax ID on file for employee')
 
-      // Pension ID rules:
-      //   - warning during first two payroll months
-      //   - blocker once pensionEligible=true and pensionId is missing
       const pensionId = row.pensionId || (() => {
         try {
           const snap = typeof row.snapshotJson === 'string' ? JSON.parse(row.snapshotJson) : row.snapshotJson
@@ -137,15 +113,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         }
       }
 
-      // Reconcile persisted values against shared module
       const expected = computePayroll({
-        basicSalary: basic,
-        workingDays,
-        commission,
-        overtime,
-        incentive,
-        allowance,
-        otherDeduction: shortageLoan,
+        basicSalary: basic, workingDays, commission, overtime,
+        incentive, allowance, otherDeduction: shortageLoan,
         pensionEligible: row.pensionEligible === true,
       })
 
@@ -163,11 +133,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       }
 
       if (msgs.length > 0 || warns.length > 0) {
-        employeeMessages[row.id] = {
-          employeeName: row.employeeName,
-          blockers: msgs,
-          warnings: warns,
-        }
+        employeeMessages[row.id] = { employeeName: row.employeeName, blockers: msgs, warnings: warns }
         globalBlockers.push(...msgs)
         globalWarnings.push(...warns)
       }
@@ -175,12 +141,14 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       const status = msgs.length > 0 ? 'ERROR' : warns.length > 0 ? 'WARNING' : 'VALID'
       await prisma.mvpPayrollRow.update({
         where: { id: row.id },
-        data: {
-          validationStatus: status,
-          validationMessages: JSON.stringify([...msgs, ...warns]),
-        },
+        data: { validationStatus: status, validationMessages: JSON.stringify([...msgs, ...warns]) },
       })
     }
+
+    await createAuditLog({
+      userId: session.userId, action: 'PAYROLL_CALCULATION_VALIDATE', entityType: 'MvpPayrollPeriod',
+      entityId: id, newValue: { blockerCount: globalBlockers.length, warningCount: globalWarnings.length },
+    })
 
     const updatedRows = await prisma.mvpPayrollRow.findMany({
       where: { payrollPeriodId: id },

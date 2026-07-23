@@ -309,13 +309,13 @@ export default function PayrollDetailPage() {
           </button>
         )}
         {isDraft && rows.length > 0 && (
-          <button onClick={handleMarkReady} disabled={saving}
+          <button onClick={() => { if (window.confirm('Mark this period as READY? This will prevent further row edits. Continue?')) handleMarkReady() }} disabled={saving}
             style={{ padding: '0.4rem 0.75rem', background: saving ? '#999' : '#16a34a', color: '#fff', border: 'none', borderRadius: 4, cursor: 'pointer', fontSize: '0.85rem' }}>
             Mark Ready
           </button>
         )}
         {isReady && (
-          <button onClick={handleLock} disabled={saving}
+          <button onClick={() => { if (window.confirm('Lock this period? This will prevent further changes. Exports will still be available. Continue?')) handleLock() }} disabled={saving}
             style={{ padding: '0.4rem 0.75rem', background: saving ? '#999' : '#dc2626', color: '#fff', border: 'none', borderRadius: 4, cursor: 'pointer', fontSize: '0.85rem' }}>
             Lock Period
           </button>

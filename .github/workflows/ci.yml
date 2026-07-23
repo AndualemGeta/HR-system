@@ -1,4 +1,4 @@
-name: CI
+name: MVP CI
 
 on:
   push:
@@ -10,11 +10,13 @@ env:
   DATABASE_URL: postgresql://leapfrog:leapfrog123@localhost:5433/leapfrog_hr
   AUTH_SECRET: ci-test-auth-secret-not-used-in-production
   NODE_ENV: test
-  TEST_PORT: 3001
-  TEST_BASE_URL: http://127.0.0.1:3001
+  MVP_MODE: "true"
+  TEST_PORT: 3003
+  TEST_BASE_URL: http://127.0.0.1:3003
+  PAYROLL_EXPORT_DIR: ${{ runner.temp }}/payroll-exports
 
 jobs:
-  test:
+  mvp-release:
     runs-on: ubuntu-latest
 
     services:
@@ -46,6 +48,12 @@ jobs:
       - name: Generate Prisma client
         run: npm run prisma:generate
 
+      - name: Deploy database migrations
+        run: npx prisma migrate deploy
+
+      - name: Seed CI database
+        run: npm run prisma:seed:ci
+
       - name: TypeScript type check
         run: npm run typecheck
 
@@ -55,32 +63,22 @@ jobs:
       - name: Build
         run: npm run build
 
-      - name: Deploy database migrations
-        run: npx prisma migrate deploy
+      - name: Unit tests
+        run: npm run test:mvp
 
-      - name: Seed CI database
-        run: npm run prisma:seed:ci
-
-      - name: Run all tests
-        run: npm test
-
-      - name: Run Phase 4C.2 E2E tests
-        run: npm run test:phase4c2-e2e
-
-      - name: Run Phase 5A tests
-        run: npm run test:phase5a
-
-      - name: Run Phase 5A E2E tests
-        run: npm run test:phase5a-e2e
-
-      - name: Run Phase 5B tests
-        run: npm run test:phase5b
-
-      - name: Run KPI assignment tests
-        run: npm run test:kpi-assignment
+      - name: E2E tests
+        run: npm run test:mvp-e2e
 
       - name: Install Playwright
         run: npx playwright install --with-deps chromium
 
-      - name: Run UI E2E tests
+      - name: UI tests
         run: npm run test:ui-e2e
+
+      - name: Upload payroll workbook artifact
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: payroll-workbook
+          path: ${{ runner.temp }}/payroll-exports/
+          retention-days: 30

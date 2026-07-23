@@ -152,7 +152,7 @@ function Table({ brackets, hasManage, hasApprove, onApprove, onDeactivate }: {
                 <td style={tdStyle}>
                   <StatusBadge status={b.approvalStatus} active={b.isActive} />
                 </td>
-                <td style={tdStyle}>{b.isSample ? '📋' : '-'}</td>
+                <td style={tdStyle}>{b.isSample ? 'S' : '-'}</td>
                 <td style={tdStyle}>
                   <div style={{ display: 'flex', gap: '0.25rem' }}>
                     {b.approvalStatus !== 'APPROVED' && hasApprove && (

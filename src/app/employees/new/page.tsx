@@ -26,6 +26,10 @@ export default function NewEmployeePage() {
     currentAreaId: '', currentShopId: '', currentClusterId: '',
     directManagerId: '', accountingReportingManagerId: '', basicSalary: '', salaryEffectiveDate: '',
     kpiDefaultAmount: '', kpiEffectiveFrom: '',
+    paymentMethod: '', bankName: '', bankAccountNumber: '', mpesaAccount: '', taxId: '', pensionId: '', payrollGroup: '',
+  })
+  const [payProfile, setPayProfile] = useState({
+    paymentMethod: '', bankName: '', bankAccountNumber: '', mpesaAccount: '', taxId: '', pensionId: '', payrollGroup: '',
   })
 
   useEffect(() => {
@@ -65,7 +69,7 @@ export default function NewEmployeePage() {
     setError('')
     setSaving(true)
 
-    const payload: Record<string, unknown> = { ...form, employeeCategory: category }
+    const payload: Record<string, unknown> = { ...form, ...payProfile, employeeCategory: category }
     if (!payload.basicSalary) delete payload.basicSalary
     else payload.basicSalary = parseFloat(payload.basicSalary as string)
     if (!payload.kpiDefaultAmount) delete payload.kpiDefaultAmount
@@ -80,6 +84,13 @@ export default function NewEmployeePage() {
     if (!payload.currentRegionId) delete payload.currentRegionId
     if (!payload.currentAreaId) delete payload.currentAreaId
     if (!payload.currentShopId) delete payload.currentShopId
+    if (!payload.payrollGroup) delete payload.payrollGroup
+    if (!payload.paymentMethod) delete payload.paymentMethod
+    if (!payload.bankName) delete payload.bankName
+    if (!payload.bankAccountNumber) delete payload.bankAccountNumber
+    if (!payload.mpesaAccount) delete payload.mpesaAccount
+    if (!payload.taxId) delete payload.taxId
+    if (!payload.pensionId) delete payload.pensionId
 
     try {
       const res = await fetch('/api/employees', {
@@ -308,6 +319,35 @@ export default function NewEmployeePage() {
           <p style={{ margin: '0.5rem 0 0', fontSize: '0.8rem', color: '#888' }}>
             KPI fields must be supplied together. Missing payroll percentage defaults to 100%.
           </p>
+        </fieldset>
+
+        <fieldset style={{ border: '1px solid #d1d5db', borderRadius: 6, padding: '1rem' }}>
+          <legend style={{ fontWeight: 600 }}>Payroll Profile</legend>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+            <Select label="Payment Method" value={payProfile.paymentMethod} onChange={v => setPayProfile(p => ({ ...p, paymentMethod: v }))} options={[
+              { value: '', label: '-- Select --' }, { value: 'BANK', label: 'Bank Transfer' },
+              { value: 'MPESA', label: 'M-PESA' }, { value: 'MANUAL', label: 'Manual' }, { value: 'HOLD', label: 'Hold' },
+            ]} />
+            <Field label="Bank Name" value={payProfile.bankName} onChange={v => setPayProfile(p => ({ ...p, bankName: v }))} />
+            <Field label="Bank Account Number" value={payProfile.bankAccountNumber} onChange={v => setPayProfile(p => ({ ...p, bankAccountNumber: v }))} />
+            <Field label="M-PESA Number" value={payProfile.mpesaAccount} onChange={v => setPayProfile(p => ({ ...p, mpesaAccount: v }))} />
+            <Field label="Tax ID" value={payProfile.taxId} onChange={v => setPayProfile(p => ({ ...p, taxId: v }))} />
+            <Field label="Pension ID" value={payProfile.pensionId} onChange={v => setPayProfile(p => ({ ...p, pensionId: v }))} />
+            <Select label="Payroll Group" value={payProfile.payrollGroup} onChange={v => setPayProfile(p => ({ ...p, payrollGroup: v }))} options={[
+              { value: '', label: '-- Select --' },
+              { value: 'HO_AA_SHOP', label: 'H,O A,A Shop' },
+              { value: 'DSA', label: 'DSA' },
+              { value: 'EBU_DEPARTMENT', label: 'EBU Department' },
+              { value: 'ALELETU', label: 'Aleletu' },
+              { value: 'CHACHA', label: 'Chacha' },
+              { value: 'LEGETAFO', label: 'Legetafo' },
+              { value: 'HMARIAM', label: 'Hmariam' },
+              { value: 'SIRTI', label: 'Sirti' },
+              { value: 'MENDIDA', label: 'Mendida' },
+              { value: 'SENDAFA', label: 'Sendafa' },
+              { value: 'SHENO', label: 'Sheno' },
+            ]} />
+          </div>
         </fieldset>
 
         <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end' }}>
