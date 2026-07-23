@@ -36,6 +36,7 @@ export const SYSTEM_FIELDS = [
   { key: 'taxId', label: 'Tax ID', required: false, category: 'payroll' },
   { key: 'pensionId', label: 'Pension ID', required: false, category: 'payroll' },
   { key: 'costCenter', label: 'Cost Center', required: false, category: 'payroll' },
+  { key: 'payrollGroup', label: 'Payroll Group', required: false, category: 'payroll' },
   { key: 'address', label: 'Address', required: false, category: 'optional' },
   { key: 'notes', label: 'Notes', required: false, category: 'optional' },
   { key: 'emergencyContactName', label: 'Emergency Contact Name', required: false, category: 'optional' },
@@ -91,6 +92,8 @@ const FRIENDLY_MAP: Record<string, string> = {
   'pension number': 'pensionId',
   'cost center': 'costCenter',
   'cc': 'costCenter',
+  'payroll group': 'payrollGroup',
+  'pay group': 'payrollGroup',
   'category': 'employeeCategory',
   'emp category': 'employeeCategory',
   'employment status': 'employmentStatus',
@@ -295,6 +298,7 @@ export interface ImportRowData {
   taxId?: string
   pensionId?: string
   costCenter?: string
+  payrollGroup?: string
   address?: string
   notes?: string
   emergencyContactName?: string
@@ -350,6 +354,7 @@ export function parseRow(rawRow: Record<string, unknown>, mapping: Record<string
       case 'taxId': parsed.taxId = normalizeString(value); break
       case 'pensionId': parsed.pensionId = normalizeString(value); break
       case 'costCenter': parsed.costCenter = normalizeString(value); break
+      case 'payrollGroup': parsed.payrollGroup = normalizeString(value); break
       case 'address': parsed.address = normalizeString(value); break
       case 'notes': parsed.notes = normalizeString(value); break
       case 'emergencyContactName': parsed.emergencyContactName = normalizeString(value); break
@@ -601,7 +606,7 @@ export async function createEmployeeFromImport(data: ImportRowData, userId: stri
     })
   }
 
-  if (data.paymentMethod || data.bankName || data.bankAccountNumber || data.mpesaAccount || data.taxId || data.pensionId || data.costCenter) {
+  if (data.paymentMethod || data.bankName || data.bankAccountNumber || data.mpesaAccount || data.taxId || data.pensionId || data.costCenter || data.payrollGroup) {
     await prisma.employeePayrollProfile.create({
       data: {
         employeeId: employee.id,
@@ -612,6 +617,7 @@ export async function createEmployeeFromImport(data: ImportRowData, userId: stri
         taxId: data.taxId || null,
         pensionId: data.pensionId || null,
         costCenter: data.costCenter || null,
+        payrollGroup: data.payrollGroup ? (data.payrollGroup as import('@prisma/client').$Enums.PayrollGroup) : undefined,
         updatedById: userId,
       },
     })
@@ -670,7 +676,7 @@ export async function updateEmployeeFromImport(data: ImportRowData, employeeId: 
   }
 
   const existingProfile = await prisma.employeePayrollProfile.findUnique({ where: { employeeId } })
-  if (data.paymentMethod || data.bankName || data.bankAccountNumber || data.mpesaAccount || data.taxId || data.pensionId || data.costCenter) {
+  if (data.paymentMethod || data.bankName || data.bankAccountNumber || data.mpesaAccount || data.taxId || data.pensionId || data.costCenter || data.payrollGroup) {
     if (existingProfile) {
       const profileUpdate: Record<string, unknown> = { updatedById: userId }
       if (data.paymentMethod) profileUpdate.paymentMethod = data.paymentMethod
@@ -680,6 +686,7 @@ export async function updateEmployeeFromImport(data: ImportRowData, employeeId: 
       if (data.taxId !== undefined) profileUpdate.taxId = data.taxId || null
       if (data.pensionId !== undefined) profileUpdate.pensionId = data.pensionId || null
       if (data.costCenter !== undefined) profileUpdate.costCenter = data.costCenter || null
+      if (data.payrollGroup !== undefined) profileUpdate.payrollGroup = data.payrollGroup as import('@prisma/client').$Enums.PayrollGroup
       await prisma.employeePayrollProfile.update({ where: { employeeId }, data: profileUpdate })
     } else {
       await prisma.employeePayrollProfile.create({
@@ -692,6 +699,7 @@ export async function updateEmployeeFromImport(data: ImportRowData, employeeId: 
           taxId: data.taxId || null,
           pensionId: data.pensionId || null,
           costCenter: data.costCenter || null,
+          payrollGroup: data.payrollGroup ? (data.payrollGroup as import('@prisma/client').$Enums.PayrollGroup) : undefined,
           updatedById: userId,
         },
       })

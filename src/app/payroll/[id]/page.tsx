@@ -7,6 +7,7 @@ import Link from 'next/link'
 interface PayrollRow {
   id: string; employeeCode: string; employeeName: string
   department: string | null; role: string | null; location: string | null
+  region: string | null; area: string | null; shop: string | null
   basicSalary: number | null; workingDays: number | null; monthlySalary: number | null
   allowance: number | null; overtime: number | null; incentive: number | null; commission: number | null
   grossSalary: number | null; taxableIncome: number | null
@@ -15,7 +16,9 @@ interface PayrollRow {
   totalDeduction: number | null; netSalary: number | null
   paymentMethod: string | null; bankName: string | null
   bankAccountNumber: string | null; mpesaAccount: string | null
-  hireDate: string | null; pensionEligible: boolean | null
+  taxId: string | null; pensionId: string | null
+  payrollGroup: string | null
+  hireDate: string | null; salaryEffectiveDate: string | null; pensionEligible: boolean | null
   notes: string | null
   validationStatus: string; validationMessages: string | null
   snapshotJson: string | null; overrideReason: string | null
@@ -288,7 +291,7 @@ export default function PayrollDetailPage() {
           </button>
         )}
         {isDraft && rows.length > 0 && (
-          <button onClick={() => { if (window.confirm('Re-snapshot will DELETE all existing rows and re-create them from active employees. Continue?')) { handleSnapshot(true).catch(() => {}) } }} disabled={snapshotLoading}
+          <button onClick={() => { if (window.confirm('WARNING: Re-snapshot will DELETE all existing rows and re-create them from active employees.\n\nAll manually entered values (working days, commission, overtime, KPI, allowance, other deductions, notes) will be LOST permanently.\n\nOnly fields from employee profiles (basic salary, dates, payroll group, bank info, tax/pension IDs) will be re-captured.\n\nContinue?')) { handleSnapshot(true).catch(() => {}) } }} disabled={snapshotLoading}
             style={{ padding: '0.4rem 0.75rem', background: snapshotLoading ? '#999' : '#f59e0b', color: '#fff', border: 'none', borderRadius: 4, cursor: 'pointer', fontSize: '0.85rem' }}>
             {snapshotLoading ? 'Re-snapshotting...' : 'Re-snapshot'}
           </button>
@@ -398,7 +401,7 @@ export default function PayrollDetailPage() {
               {filteredRows.map(row => {
                 const valStatus = row.validationStatus
                 const statusBg = valStatus === 'ERROR' ? '#fee' : valStatus === 'WARNING' ? '#fef3c7' : valStatus === 'VALID' ? '#f0fdf4' : 'transparent'
-                const monthlySalary = Number(row.monthlySalary || 0) || Math.round((Number(row.basicSalary || 0) / 30) * Number(row.workingDays || 30) * 100) / 100
+                const monthlySalary = Number(row.monthlySalary || 0)
                 return (
                   <tr key={row.id} style={{ background: statusBg, borderBottom: '1px solid #f3f4f6' }}>
                     <td style={tdStyle}>{row.employeeCode}</td>

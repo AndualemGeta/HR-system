@@ -13,6 +13,7 @@ const updateSchema = z.object({
   mpesaAccount: z.string().optional(),
   taxId: z.string().optional(),
   pensionId: z.string().optional(),
+  payrollGroup: z.string().optional(),
 })
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -81,6 +82,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
         mpesaAccount: data.mpesaAccount || null,
         taxId: data.taxId || null,
         pensionId: data.pensionId || null,
+        payrollGroup: data.payrollGroup ? (data.payrollGroup as import('@prisma/client').$Enums.PayrollGroup) : undefined,
       },
       update: {
         paymentMethod: data.paymentMethod,
@@ -89,6 +91,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
         mpesaAccount: data.mpesaAccount,
         taxId: data.taxId,
         pensionId: data.pensionId,
+        payrollGroup: data.payrollGroup ? (data.payrollGroup as import('@prisma/client').$Enums.PayrollGroup) : undefined,
       },
     })
 

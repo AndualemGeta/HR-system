@@ -32,7 +32,7 @@ export default function EditEmployeePage() {
     directManagerId: '', accountingReportingManagerId: '', basicSalary: '', salaryEffectiveDate: '',
   })
   const [payProfile, setPayProfile] = useState({
-    paymentMethod: '', bankName: '', bankAccountNumber: '', mpesaAccount: '', taxId: '', pensionId: '',
+    paymentMethod: '', bankName: '', bankAccountNumber: '', mpesaAccount: '', taxId: '', pensionId: '', payrollGroup: '',
   })
   const isHO = form.employeeCategory === 'HEAD_OFFICE'
 
@@ -64,6 +64,7 @@ export default function EditEmployeePage() {
           mpesaAccount: profile.mpesaAccount || '',
           taxId: profile.taxId || '',
           pensionId: profile.pensionId || '',
+          payrollGroup: profile.payrollGroup || '',
         })
       }
       setForm({
@@ -350,6 +351,20 @@ export default function EditEmployeePage() {
             <Field label="M-PESA Number" value={payProfile.mpesaAccount} onChange={v => setPayProfile(p => ({ ...p, mpesaAccount: v }))} />
             <Field label="Tax ID" value={payProfile.taxId} onChange={v => setPayProfile(p => ({ ...p, taxId: v }))} />
             <Field label="Pension ID" value={payProfile.pensionId} onChange={v => setPayProfile(p => ({ ...p, pensionId: v }))} />
+            <Select label="Payroll Group" value={payProfile.payrollGroup} onChange={v => setPayProfile(p => ({ ...p, payrollGroup: v }))} options={[
+              { value: '', label: '-- Select --' },
+              { value: 'HO_AA_SHOP', label: 'H,O A,A Shop' },
+              { value: 'DSA', label: 'DSA' },
+              { value: 'EBU_DEPARTMENT', label: 'EBU Department' },
+              { value: 'ALELETU', label: 'Aleletu' },
+              { value: 'CHACHA', label: 'Chacha' },
+              { value: 'LEGETAFO', label: 'Legetafo' },
+              { value: 'HMARIAM', label: 'Hmariam' },
+              { value: 'SIRTI', label: 'Sirti' },
+              { value: 'MENDIDA', label: 'Mendida' },
+              { value: 'SENDAFA', label: 'Sendafa' },
+              { value: 'SHENO', label: 'Sheno' },
+            ]} />
           </div>
         </fieldset>
 

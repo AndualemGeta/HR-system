@@ -19,7 +19,12 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       orderBy: { generatedAt: 'desc' },
     })
 
-    return success(exports)
+    const items = exports.map(e => ({
+      ...e,
+      downloadUrl: `/api/payroll/${id}/download-excel?exportId=${e.id}`,
+    }))
+
+    return success(items)
   } catch (err) {
     console.error(err)
     return internalError()

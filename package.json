@@ -26,6 +26,7 @@
     "test:mvp": "tsx src/test/mvp-employee-tests.ts && tsx src/test/mvp-payroll-tests.ts",
     "test:mvp-e2e": "tsx src/test/run-mvp-e2e.ts",
     "verify:mvp": "npm run prisma:generate && npm run typecheck && npm run lint && npm run build && npm run test:mvp && npm run test:mvp-e2e",
+    "verify:mvp:ci": "npm ci && npm run prisma:generate && npx prisma migrate deploy && npm run prisma:seed:ci && npm run typecheck && npm run lint && npm run build && npm run test:mvp && npm run test:mvp-e2e && npx playwright install --with-deps chromium && npm run test:ui-e2e",
     "verify:phase5b": "npm run prisma:generate && npm run typecheck && npm run lint && npm run build && npm run verify:phase5a && npm run test:phase5b",
     "test:kpi-assignment": "tsx src/test/run-kpi-assignment-e2e.ts",
     "test:kpi-assignment:http": "tsx src/test/kpi-assignment-tests.ts",

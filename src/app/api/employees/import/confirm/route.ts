@@ -70,7 +70,7 @@ export async function POST(req: NextRequest) {
               newValue: { importSessionId, rowNumber: row.rowNumber, parsedData },
             })
 
-            if (parsedData.paymentMethod || parsedData.bankName || parsedData.bankAccountNumber || parsedData.mpesaAccount || parsedData.taxId || parsedData.pensionId || parsedData.costCenter) {
+            if (parsedData.paymentMethod || parsedData.bankName || parsedData.bankAccountNumber || parsedData.mpesaAccount || parsedData.taxId || parsedData.pensionId || parsedData.costCenter || parsedData.payrollGroup) {
               await createAuditLog({
                 userId: session.userId,
                 action: 'PAYROLL_PROFILE_UPDATE',
@@ -85,6 +85,7 @@ export async function POST(req: NextRequest) {
                   taxId: parsedData.taxId,
                   pensionId: parsedData.pensionId,
                   costCenter: parsedData.costCenter,
+                  payrollGroup: parsedData.payrollGroup,
                 },
               })
             }

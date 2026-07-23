@@ -22,9 +22,43 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const rowCount = period._count.rows
     if (rowCount === 0) return badRequest('No employee rows to prepare. Run snapshot first.')
 
-    // Require all rows to be validated with zero blockers
+    // All rows must be calculated
+    const uncalculatedRows = await prisma.mvpPayrollRow.count({
+      where: { payrollPeriodId: id, monthlySalary: { lte: 0 } },
+    })
+    if (uncalculatedRows > 0) return badRequest(`Cannot mark READY: ${uncalculatedRows} row(s) have zero monthly salary. Run Calculate first.`)
+
+    // No PENDING rows
+    const pendingRows = await prisma.mvpPayrollRow.count({ where: { payrollPeriodId: id, validationStatus: 'PENDING' } })
+    if (pendingRows > 0) return badRequest(`Cannot mark READY: ${pendingRows} row(s) have not been validated. Run validation first.`)
+
+    // No ERROR rows
     const errorRows = await prisma.mvpPayrollRow.count({ where: { payrollPeriodId: id, validationStatus: 'ERROR' } })
     if (errorRows > 0) return badRequest(`Cannot mark READY: ${errorRows} row(s) have validation errors. Fix blockers first.`)
+
+    // All rows must have a payroll group
+    const missingGroup = await prisma.mvpPayrollRow.count({ where: { payrollPeriodId: id, payrollGroup: null } })
+    if (missingGroup > 0) return badRequest(`Cannot mark READY: ${missingGroup} employee(s) missing payroll group. Assign groups and run validation first.`)
+
+    // No missing active/probation employees (not snapshotted)
+    const existingCodes = await prisma.mvpPayrollRow.findMany({
+      where: { payrollPeriodId: id },
+      select: { employeeCode: true },
+    })
+    const existingCodeSet = new Set(existingCodes.map(r => r.employeeCode))
+    const missingActiveEmployees = await prisma.employee.findMany({
+      where: {
+        employmentStatus: { in: ['ACTIVE', 'ON_PROBATION'] },
+        employeeId: { notIn: [...existingCodeSet] },
+      },
+      select: { employeeId: true, fullName: true },
+    })
+    if (missingActiveEmployees.length > 0) {
+      return badRequest(
+        `Cannot mark READY: ${missingActiveEmployees.length} active employee(s) not found in payroll rows. ` +
+        `Missing: ${missingActiveEmployees.map(e => e.fullName).join(', ')}. Run Snapshot first.`
+      )
+    }
 
     const updated = await prisma.mvpPayrollPeriod.update({
       where: { id },
@@ -32,7 +66,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     })
 
     await createAuditLog({
-      userId: session.userId, action: 'PAYROLL_PERIOD_CLOSE', entityType: 'MvpPayrollPeriod',
+      userId: session.userId, action: 'PAYROLL_PERIOD_READY', entityType: 'MvpPayrollPeriod',
       entityId: id, newValue: { status: 'READY' },
     })
 

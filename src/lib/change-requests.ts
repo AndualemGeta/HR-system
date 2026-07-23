@@ -3,7 +3,7 @@ import { createAuditLog } from './audit'
 
 export const SENSITIVE_FIELDS = [
   'basicSalary', 'salaryEffectiveDate', 'paymentMethod', 'bankName',
-  'bankAccountNumber', 'mpesaAccount', 'taxId', 'pensionId', 'costCenter',
+  'bankAccountNumber', 'mpesaAccount', 'taxId', 'pensionId', 'costCenter', 'payrollGroup',
 ] as const
 
 export type SensitiveField = typeof SENSITIVE_FIELDS[number]
@@ -59,7 +59,7 @@ export async function approveChangeRequest(requestId: string, userId: string) {
 
 async function applyChangeRequestField(request: { id: string; employeeId: string; requestedField: string; newValue: string }) {
   const field = request.requestedField
-  const payrollFields = ['paymentMethod', 'bankName', 'bankAccountNumber', 'mpesaAccount', 'taxId', 'pensionId', 'costCenter']
+  const payrollFields = ['paymentMethod', 'bankName', 'bankAccountNumber', 'mpesaAccount', 'taxId', 'pensionId', 'costCenter', 'payrollGroup']
 
   if (field === 'basicSalary') {
     await prisma.employee.update({ where: { id: request.employeeId }, data: { basicSalary: Number(request.newValue) } })

@@ -51,7 +51,10 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 
     const period = await prisma.mvpPayrollPeriod.findUnique({ where: { id } })
     if (!period) return notFound()
-    if (period.status !== 'DRAFT' && period.status !== 'READY') return badRequest('Period is locked')
+    if (period.status === 'LOCKED') return badRequest('Period is LOCKED. Reopen to DRAFT before editing rows.')
+
+    // Row edits after READY are rejected — user must reopen to DRAFT first
+    if (period.status === 'READY') return badRequest('Period is READY. Reopen to DRAFT before editing rows.')
 
     const body = await req.json().catch(() => ({}))
     const { rows } = body
@@ -62,23 +65,38 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       const updateData: Record<string, unknown> = {}
       const allowedFields = ['allowance', 'overtime', 'incentive', 'commission',
         'employeePension', 'incomeTax', 'otherDeduction', 'notes', 'basicSalary',
-        'workingDays',
-        'paymentMethod', 'bankName', 'bankAccountNumber', 'mpesaAccount']
+        'workingDays', 'payrollGroup',
+        'paymentMethod', 'bankName', 'bankAccountNumber', 'mpesaAccount',
+        'taxId', 'pensionId', 'region', 'area', 'shop']
       for (const field of allowedFields) {
         if (row[field] !== undefined) {
           updateData[field] = row[field] === '' ? null : row[field]
         }
       }
       if (Object.keys(updateData).length > 0) {
+        // Any edit resets validation to PENDING
+        updateData.validationStatus = 'PENDING'
+
         const existing = await prisma.mvpPayrollRow.findUnique({ where: { id: row.id } })
         await prisma.mvpPayrollRow.update({ where: { id: row.id }, data: updateData })
+
+        const oldValues = existing
+          ? Object.fromEntries(
+              Object.entries(updateData)
+                .filter(([k]) => k !== 'validationStatus')
+                .map(([k]) => [k, existing[k as keyof typeof existing]])
+            )
+          : undefined
+
         await createAuditLog({
           userId: session.userId,
-          action: 'PAYROLL_PERIOD_UPDATE',
+          action: 'PAYROLL_ROW_UPDATE',
           entityType: 'MvpPayrollRow',
           entityId: row.id,
-          oldValue: existing ? Object.fromEntries(Object.entries(updateData).map(([k]) => [k, existing[k as keyof typeof existing]])) : undefined,
-          newValue: updateData,
+          oldValue: oldValues,
+          newValue: Object.fromEntries(
+            Object.entries(updateData).filter(([k]) => k !== 'validationStatus')
+          ),
         })
       }
     }

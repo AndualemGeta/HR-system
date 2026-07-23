@@ -3,10 +3,10 @@ import { prisma } from '@/lib/prisma'
 import { getSession } from '@/lib/session'
 import { userHasPermission } from '@/lib/rbac'
 import { unauthorized, forbidden, internalError } from '@/lib/api'
+import { createAuditLog } from '@/lib/audit'
+import { getExportDir } from '@/lib/mvp-payroll/template-map'
 import fs from 'fs/promises'
 import path from 'path'
-
-const EXPORT_DIR = path.join(process.cwd(), 'uploads', 'payroll-exports')
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -19,30 +19,61 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     if (!period) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
     const { searchParams } = new URL(req.url)
-    const fileName = searchParams.get('file')
-    if (!fileName) return NextResponse.json({ error: 'File parameter required' }, { status: 400 })
+    const fileParam = searchParams.get('file')
+    const exportIdParam = searchParams.get('exportId')
 
-    const filePath = path.join(EXPORT_DIR, fileName)
+    let exportRecord
+    if (exportIdParam) {
+      exportRecord = await prisma.mvpPayrollExport.findUnique({
+        where: { id: exportIdParam },
+      })
+      if (!exportRecord) return NextResponse.json({ error: 'Export not found' }, { status: 404 })
+      if (exportRecord.payrollPeriodId !== id) {
+        return NextResponse.json({ error: 'Export does not belong to this period' }, { status: 400 })
+      }
+    } else if (fileParam) {
+      exportRecord = await prisma.mvpPayrollExport.findFirst({
+        where: { fileName: fileParam, payrollPeriodId: id },
+      })
+      if (!exportRecord) return NextResponse.json({ error: 'Export not found' }, { status: 404 })
+    } else {
+      exportRecord = await prisma.mvpPayrollExport.findFirst({
+        where: { payrollPeriodId: id },
+        orderBy: { generatedAt: 'desc' },
+      })
+      if (!exportRecord) return NextResponse.json({ error: 'No export found for this period' }, { status: 404 })
+    }
 
-    // Security: ensure file is within export directory
-    const resolvedPath = path.resolve(filePath)
-    const resolvedDir = path.resolve(EXPORT_DIR)
-    if (!resolvedPath.startsWith(resolvedDir)) {
+    const exportDir = getExportDir()
+    const fileName = exportRecord.fileName
+
+    // Path traversal protection
+    const resolvedPath = path.resolve(path.join(exportDir, fileName))
+    const resolvedDir = path.resolve(exportDir)
+    const relative = path.relative(resolvedDir, resolvedPath)
+    if (relative.startsWith('..') || path.isAbsolute(relative)) {
       return NextResponse.json({ error: 'Invalid file path' }, { status: 400 })
     }
 
     try {
-      await fs.access(filePath)
+      await fs.access(resolvedPath)
     } catch {
-      return NextResponse.json({ error: 'File not found' }, { status: 404 })
+      return NextResponse.json({ error: 'File not found on disk' }, { status: 404 })
     }
 
-    const fileBuffer = await fs.readFile(filePath)
+    const fileBuffer = await fs.readFile(resolvedPath)
 
-    // Update download counter
-    await prisma.mvpPayrollExport.updateMany({
-      where: { fileName, payrollPeriodId: id },
-      data: { downloadedCount: { increment: 1 } },
+    await prisma.mvpPayrollExport.update({
+      where: { id: exportRecord.id },
+      data: { downloadedCount: { increment: 1 }, lastDownloadedAt: new Date() },
+    })
+
+    await createAuditLog({
+      userId: session.userId,
+      action: 'PAYROLL_EXPORT_DOWNLOAD',
+      entityType: 'MvpPayrollExport',
+      entityId: exportRecord.id,
+      newValue: { payrollPeriodId: id, fileName },
     })
 
     return new NextResponse(fileBuffer, {

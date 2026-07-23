@@ -84,6 +84,20 @@ enum LocationType {
   CLUSTER
 }
 
+enum PayrollGroup {
+  HO_AA_SHOP
+  DSA
+  EBU_DEPARTMENT
+  ALELETU
+  CHACHA
+  LEGETAFO
+  HMARIAM
+  SIRTI
+  MENDIDA
+  SENDAFA
+  SHENO
+}
+
 enum DocumentType {
   ID
   CONTRACT
@@ -521,6 +535,10 @@ enum AuditAction {
   PAYROLL_PERIOD_OPEN
   PAYROLL_PERIOD_CLOSE
   PAYROLL_PERIOD_CANCEL
+  PAYROLL_PERIOD_READY
+  PAYROLL_PERIOD_REOPEN
+  PAYROLL_ROW_UPDATE
+  PAYROLL_EXPORT_DOWNLOAD
   PAYROLL_EMPLOYEE_ADD
   PAYROLL_EMPLOYEE_REMOVE
   PAYROLL_INPUT_TYPE_CREATE
@@ -1712,8 +1730,8 @@ model ExportHistory {
 }
 
 model EmployeePayrollProfile {
-  id                String   @id @default(uuid())
-  employeeId        String   @unique
+  id                String       @id @default(uuid())
+  employeeId        String       @unique
   paymentMethod     String?
   bankName          String?
   bankAccountNumber String?
@@ -1721,10 +1739,11 @@ model EmployeePayrollProfile {
   taxId             String?
   pensionId         String?
   costCenter        String?
+  payrollGroup      PayrollGroup?
   updatedById       String?
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
-  employee          Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+  employee          Employee     @relation(fields: [employeeId], references: [id], onDelete: Cascade)
 }
 
 model PayComponent {
@@ -2489,6 +2508,9 @@ model MvpPayrollRow {
   department          String?
   role                String?
   location            String?
+  region              String?
+  area                String?
+  shop                String?
   basicSalary         Decimal?                     @db.Decimal(12, 2)
   workingDays         Decimal?                     @db.Decimal(6, 2)
   monthlySalary       Decimal?                     @db.Decimal(12, 2)
@@ -2508,8 +2530,12 @@ model MvpPayrollRow {
   bankName            String?
   bankAccountNumber   String?
   mpesaAccount        String?
+  taxId               String?
+  pensionId           String?
   notes               String?
+  payrollGroup        PayrollGroup?
   hireDate            DateTime?
+  salaryEffectiveDate DateTime?
   pensionEligible     Boolean?
   validationStatus    MvpPayrollRowValidationStatus @default(PENDING)
   validationMessages  Json?
@@ -2538,7 +2564,8 @@ model MvpPayrollExport {
   templateVersion String?
   generatedById   String?
   generatedAt     DateTime @default(now())
-  downloadedCount Int      @default(0)
+  downloadedCount  Int      @default(0)
+  lastDownloadedAt DateTime?
   payrollPeriod   MvpPayrollPeriod @relation(fields: [payrollPeriodId], references: [id])
 
   @@index([payrollPeriodId])

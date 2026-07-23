@@ -38,6 +38,7 @@ const SYSTEM_FIELDS = [
   { key: 'mpesaAccount', label: 'M-PESA Account', required: false, category: 'payroll' },
   { key: 'taxId', label: 'Tax ID', required: false, category: 'payroll' },
   { key: 'pensionId', label: 'Pension ID', required: false, category: 'payroll' },
+  { key: 'payrollGroup', label: 'Payroll Group', required: false, category: 'payroll' },
   { key: 'costCenter', label: 'Cost Center', required: false, category: 'payroll' },
   { key: 'address', label: 'Address', required: false, category: 'optional' },
   { key: 'notes', label: 'Notes', required: false, category: 'optional' },
