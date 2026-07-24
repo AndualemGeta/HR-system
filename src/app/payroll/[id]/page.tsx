@@ -285,43 +285,43 @@ export default function PayrollDetailPage() {
       {/* Action buttons */}
       <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '1rem' }}>
         {isDraft && rows.length === 0 && (
-          <button onClick={() => { handleSnapshot(false).catch(() => {}) }} disabled={snapshotLoading}
+          <button data-testid="payroll-snapshot" onClick={() => { handleSnapshot(false).catch(() => {}) }} disabled={snapshotLoading}
             style={{ padding: '0.4rem 0.75rem', background: snapshotLoading ? '#999' : '#2563eb', color: '#fff', border: 'none', borderRadius: 4, cursor: 'pointer', fontSize: '0.85rem' }}>
             {snapshotLoading ? 'Snapshoting...' : 'Snapshot Active Employees'}
           </button>
         )}
         {isDraft && rows.length > 0 && (
-          <button onClick={() => { if (window.confirm('WARNING: Re-snapshot will DELETE all existing rows and re-create them from active employees.\n\nAll manually entered values (working days, commission, overtime, KPI, allowance, other deductions, notes) will be LOST permanently.\n\nOnly fields from employee profiles (basic salary, dates, payroll group, bank info, tax/pension IDs) will be re-captured.\n\nContinue?')) { handleSnapshot(true).catch(() => {}) } }} disabled={snapshotLoading}
+          <button data-testid="payroll-re-snapshot" onClick={() => { if (window.confirm('WARNING: Re-snapshot will DELETE all existing rows and re-create them from active employees.\n\nAll manually entered values (working days, commission, overtime, KPI, allowance, other deductions, notes) will be LOST permanently.\n\nOnly fields from employee profiles (basic salary, dates, payroll group, bank info, tax/pension IDs) will be re-captured.\n\nContinue?')) { handleSnapshot(true).catch(() => {}) } }} disabled={snapshotLoading}
             style={{ padding: '0.4rem 0.75rem', background: snapshotLoading ? '#999' : '#f59e0b', color: '#fff', border: 'none', borderRadius: 4, cursor: 'pointer', fontSize: '0.85rem' }}>
             {snapshotLoading ? 'Re-snapshotting...' : 'Re-snapshot'}
           </button>
         )}
         {canEdit && rows.length > 0 && (
-          <button onClick={handleCalculate} disabled={saving}
+          <button data-testid="payroll-calculate" onClick={handleCalculate} disabled={saving}
             style={{ padding: '0.4rem 0.75rem', background: saving ? '#999' : '#7c3aed', color: '#fff', border: 'none', borderRadius: 4, cursor: 'pointer', fontSize: '0.85rem' }}>
             Calculate Gross/Net
           </button>
         )}
         {canEdit && rows.length > 0 && (
-          <button onClick={handleValidate} disabled={saving}
+          <button data-testid="payroll-validate" onClick={handleValidate} disabled={saving}
             style={{ padding: '0.4rem 0.75rem', background: saving ? '#999' : '#0891b2', color: '#fff', border: 'none', borderRadius: 4, cursor: 'pointer', fontSize: '0.85rem' }}>
             Validate Rows
           </button>
         )}
         {isDraft && rows.length > 0 && (
-          <button onClick={() => { if (window.confirm('Mark this period as READY? This will prevent further row edits. Continue?')) handleMarkReady() }} disabled={saving}
+          <button data-testid="payroll-ready" onClick={() => { if (window.confirm('Mark this period as READY? This will prevent further row edits. Continue?')) handleMarkReady() }} disabled={saving}
             style={{ padding: '0.4rem 0.75rem', background: saving ? '#999' : '#16a34a', color: '#fff', border: 'none', borderRadius: 4, cursor: 'pointer', fontSize: '0.85rem' }}>
             Mark Ready
           </button>
         )}
         {isReady && (
-          <button onClick={() => { if (window.confirm('Lock this period? This will prevent further changes. Exports will still be available. Continue?')) handleLock() }} disabled={saving}
+          <button data-testid="payroll-lock" onClick={() => { if (window.confirm('Lock this period? This will prevent further changes. Exports will still be available. Continue?')) handleLock() }} disabled={saving}
             style={{ padding: '0.4rem 0.75rem', background: saving ? '#999' : '#dc2626', color: '#fff', border: 'none', borderRadius: 4, cursor: 'pointer', fontSize: '0.85rem' }}>
             Lock Period
           </button>
         )}
         {(isReady || isLocked) && (
-          <button onClick={handleExport} disabled={exporting}
+          <button data-testid="payroll-export" onClick={handleExport} disabled={exporting}
             style={{ padding: '0.4rem 0.75rem', background: exporting ? '#999' : '#059669', color: '#fff', border: 'none', borderRadius: 4, cursor: 'pointer', fontSize: '0.85rem' }}>
             {exporting ? 'Exporting...' : 'Export Excel'}
           </button>
@@ -416,6 +416,7 @@ export default function PayrollDetailPage() {
                             <input type="number" step="0.01"
                               value={String(displayVal ?? '')}
                               onChange={e => handleCellChange(row.id, f, e.target.value)}
+                              data-testid={`payroll-${f}-${row.id}`}
                               style={{ width: '100%', padding: '2px 4px', border: '1px solid #d1d5db', borderRadius: 2, fontSize: '0.85rem', boxSizing: 'border-box', background: isLocked ? '#f3f4f6' : '#fff' }}
                               disabled={isLocked} />
                           ) : (

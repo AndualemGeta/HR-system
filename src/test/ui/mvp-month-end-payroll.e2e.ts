@@ -8,6 +8,7 @@ const testSuffix = `ui_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`
 let userId = ''
 let employeeId = ''
 let periodId = ''
+let rowIds: string[] = []
 const createdPeriodIds: string[] = []
 const createdEmployeeIds: string[] = []
 
@@ -59,9 +60,9 @@ test.describe('MVP Month-End Payroll', () => {
   test('Complete payroll lifecycle through real UI', async ({ page }) => {
     // 1. Login through the login form
     await page.goto('/login')
-    await expect(page.locator('h2, h1').first()).toBeVisible({ timeout: 5000 })
-    await page.fill('input[type="email"]', `ui_${testSuffix}@test.com`)
-    await page.fill('input[type="password"]', 'Test123!')
+    await expect(page.locator('[data-testid="login-email"], input[type="email"]').first()).toBeVisible({ timeout: 5000 })
+    await page.fill('[data-testid="login-email"], input[type="email"]', `ui_${testSuffix}@test.com`)
+    await page.fill('[data-testid="login-password"], input[type="password"]', 'Test123!')
     await page.click('button[type="submit"]')
     await page.waitForURL('**/dashboard', { timeout: 15000 })
 
@@ -70,37 +71,37 @@ test.describe('MVP Month-End Payroll', () => {
     await page.waitForLoadState('networkidle')
 
     // Select HEAD_OFFICE category
-    await page.locator('button', { hasText: 'Head Office Department' }).click()
+    await page.getByText('Head Office Department').click()
     await page.waitForLoadState('networkidle')
 
     // Fill personal information
-    await page.fill('input[name="firstName"]', 'UI')
-    await page.fill('input[name="lastName"]', 'Test')
+    await page.fill('[data-testid="employee-first-name"]', 'UI')
+    await page.fill('[data-testid="employee-last-name"]', 'Test')
 
     // Fill employment details
-    await page.selectOption('select >> nth=2', 'FULL_TIME')
-    await page.selectOption('select >> nth=3', 'ACTIVE')
-    await page.fill('input[type="date"]', '2025-01-15')
+    await page.selectOption('[data-testid="employee-employment-type"], select >> nth=0', 'FULL_TIME')
+    await page.selectOption('[data-testid="employee-status"], select >> nth=1', 'ACTIVE')
+    await page.fill('[data-testid="employee-hire-date"]', '2025-01-15')
 
     // Fill HO assignment
-    await page.selectOption('select >> nth=4', 'cd63b2cb-fd31-4e5b-a8cc-2be089e4f8df') // Sales department
-    await page.selectOption('select >> nth=5', 'ACCOUNTANT')
-    await page.selectOption('select >> nth=6', 'MID')
+    await page.selectOption('[data-testid="employee-department"], select >> nth=2', { index: 1 })
+    await page.selectOption('[data-testid="employee-role"], select >> nth=3', 'ACCOUNTANT')
+    await page.selectOption('[data-testid="employee-level"], select >> nth=4', 'MID')
 
     // Fill compensation
-    await page.fill('input[type="number"]', '10000')
+    await page.fill('[data-testid="employee-basic-salary"]', '10000')
+    await page.fill('[data-testid="employee-salary-effective-date"]', '2025-01-15')
 
     // Fill payroll profile
-    await page.selectOption('select >> nth=9', 'BANK')
-    await page.fill('input[name="bankName"]', 'Test Bank')
-    await page.fill('input[name="bankAccountNumber"]', '1234567890')
-    await page.fill('input[name="taxId"]', 'TAX_UI')
-    await page.fill('input[name="pensionId"]', 'PEN_UI')
-    await page.selectOption('select >> nth=14', 'HO_AA_SHOP')
+    await page.selectOption('[data-testid="employee-payment-method"], select >> nth=5', 'BANK')
+    await page.fill('[data-testid="employee-bank-name"]', 'Test Bank')
+    await page.fill('[data-testid="employee-bank-account"]', '1234567890')
+    await page.fill('[data-testid="employee-tax-id"]', 'TAX_UI')
+    await page.fill('[data-testid="employee-pension-id"]', 'PEN_UI')
+    await page.selectOption('[data-testid="employee-payroll-group"]', 'HO_AA_SHOP')
 
     // Submit
     await page.click('button[type="submit"]')
-    // Should redirect to employee detail page
     await page.waitForURL(/\/employees\//, { timeout: 15000 })
     const currentUrl = page.url()
     const urlMatch = currentUrl.match(/\/employees\/([^/]+)/)
@@ -113,100 +114,87 @@ test.describe('MVP Month-End Payroll', () => {
     // 3. Create payroll period through UI
     await page.goto('/payroll')
     await page.waitForLoadState('networkidle')
-    await expect(page.locator('body')).toContainText('Payroll', { timeout: 5000 })
 
-    // Click "Create Period" button if it exists
-    const createBtn = page.locator('button, a', { hasText: /Create|New Period/ })
-    if (await createBtn.isVisible()) {
-      await createBtn.click()
-      await page.waitForLoadState('networkidle')
-    }
-
-    // Navigate to the period or find the most recent one
-    await page.goto('/payroll')
+    // Click "New Period" link
+    await page.getByText('New Period').click()
     await page.waitForLoadState('networkidle')
 
-    // Create period via visible controls or API as last resort
-    const periodInputs = page.locator('input[type="number"], input[placeholder*="month" i], input[placeholder*="year" i]')
-    const hasForm = await periodInputs.count()
-    if (hasForm > 0) {
-      await page.fill('input[placeholder*="month" i], input[type="number"]', '1')
-      await page.fill('input[placeholder*="year" i], input[type="number"] >> nth=1', '2035')
-      await page.click('button[type="submit"], button:has-text("Create")')
-      await page.waitForTimeout(1000)
-    }
-
-    // If no form, use Playwright's evaluate ONLY for operations the UI does not support
-    const periods = await page.evaluate(async () => {
-      const r = await fetch('/api/payroll', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ month: 1, year: 2035, periodName: 'Jan 2035' }),
-      })
-      return r.ok ? (await r.json()).data : null
-    })
-    if (periods) {
-      periodId = periods.id
+    // Fill month and year
+    await page.selectOption('[data-testid="payroll-create-month"]', '1')
+    await page.fill('[data-testid="payroll-create-year"]', '2035')
+    await page.click('button[type="submit"]')
+    await page.waitForURL(/\/payroll\//, { timeout: 15000 })
+    const periodUrl = page.url()
+    const periodUrlMatch = periodUrl.match(/\/payroll\/([^/]+)/)
+    if (periodUrlMatch) {
+      periodId = periodUrlMatch[1]
       createdPeriodIds.push(periodId)
     }
     expect(periodId).toBeTruthy()
 
-    // 4. Open payroll period page
-    await page.goto(`/payroll/${periodId}`)
-    await page.waitForLoadState('networkidle')
-
-    // 5. Click Snapshot button
-    const snapshotBtn = page.locator('button', { hasText: /Snapshot/i })
+    // 4. Click Snapshot button
+    const snapshotBtn = page.locator('[data-testid="payroll-snapshot"]')
     await expect(snapshotBtn).toBeVisible({ timeout: 5000 })
     await snapshotBtn.click()
     await page.waitForTimeout(2000)
     await page.waitForLoadState('networkidle')
 
-    // 6. Edit working days in payroll table
-    const workingDaysInput = page.locator('input[type="number"]').first()
-    const hasInput = await workingDaysInput.isVisible().catch(() => false)
-    if (hasInput) {
-      await workingDaysInput.fill('25')
-      await page.waitForTimeout(1000)
-    }
+    // Verify rows exist by checking table content
+    await expect(page.locator('table')).toBeVisible({ timeout: 5000 })
+    const tableRows = page.locator('table tbody tr')
+    await expect(tableRows.first()).toBeVisible({ timeout: 5000 })
 
-    // 7-8. Edit commission and overtime
-    const commissionInput = page.locator('input[type="number"]').nth(1)
-    const hasCommission = await commissionInput.isVisible().catch(() => false)
-    if (hasCommission) {
-      await commissionInput.fill('500')
-    }
-    const overtimeInput = page.locator('input[type="number"]').nth(2)
-    const hasOvertime = await overtimeInput.isVisible().catch(() => false)
-    if (hasOvertime) {
-      await overtimeInput.fill('300')
-    }
-    await page.waitForTimeout(1000)
+    // Get row IDs from the table
+    const editInputs = page.locator('[data-testid^="payroll-workingDays-"]')
+    const inputCount = await editInputs.count()
+    expect(inputCount).toBeGreaterThan(0)
 
-    // 9. Click Calculate
-    const calcBtn = page.locator('button', { hasText: /Calculat/i })
+    // Collect row IDs
+    for (let i = 0; i < inputCount; i++) {
+      const testId = await editInputs.nth(i).getAttribute('data-testid')
+      if (testId) {
+        const rid = testId.replace('payroll-workingDays-', '')
+        rowIds.push(rid)
+      }
+    }
+    expect(rowIds.length).toBeGreaterThan(0)
+
+    // 5. Edit working days for first row
+    const wdInput = page.locator(`[data-testid="payroll-workingDays-${rowIds[0]}"]`)
+    await expect(wdInput).toBeVisible({ timeout: 5000 })
+    await wdInput.fill('25')
+
+    // 6. Edit commission for first row
+    const commInput = page.locator(`[data-testid="payroll-commission-${rowIds[0]}"]`)
+    await expect(commInput).toBeVisible({ timeout: 5000 })
+    await commInput.fill('500')
+
+    // 7. Edit overtime for first row
+    const otInput = page.locator(`[data-testid="payroll-overtime-${rowIds[0]}"]`)
+    await expect(otInput).toBeVisible({ timeout: 5000 })
+    await otInput.fill('300')
+
+    // 8. Click Calculate
+    const calcBtn = page.locator('[data-testid="payroll-calculate"]')
     await expect(calcBtn).toBeVisible({ timeout: 5000 })
     await calcBtn.click()
     await page.waitForTimeout(2000)
     await page.waitForLoadState('networkidle')
 
-    // 10. Click Validate
-    const valBtn = page.locator('button', { hasText: /Validat/i })
+    // 9. Click Validate
+    const valBtn = page.locator('[data-testid="payroll-validate"]')
     await expect(valBtn).toBeVisible({ timeout: 5000 })
     await valBtn.click()
     await page.waitForTimeout(2000)
     await page.waitForLoadState('networkidle')
 
-    // 11. Display validation results
-    const blockerInfo = page.locator('text=Blockers')
-    const warningInfo = page.locator('text=Warnings')
-    await expect(blockerInfo.or(warningInfo)).toBeVisible({ timeout: 5000 })
+    // 10. Check validation results
+    const pageContent = await page.textContent('body')
+    expect(pageContent).toMatch(/Blockers|Warnings|VALID/)
 
-    // 12. Click Mark Ready
-    const readyBtn = page.locator('button', { hasText: /Mark Ready/i })
+    // 11. Click Mark Ready
+    const readyBtn = page.locator('[data-testid="payroll-ready"]')
     await expect(readyBtn).toBeVisible({ timeout: 5000 })
-
-    // Handle confirmation dialog
     page.once('dialog', dialog => {
       expect(dialog.message()).toContain('READY')
       dialog.accept()
@@ -215,26 +203,22 @@ test.describe('MVP Month-End Payroll', () => {
     await page.waitForTimeout(2000)
     await page.waitForLoadState('networkidle')
 
-    // 13. Click Generate Excel
-    const exportBtn = page.locator('button', { hasText: /Export/i })
+    // 12. Click Export Excel
+    const exportBtn = page.locator('[data-testid="payroll-export"]')
     await expect(exportBtn).toBeVisible({ timeout: 5000 })
+
+    const downloadPromise = page.waitForEvent('download', { timeout: 15000 })
     await exportBtn.click()
+    const download = await downloadPromise
+    expect(download).toBeTruthy()
+    expect(download.suggestedFilename()).toMatch(/\.xlsx$/)
+
+    // 13. Wait for page to process export, then click Lock
     await page.waitForTimeout(3000)
     await page.waitForLoadState('networkidle')
 
-    // 14. Download the file (via API, since download in headless may not open)
-    const expRes = await page.evaluate(async (pid) => {
-      const r = await fetch(`/api/payroll/${pid}/generate-excel`, { method: 'POST' })
-      if (!r.ok) return null
-      const data = (await r.json()).data
-      return data.downloadUrl || null
-    }, periodId)
-    expect(expRes).toBeTruthy()
-
-    // 15. Click Lock
-    const lockBtn = page.locator('button', { hasText: /Lock/i })
+    const lockBtn = page.locator('[data-testid="payroll-lock"]')
     await expect(lockBtn).toBeVisible({ timeout: 5000 })
-
     page.once('dialog', dialog => {
       expect(dialog.message()).toContain('Lock')
       dialog.accept()
@@ -243,10 +227,10 @@ test.describe('MVP Month-End Payroll', () => {
     await page.waitForTimeout(2000)
     await page.waitForLoadState('networkidle')
 
-    // 16. View export history on period page
+    // 14. Verify LOCKED status
     await page.goto(`/payroll/${periodId}`)
     await page.waitForLoadState('networkidle')
-    const pageText = await page.textContent('body')
-    expect(pageText).toContain('LOCKED')
+    const finalText = await page.textContent('body')
+    expect(finalText).toContain('LOCKED')
   })
 })

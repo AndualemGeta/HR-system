@@ -6,7 +6,7 @@ import { notFound, success, badRequest, unauthorized, forbidden, internalError }
 import { createAuditLog } from '@/lib/audit'
 import { generateExcel } from '@/lib/mvp-payroll/excel-generator'
 import { verifyExport } from '@/lib/mvp-payroll/export-verifier'
-import { getExportDir } from '@/lib/mvp-payroll/template-map'
+import { getExportDir, TEMPLATE_VERSION } from '@/lib/mvp-payroll/template-map'
 import fs from 'fs/promises'
 import path from 'path'
 
@@ -39,6 +39,13 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const fileName = `payroll_${period.periodName}_${Date.now()}.xlsx`
     const filePath = path.join(exportDir, fileName)
 
+    const genError = (msg: string) => {
+      createAuditLog({
+        userId: session.userId, action: 'EXPORT_FAILED' as never, entityType: 'MvpPayrollPeriod',
+        entityId: id, newValue: { error: msg, templateVersion: TEMPLATE_VERSION, timestamp: new Date().toISOString() },
+      }).catch(() => {})
+    }
+
     let result
     try {
       result = await generateExcel({
@@ -50,6 +57,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     } catch (err) {
       await fs.unlink(filePath).catch(() => {})
       const message = err instanceof Error ? err.message : String(err)
+      genError(`Generate failed: ${message}`)
       return badRequest(message)
     }
 
@@ -64,6 +72,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
     if (!verification.valid) {
       await fs.unlink(filePath).catch(() => {})
+      genError(`Verification failed: ${verification.errors.join('; ')}`)
       return badRequest(`Export verification failed: ${verification.errors.join('; ')}`)
     }
 

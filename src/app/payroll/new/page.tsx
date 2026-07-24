@@ -48,6 +48,7 @@ export default function NewPayrollPeriodPage() {
         <div>
           <label style={{ display: 'block', marginBottom: '0.25rem', fontSize: '0.85rem', fontWeight: 500 }}>Month *</label>
           <select value={month} onChange={e => setMonth(e.target.value)}
+            data-testid="payroll-create-month"
             style={{ width: '100%', padding: '0.4rem', border: '1px solid #d1d5db', borderRadius: 4, fontSize: '0.9rem', background: '#fff' }}>
             <option value="">-- Select Month --</option>
             {months.map(m => <option key={m.v} value={m.v}>{m.l}</option>)}
@@ -56,6 +57,7 @@ export default function NewPayrollPeriodPage() {
         <div>
           <label style={{ display: 'block', marginBottom: '0.25rem', fontSize: '0.85rem', fontWeight: 500 }}>Year *</label>
           <input type="number" value={year} onChange={e => setYear(e.target.value)}
+            data-testid="payroll-create-year"
             style={{ width: '100%', padding: '0.4rem', border: '1px solid #d1d5db', borderRadius: 4, fontSize: '0.9rem', boxSizing: 'border-box' }} />
         </div>
         <div>

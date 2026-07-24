@@ -63,7 +63,7 @@ export default function PayrollExportPage() {
                   Generated {new Date(exp.generatedAt).toLocaleString()} · {exp.downloadedCount} downloads
                 </div>
               </div>
-              <a href={`/api/payroll/${params.id}/download-excel?file=${exp.fileName}`}
+              <a href={`/api/payroll/${params.id}/download-excel?exportId=${exp.id}`}
                 style={{ padding: '0.4rem 0.75rem', background: '#2563eb', color: '#fff', borderRadius: 4, textDecoration: 'none', fontSize: '0.85rem' }}>
                 Download
               </a>

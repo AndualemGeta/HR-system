@@ -160,9 +160,9 @@ export default function NewEmployeePage() {
         <fieldset style={{ border: '1px solid #d1d5db', borderRadius: 6, padding: '1rem' }}>
           <legend style={{ fontWeight: 600 }}>Personal Information</legend>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
-            <Field label="First Name *" value={form.firstName} onChange={v => set('firstName', v)} required />
+            <Field label="First Name *" value={form.firstName} onChange={v => set('firstName', v)} required testId="employee-first-name" />
             <Field label="Middle Name" value={form.middleName} onChange={v => set('middleName', v)} />
-            <Field label="Last Name" value={form.lastName} onChange={v => set('lastName', v)} />
+            <Field label="Last Name" value={form.lastName} onChange={v => set('lastName', v)} testId="employee-last-name" />
             <Select label="Gender" value={form.gender} onChange={v => set('gender', v)} options={[
               { value: 'NOT_SPECIFIED', label: 'Not Specified' },
               { value: 'MALE', label: 'Male' },
@@ -194,7 +194,7 @@ export default function NewEmployeePage() {
               { value: 'ACTIVE', label: 'Active' },
               { value: 'ON_PROBATION', label: 'On Probation' },
             ]} />
-            <Field label="Hire Date" value={form.hireDate} onChange={v => set('hireDate', v)} type="date" />
+            <Field label="Hire Date" value={form.hireDate} onChange={v => set('hireDate', v)} type="date" testId="employee-hire-date" />
           </div>
         </fieldset>
 
@@ -309,8 +309,8 @@ export default function NewEmployeePage() {
         <fieldset style={{ border: '1px solid #d1d5db', borderRadius: 6, padding: '1rem' }}>
           <legend style={{ fontWeight: 600 }}>Compensation</legend>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
-            <Field label="Basic Salary" value={form.basicSalary} onChange={v => set('basicSalary', v)} type="number" />
-            <Field label="Salary Effective Date" value={form.salaryEffectiveDate} onChange={v => set('salaryEffectiveDate', v)} type="date" />
+            <Field label="Basic Salary" value={form.basicSalary} onChange={v => set('basicSalary', v)} type="number" testId="employee-basic-salary" />
+            <Field label="Salary Effective Date" value={form.salaryEffectiveDate} onChange={v => set('salaryEffectiveDate', v)} type="date" testId="employee-salary-effective-date" />
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginTop: '0.75rem', borderTop: '1px solid #e5e7eb', paddingTop: '0.75rem' }}>
             <Field label="KPI Default Amount" value={form.kpiDefaultAmount} onChange={v => set('kpiDefaultAmount', v)} type="number" />
@@ -328,11 +328,11 @@ export default function NewEmployeePage() {
               { value: '', label: '-- Select --' }, { value: 'BANK', label: 'Bank Transfer' },
               { value: 'MPESA', label: 'M-PESA' }, { value: 'MANUAL', label: 'Manual' }, { value: 'HOLD', label: 'Hold' },
             ]} />
-            <Field label="Bank Name" value={payProfile.bankName} onChange={v => setPayProfile(p => ({ ...p, bankName: v }))} />
-            <Field label="Bank Account Number" value={payProfile.bankAccountNumber} onChange={v => setPayProfile(p => ({ ...p, bankAccountNumber: v }))} />
+            <Field label="Bank Name" value={payProfile.bankName} onChange={v => setPayProfile(p => ({ ...p, bankName: v }))} testId="employee-bank-name" />
+            <Field label="Bank Account Number" value={payProfile.bankAccountNumber} onChange={v => setPayProfile(p => ({ ...p, bankAccountNumber: v }))} testId="employee-bank-account" />
             <Field label="M-PESA Number" value={payProfile.mpesaAccount} onChange={v => setPayProfile(p => ({ ...p, mpesaAccount: v }))} />
-            <Field label="Tax ID" value={payProfile.taxId} onChange={v => setPayProfile(p => ({ ...p, taxId: v }))} />
-            <Field label="Pension ID" value={payProfile.pensionId} onChange={v => setPayProfile(p => ({ ...p, pensionId: v }))} />
+            <Field label="Tax ID" value={payProfile.taxId} onChange={v => setPayProfile(p => ({ ...p, taxId: v }))} testId="employee-tax-id" />
+            <Field label="Pension ID" value={payProfile.pensionId} onChange={v => setPayProfile(p => ({ ...p, pensionId: v }))} testId="employee-pension-id" />
             <Select label="Payroll Group" value={payProfile.payrollGroup} onChange={v => setPayProfile(p => ({ ...p, payrollGroup: v }))} options={[
               { value: '', label: '-- Select --' },
               { value: 'HO_AA_SHOP', label: 'H,O A,A Shop' },
@@ -346,7 +346,7 @@ export default function NewEmployeePage() {
               { value: 'MENDIDA', label: 'Mendida' },
               { value: 'SENDAFA', label: 'Sendafa' },
               { value: 'SHENO', label: 'Sheno' },
-            ]} />
+            ]} testId="employee-payroll-group" />
           </div>
         </fieldset>
 
@@ -378,8 +378,8 @@ function CategoryCard({ title, description, onClick }: { title: string; descript
   )
 }
 
-function Field({ label, value, onChange, type, required }: {
-  label: string; value: string; onChange: (v: string) => void; type?: string; required?: boolean
+function Field({ label, value, onChange, type, required, testId }: {
+  label: string; value: string; onChange: (v: string) => void; type?: string; required?: boolean; testId?: string
 }) {
   return (
     <div>
@@ -389,19 +389,21 @@ function Field({ label, value, onChange, type, required }: {
       <input
         type={type || 'text'} value={value} onChange={e => onChange(e.target.value)}
         required={required}
+        data-testid={testId}
         style={{ width: '100%', padding: '0.4rem', border: '1px solid #d1d5db', borderRadius: 4, boxSizing: 'border-box', fontSize: '0.9rem' }}
       />
     </div>
   )
 }
 
-function Select({ label, value, onChange, options }: {
-  label: string; value: string; onChange: (v: string) => void; options: { value: string; label: string }[]
+function Select({ label, value, onChange, options, testId }: {
+  label: string; value: string; onChange: (v: string) => void; options: { value: string; label: string }[]; testId?: string
 }) {
   return (
     <div>
       <label style={{ display: 'block', marginBottom: '0.25rem', fontSize: '0.85rem', fontWeight: 500 }}>{label}</label>
       <select value={value} onChange={e => onChange(e.target.value)}
+        data-testid={testId}
         style={{ width: '100%', padding: '0.4rem', border: '1px solid #d1d5db', borderRadius: 4, boxSizing: 'border-box', fontSize: '0.9rem', background: '#fff' }}
       >
         {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}

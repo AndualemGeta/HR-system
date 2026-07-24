@@ -15,13 +15,19 @@ export interface VerificationResult {
   hasExternalLinks: boolean
 }
 
-interface ExpectedRow {
+export interface ExpectedRow {
   employeeCode: string
   employeeName: string
   payrollGroup: string | null
   grossSalary: number
   totalDeduction: number
   netSalary: number
+  basicSalary?: number
+  workingDays?: number
+  position?: string
+  workplace?: string
+  payrollRowId?: string
+  employeeId?: string
 }
 
 interface SheetLayout {
@@ -96,6 +102,36 @@ function inspectExternalLink(wb: ExcelJS.Workbook): boolean {
   return false
 }
 
+function resolveCellValue(value: unknown): { formula?: string; numberValue?: number; stringValue?: string } {
+  if (value === null || value === undefined) return {}
+  if (typeof value === 'number') return { numberValue: value }
+  if (typeof value === 'string') return { stringValue: value }
+  if (typeof value === 'object' && value !== null) {
+    const obj = value as Record<string, unknown>
+    if (typeof obj.formula === 'string') {
+      return { formula: obj.formula, numberValue: typeof obj.result === 'number' ? obj.result : undefined }
+    }
+    if (typeof obj.result === 'number') return { numberValue: obj.result, formula: typeof obj.formula === 'string' ? String(obj.formula) : undefined }
+    if (typeof obj.sharedFormula === 'string') return { formula: obj.sharedFormula }
+  }
+  return {}
+}
+
+function getFormulaString(totalCell: ExcelJS.Cell): string {
+  const value = totalCell.value
+  if (typeof value === 'object' && value !== null && 'formula' in value) {
+    return String((value as { formula: string }).formula)
+  }
+  return String(value || '')
+}
+
+function extractRangeFromFormula(formula: string, colLetter: string): { firstRow: number; lastRow: number } | null {
+  const regex = new RegExp(`${colLetter}(\\d+):${colLetter}(\\d+)`)
+  const match = formula.match(regex)
+  if (!match) return null
+  return { firstRow: parseInt(match[1], 10), lastRow: parseInt(match[2], 10) }
+}
+
 export async function verifyExport(
   filePath: string,
   expectedRows: ExpectedRow[],
@@ -107,7 +143,6 @@ export async function verifyExport(
   const wb = await new ExcelJS.Workbook().xlsx.readFile(filePath)
   const wsNames = wb.worksheets.map(ws => ws.name)
 
-  // Check exactly 13 sheets (11 payroll + 2 supporting)
   if (wsNames.length !== ALL_REQUIRED_SHEETS.length) {
     errors.push(`Expected ${ALL_REQUIRED_SHEETS.length} worksheets, got ${wsNames.length}`)
   }
@@ -118,19 +153,16 @@ export async function verifyExport(
     }
   }
 
-  // Check for extra sheets
   for (const wsName of wsNames) {
     if (!ALL_REQUIRED_SHEETS.includes(wsName as typeof ALL_REQUIRED_SHEETS[number])) {
       errors.push(`Unexpected extra worksheet: "${wsName}"`)
     }
   }
 
-  // External link check — hard reject
   if (inspectExternalLink(wb)) {
     errors.push('Export contains external links or cross-workbook references — rejected')
   }
 
-  // Build layout for each payroll sheet
   const sheetLayouts: Record<string, SheetLayout> = {}
   for (const name of WORKSHEET_NAMES) {
     if (!wsNames.includes(name)) continue
@@ -139,69 +171,137 @@ export async function verifyExport(
     sheetLayouts[name] = analyzeSheet(ws)
   }
 
-  // Verify each expected row via manifest or direct check
-  const foundByName = new Map<string, { sheet: string; row: number }[]>()
   const sheetEmployeeCounts: Record<string, number> = {}
 
   if (manifest && manifest.length > 0) {
-    // Use manifest for precise verification
     for (const entry of manifest) {
-      if (!entry.sheetName || !entry.employeeName) continue
-      const key = entry.employeeName
-      if (!foundByName.has(key)) foundByName.set(key, [])
-      foundByName.get(key)!.push({ sheet: entry.sheetName, row: entry.worksheetRowNumber })
+      if (!entry.sheetName) continue
       sheetEmployeeCounts[entry.sheetName] = (sheetEmployeeCounts[entry.sheetName] || 0) + 1
     }
   } else {
-    // Fallback: scan worksheets directly
     for (const sheetName of WORKSHEET_NAMES) {
       if (!wsNames.includes(sheetName)) continue
       const ws = wb.getWorksheet(sheetName)
       if (!ws) continue
       const layout = sheetLayouts[sheetName]
-
+      let count = 0
       for (let r = layout.dataStartRow; r <= layout.dataEndRow; r++) {
         const code = String(ws.getRow(r).getCell(1).value || '').trim()
         if (!code || isNaN(Number(code))) continue
         const name = String(ws.getRow(r).getCell(2).value || '').trim()
         if (!name || name.startsWith('Total')) continue
+        count++
+      }
+      sheetEmployeeCounts[sheetName] = count
+    }
+  }
 
-        const key = name
-        if (!foundByName.has(key)) foundByName.set(key, [])
-        foundByName.get(key)!.push({ sheet: sheetName, row: r })
-        sheetEmployeeCounts[sheetName] = (sheetEmployeeCounts[sheetName] || 0) + 1
+  let totalFound = 0
+  if (manifest && manifest.length > 0) {
+    const foundById = new Map<string, ManifestEntry>()
+
+    for (const entry of manifest) {
+      const key = entry.payrollRowId || entry.employeeId || ''
+      if (!key) continue
+      if (foundById.has(key)) {
+        errors.push(`Employee payrollRowId "${key}" appears ${foundById.has(key) ? 'twice' : 'multiple times'} in manifest`)
+      }
+      foundById.set(key, entry)
+      totalFound++
+    }
+
+    for (const expected of expectedRows) {
+      const key = expected.payrollRowId || expected.employeeId || expected.employeeName
+
+      const entry = manifest.find(m => {
+        if (expected.payrollRowId && m.payrollRowId === expected.payrollRowId) return true
+        if (expected.employeeId && m.employeeId === expected.employeeId) return true
+        return false
+      })
+
+      if (!entry) {
+        errors.push(`Employee "${expected.employeeName}" (${expected.employeeCode}) not found in manifest`)
+        continue
+      }
+
+      const ws = wb.getWorksheet(entry.sheetName)
+      if (!ws) {
+        errors.push(`Sheet "${entry.sheetName}" from manifest not found in workbook`)
+        continue
+      }
+
+      const row = ws.getRow(entry.worksheetRowNumber)
+
+      const cellB = resolveCellValue(row.getCell(2).value)
+      const cellC = resolveCellValue(row.getCell(3).value)
+      const cellD = resolveCellValue(row.getCell(4).value)
+      const cellE = resolveCellValue(row.getCell(5).value)
+      const cellF = resolveCellValue(row.getCell(6).value)
+      const cellJ = resolveCellValue(row.getCell(10).value)
+      const cellP = resolveCellValue(row.getCell(16).value)
+      const cellR = resolveCellValue(row.getCell(18).value)
+
+      const actualName = (cellB.stringValue || '').trim()
+      if (actualName !== expected.employeeName) {
+        errors.push(`Employee "${expected.employeeName}" at "${entry.sheetName}" row ${entry.worksheetRowNumber}: expected name "${expected.employeeName}", got "${actualName}"`)
+      }
+
+      if (expected.position) {
+        const actualPos = (cellC.stringValue || '').trim()
+        if (actualPos && actualPos !== expected.position) {
+          errors.push(`Employee "${expected.employeeName}" at "${entry.sheetName}" row ${entry.worksheetRowNumber}: expected position "${expected.position}", got "${actualPos}"`)
+        }
+      }
+
+      if (expected.workplace) {
+        const actualWp = (cellD.stringValue || '').trim()
+        if (actualWp && actualWp !== expected.workplace) {
+          errors.push(`Employee "${expected.employeeName}" at "${entry.sheetName}" row ${entry.worksheetRowNumber}: expected workplace "${expected.workplace}", got "${actualWp}"`)
+        }
+      }
+
+      if (expected.workingDays !== undefined) {
+        const actualWd = cellE.numberValue
+        if (actualWd !== undefined && Math.abs(actualWd - expected.workingDays) > 0.5) {
+          errors.push(`Employee "${expected.employeeName}" at "${entry.sheetName}" row ${entry.worksheetRowNumber}: expected workingDays ${expected.workingDays}, got ${actualWd}`)
+        }
+      }
+
+      if (expected.basicSalary !== undefined) {
+        const actualBs = cellF.numberValue
+        if (actualBs !== undefined && Math.abs(actualBs - expected.basicSalary) > 0.5) {
+          errors.push(`Employee "${expected.employeeName}" at "${entry.sheetName}" row ${entry.worksheetRowNumber}: expected basicSalary ${expected.basicSalary}, got ${actualBs}`)
+        }
+      }
+
+      const actualGross = cellJ.numberValue
+      if (actualGross !== undefined && Math.abs(actualGross - expected.grossSalary) > 1) {
+        errors.push(`Employee "${expected.employeeName}" at "${entry.sheetName}" row ${entry.worksheetRowNumber}: expected grossSalary ${expected.grossSalary}, got ${actualGross}`)
+      }
+
+      const actualDed = cellP.numberValue
+      if (actualDed !== undefined && Math.abs(actualDed - expected.totalDeduction) > 1) {
+        errors.push(`Employee "${expected.employeeName}" at "${entry.sheetName}" row ${entry.worksheetRowNumber}: expected totalDeduction ${expected.totalDeduction}, got ${actualDed}`)
+      }
+
+      const actualNet = cellR.numberValue
+      if (actualNet !== undefined && Math.abs(actualNet - expected.netSalary) > 1) {
+        errors.push(`Employee "${expected.employeeName}" at "${entry.sheetName}" row ${entry.worksheetRowNumber}: expected netSalary ${expected.netSalary}, got ${actualNet}`)
+      }
+
+      if (expected.payrollGroup) {
+        const expectedSheet = PAYROLL_SHEETS_MAP[expected.payrollGroup]
+        if (expectedSheet && entry.sheetName !== expectedSheet) {
+          errors.push(`Employee "${expected.employeeName}" found in sheet "${entry.sheetName}" but expected in "${expectedSheet}" based on payroll group "${expected.payrollGroup}"`)
+        }
       }
     }
-  }
 
-  // Verify every expected employee appears exactly once on the right sheet
-  for (const expected of expectedRows) {
-    const hits = foundByName.get(expected.employeeName)
-    if (!hits || hits.length === 0) {
-      errors.push(`Employee "${expected.employeeName}" (${expected.employeeCode}) not found in any payroll sheet`)
-      continue
-    }
-    if (hits.length > 1) {
-      errors.push(`Employee "${expected.employeeName}" (${expected.employeeCode}) appears ${hits.length} times across sheets`)
-    }
-    if (expected.payrollGroup) {
-      const expectedSheet = PAYROLL_SHEETS_MAP[expected.payrollGroup]
-      if (expectedSheet && hits[0].sheet !== expectedSheet) {
-        errors.push(`Employee "${expected.employeeName}" found in sheet "${hits[0].sheet}" but expected in "${expectedSheet}" based on payroll group "${expected.payrollGroup}"`)
-      }
+    if (totalFound !== expectedRows.length) {
+      errors.push(`Employee count mismatch: export has ${totalFound} rows, expected ${expectedRows.length}`)
     }
   }
 
-  // Employee count mismatch is an ERROR
-  const totalFound = [...foundByName.values()].reduce((s, v) => s + v.length, 0)
-  if (totalFound !== expectedRows.length) {
-    errors.push(`Employee count mismatch: export has ${totalFound} rows, expected ${expectedRows.length}`)
-  }
-
-  // Check for rows on wrong sheet (not assigned to any group)
-  // This is covered by the manifest check above
-
-  // Sum numeric values independently from columns J(10), P(16), R(18)
   const grossBySheet: Record<string, Decimal> = {}
   const dedBySheet: Record<string, Decimal> = {}
   const netBySheet: Record<string, Decimal> = {}
@@ -253,7 +353,6 @@ export async function verifyExport(
     errors.push(`Net total mismatch: export=${exportNet.toFixed(2)}, expected=${expectedNet.toFixed(2)}`)
   }
 
-  // Verify total-row formulas cover first through last employee
   for (const sheetName of WORKSHEET_NAMES) {
     if (!wsNames.includes(sheetName)) continue
     if (!sheetEmployeeCounts[sheetName]) continue
@@ -266,11 +365,24 @@ export async function verifyExport(
     if (!ws) continue
 
     const totalRow = ws.getRow(layout.totalRow)
-    const totalFormula = String(totalRow.getCell(10).value || '')
-    if (totalFormula.includes(`${colToLetter(10)}${firstRow}:${colToLetter(10)}${lastRow}`)) {
-      // correct
-    } else {
-      errors.push(`Sheet "${sheetName}" total formula range ${totalFormula} does not cover first(${firstRow}) to last(${lastRow}) employee row`)
+
+    const colsToCheck = ['J', 'P', 'R']
+    for (const colLetter of colsToCheck) {
+      const colNum = colLetter === 'J' ? 10 : colLetter === 'P' ? 16 : 18
+      const formula = getFormulaString(totalRow.getCell(colNum))
+      const range = extractRangeFromFormula(formula, colLetter)
+
+      if (!range) {
+        errors.push(`Sheet "${sheetName}" col ${colLetter}: total formula "${formula}" does not contain a valid SUM range`)
+        continue
+      }
+
+      if (range.firstRow !== firstRow) {
+        errors.push(`Sheet "${sheetName}" col ${colLetter}: total formula starts at row ${range.firstRow}, expected ${firstRow} (first employee row)`)
+      }
+      if (range.lastRow !== lastRow) {
+        errors.push(`Sheet "${sheetName}" col ${colLetter}: total formula ends at row ${range.lastRow}, expected ${lastRow} (last employee row)`)
+      }
     }
   }
 
