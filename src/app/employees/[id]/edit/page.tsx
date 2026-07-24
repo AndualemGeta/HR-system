@@ -344,7 +344,7 @@ export default function EditEmployeePage() {
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
             <Select label="Payment Method" value={payProfile.paymentMethod} onChange={v => setPayProfile(p => ({ ...p, paymentMethod: v }))} options={[
               { value: '', label: '-- Select --' }, { value: 'BANK', label: 'Bank Transfer' },
-              { value: 'MPESA', label: 'M-PESA' }, { value: 'MANUAL', label: 'Manual' }, { value: 'HOLD', label: 'Hold' },
+              { value: 'MPESA', label: 'M-PESA' }, { value: 'MANUAL', label: 'Cash' }, { value: 'HOLD', label: 'Hold' },
             ]} />
             <Field label="Bank Name" value={payProfile.bankName} onChange={v => setPayProfile(p => ({ ...p, bankName: v }))} />
             <Field label="Bank Account Number" value={payProfile.bankAccountNumber} onChange={v => setPayProfile(p => ({ ...p, bankAccountNumber: v }))} />

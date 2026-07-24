@@ -16,18 +16,18 @@ export interface VerificationResult {
 }
 
 export interface ExpectedRow {
+  payrollRowId: string
+  employeeId: string
   employeeCode: string
   employeeName: string
   payrollGroup: string | null
+  position: string
+  workplace: string
+  workingDays: number
+  basicSalary: number
   grossSalary: number
   totalDeduction: number
   netSalary: number
-  basicSalary?: number
-  workingDays?: number
-  position?: string
-  workplace?: string
-  payrollRowId?: string
-  employeeId?: string
 }
 
 interface SheetLayout {
@@ -132,6 +132,13 @@ function extractRangeFromFormula(formula: string, colLetter: string): { firstRow
   return { firstRow: parseInt(match[1], 10), lastRow: parseInt(match[2], 10) }
 }
 
+function matchManifest(entry: ManifestEntry, expected: ExpectedRow): boolean {
+  if (expected.payrollRowId && entry.payrollRowId === expected.payrollRowId) return true
+  if (expected.employeeId && entry.employeeId === expected.employeeId) return true
+  if (expected.employeeCode && entry.employeeCode === expected.employeeCode) return true
+  return false
+}
+
 export async function verifyExport(
   filePath: string,
   expectedRows: ExpectedRow[],
@@ -197,32 +204,35 @@ export async function verifyExport(
   }
 
   let totalFound = 0
+  const matchedExpected = new Set<number>()
+
   if (manifest && manifest.length > 0) {
-    const foundById = new Map<string, ManifestEntry>()
+    const seenManifestKeys = new Set<string>()
 
     for (const entry of manifest) {
-      const key = entry.payrollRowId || entry.employeeId || ''
-      if (!key) continue
-      if (foundById.has(key)) {
-        errors.push(`Employee payrollRowId "${key}" appears ${foundById.has(key) ? 'twice' : 'multiple times'} in manifest`)
+      const key = entry.payrollRowId || entry.employeeId || entry.employeeCode || ''
+      if (!key) {
+        errors.push('Manifest entry missing payrollRowId, employeeId, and employeeCode')
+        continue
       }
-      foundById.set(key, entry)
+      if (seenManifestKeys.has(key)) {
+        errors.push(`Duplicate manifest entry: "${key}" appears more than once`)
+      }
+      seenManifestKeys.add(key)
       totalFound++
     }
 
-    for (const expected of expectedRows) {
-      const key = expected.payrollRowId || expected.employeeId || expected.employeeName
+    for (let ei = 0; ei < expectedRows.length; ei++) {
+      const expected = expectedRows[ei]
 
-      const entry = manifest.find(m => {
-        if (expected.payrollRowId && m.payrollRowId === expected.payrollRowId) return true
-        if (expected.employeeId && m.employeeId === expected.employeeId) return true
-        return false
-      })
+      const entry = manifest.find(m => matchManifest(m, expected))
 
       if (!entry) {
         errors.push(`Employee "${expected.employeeName}" (${expected.employeeCode}) not found in manifest`)
         continue
       }
+
+      matchedExpected.add(ei)
 
       const ws = wb.getWorksheet(entry.sheetName)
       if (!ws) {
@@ -260,32 +270,38 @@ export async function verifyExport(
         }
       }
 
-      if (expected.workingDays !== undefined) {
-        const actualWd = cellE.numberValue
-        if (actualWd !== undefined && Math.abs(actualWd - expected.workingDays) > 0.5) {
-          errors.push(`Employee "${expected.employeeName}" at "${entry.sheetName}" row ${entry.worksheetRowNumber}: expected workingDays ${expected.workingDays}, got ${actualWd}`)
-        }
+      const actualWd = cellE.numberValue
+      if (actualWd === undefined) {
+        errors.push(`Employee "${expected.employeeName}" at "${entry.sheetName}" row ${entry.worksheetRowNumber}: working days cell is blank`)
+      } else if (Math.abs(actualWd - expected.workingDays) > 0.5) {
+        errors.push(`Employee "${expected.employeeName}" at "${entry.sheetName}" row ${entry.worksheetRowNumber}: expected workingDays ${expected.workingDays}, got ${actualWd}`)
       }
 
-      if (expected.basicSalary !== undefined) {
-        const actualBs = cellF.numberValue
-        if (actualBs !== undefined && Math.abs(actualBs - expected.basicSalary) > 0.5) {
-          errors.push(`Employee "${expected.employeeName}" at "${entry.sheetName}" row ${entry.worksheetRowNumber}: expected basicSalary ${expected.basicSalary}, got ${actualBs}`)
-        }
+      const actualBs = cellF.numberValue
+      if (actualBs === undefined) {
+        errors.push(`Employee "${expected.employeeName}" at "${entry.sheetName}" row ${entry.worksheetRowNumber}: basic salary cell is blank`)
+      } else if (Math.abs(actualBs - expected.basicSalary) > 0.5) {
+        errors.push(`Employee "${expected.employeeName}" at "${entry.sheetName}" row ${entry.worksheetRowNumber}: expected basicSalary ${expected.basicSalary}, got ${actualBs}`)
       }
 
       const actualGross = cellJ.numberValue
-      if (actualGross !== undefined && Math.abs(actualGross - expected.grossSalary) > 1) {
+      if (actualGross === undefined) {
+        errors.push(`Employee "${expected.employeeName}" at "${entry.sheetName}" row ${entry.worksheetRowNumber}: gross salary cell is blank`)
+      } else if (Math.abs(actualGross - expected.grossSalary) > 1) {
         errors.push(`Employee "${expected.employeeName}" at "${entry.sheetName}" row ${entry.worksheetRowNumber}: expected grossSalary ${expected.grossSalary}, got ${actualGross}`)
       }
 
       const actualDed = cellP.numberValue
-      if (actualDed !== undefined && Math.abs(actualDed - expected.totalDeduction) > 1) {
+      if (actualDed === undefined) {
+        errors.push(`Employee "${expected.employeeName}" at "${entry.sheetName}" row ${entry.worksheetRowNumber}: total deduction cell is blank`)
+      } else if (Math.abs(actualDed - expected.totalDeduction) > 1) {
         errors.push(`Employee "${expected.employeeName}" at "${entry.sheetName}" row ${entry.worksheetRowNumber}: expected totalDeduction ${expected.totalDeduction}, got ${actualDed}`)
       }
 
       const actualNet = cellR.numberValue
-      if (actualNet !== undefined && Math.abs(actualNet - expected.netSalary) > 1) {
+      if (actualNet === undefined) {
+        errors.push(`Employee "${expected.employeeName}" at "${entry.sheetName}" row ${entry.worksheetRowNumber}: net salary cell is blank`)
+      } else if (Math.abs(actualNet - expected.netSalary) > 1) {
         errors.push(`Employee "${expected.employeeName}" at "${entry.sheetName}" row ${entry.worksheetRowNumber}: expected netSalary ${expected.netSalary}, got ${actualNet}`)
       }
 

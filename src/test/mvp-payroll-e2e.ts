@@ -219,7 +219,7 @@ async function main() {
     const profile = await prisma.employeePayrollProfile.create({
       data: {
         employeeId: emp.id, payrollGroup: 'EBU_DEPARTMENT',
-        paymentMethod: 'CASH', taxId: 'TAX003',
+        paymentMethod: 'MANUAL', taxId: 'TAX003',
       },
     })
     createdProfileIds.push(profile.id)

@@ -54,6 +54,9 @@ export default function PayrollDetailPage() {
   const [bulkField, setBulkField] = useState('')
   const [bulkValue, setBulkValue] = useState('')
   const [bulkModal, setBulkModal] = useState(false)
+  const [savingFields, setSavingFields] = useState<Record<string, 'saving' | 'saved' | 'error'>>({})
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
+  const rowValuesRef = useRef<Record<string, Record<string, string>>>({})
 
   const loadData = useCallback(async () => {
     if (!params.id) return
@@ -82,7 +85,7 @@ export default function PayrollDetailPage() {
   const isDraft = period?.status === 'DRAFT'
   const isReady = period?.status === 'READY'
   const isLocked = period?.status === 'LOCKED'
-  const canEdit = (isDraft || isReady) && has('payrollPeriod.update')
+  const canEdit = isDraft && has('payrollPeriod.update')
 
   const filteredRows = rows.filter(r => {
     if (search && !r.employeeName.toLowerCase().includes(search.toLowerCase()) && !r.employeeCode.toLowerCase().includes(search.toLowerCase())) return false
@@ -223,22 +226,41 @@ export default function PayrollDetailPage() {
     setRows(prev => prev.map(r => r.id === rowId ? { ...r, [field]: value } : r))
   }
 
-  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-
-  function handleCellChange(rowId: string, field: string, value: string) {
+  // Save-on-blur for each editable field
+  async function handleCellSave(rowId: string, field: string, value: string, prevValue: string) {
     const numValue = value === '' ? null : parseFloat(value)
-    updateRow(rowId, field, numValue)
-    if (saveTimer.current) clearTimeout(saveTimer.current)
-    saveTimer.current = setTimeout(async () => {
-      const row = rows.find(r => r.id === rowId)
-      if (!row) return
+    if (numValue === parseFloat(prevValue) && !(numValue === null && prevValue === '')) return
+    const fieldKey = `${rowId}_${field}`
+    setSavingFields(prev => ({ ...prev, [fieldKey]: 'saving' }))
+    setFieldErrors(prev => { const n = { ...prev }; delete n[fieldKey]; return n })
+    try {
       const res = await fetch(`/api/payroll/${params.id}/rows`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ rows: [{ id: rowId, [field]: numValue }] }),
       })
-      if (res.ok) setSuccessMsg('Saved')
-    }, 800)
+      if (res.ok) {
+        setSavingFields(prev => ({ ...prev, [fieldKey]: 'saved' }))
+        setTimeout(() => setSavingFields(prev => { const n = { ...prev }; delete n[fieldKey]; return n }), 2000)
+      } else {
+        const json = await res.json()
+        setFieldErrors(prev => ({ ...prev, [fieldKey]: json.error || 'Save failed' }))
+        setSavingFields(prev => ({ ...prev, [fieldKey]: 'error' }))
+        setTimeout(() => setSavingFields(prev => { const n = { ...prev }; delete n[fieldKey]; return n }), 3000)
+        updateRow(rowId, field, prevValue === '' ? null : parseFloat(prevValue))
+      }
+    } catch {
+      setFieldErrors(prev => ({ ...prev, [fieldKey]: 'Network error' }))
+      setSavingFields(prev => ({ ...prev, [fieldKey]: 'error' }))
+      setTimeout(() => setSavingFields(prev => { const n = { ...prev }; delete n[fieldKey]; return n }), 3000)
+      updateRow(rowId, field, prevValue === '' ? null : parseFloat(prevValue))
+    }
+  }
+
+  function handleCellFocus(rowId: string, field: string) {
+    const key = `${rowId}_${field}`
+    if (!rowValuesRef.current[rowId]) rowValuesRef.current[rowId] = {}
+    rowValuesRef.current[rowId][field] = String((rows.find(r => r.id === rowId) as unknown as Record<string, unknown>)?.[field] ?? '')
   }
 
   async function handleExport() {
@@ -410,15 +432,24 @@ export default function PayrollDetailPage() {
                     <td style={tdStyle}>{row.location || row.department || '—'}</td>
                     {editableFields.map(f => {
                       const displayVal = (row as unknown as Record<string, unknown>)[f]
+                      const fieldKey = `${row.id}_${f}`
+                      const saveStatus = savingFields[fieldKey]
+                      const fieldErr = fieldErrors[fieldKey]
                       return (
                         <td key={f} style={tdStyle}>
                           {canEdit ? (
-                            <input type="number" step="0.01"
-                              value={String(displayVal ?? '')}
-                              onChange={e => handleCellChange(row.id, f, e.target.value)}
-                              data-testid={`payroll-${f}-${row.id}`}
-                              style={{ width: '100%', padding: '2px 4px', border: '1px solid #d1d5db', borderRadius: 2, fontSize: '0.85rem', boxSizing: 'border-box', background: isLocked ? '#f3f4f6' : '#fff' }}
-                              disabled={isLocked} />
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                              <input type="number" step="0.01"
+                                defaultValue={String(displayVal ?? '')}
+                                onFocus={() => handleCellFocus(row.id, f)}
+                                onBlur={e => handleCellSave(row.id, f, e.target.value, rowValuesRef.current[row.id]?.[f] ?? '')}
+                                data-testid={`payroll-${f}-${row.id}`}
+                                style={{ width: '100%', padding: '2px 4px', border: '1px solid #d1d5db', borderRadius: 2, fontSize: '0.85rem', boxSizing: 'border-box' }}
+                                disabled={isLocked} />
+                              {saveStatus === 'saving' && <span style={{ fontSize: '0.65rem', color: '#7c3aed' }}>Saving</span>}
+                              {saveStatus === 'saved' && <span style={{ fontSize: '0.65rem', color: '#16a34a' }}>Saved</span>}
+                              {saveStatus === 'error' && <span style={{ fontSize: '0.65rem', color: '#dc2626' }} title={fieldErr}>{fieldErr ? 'Err' : 'Error'}</span>}
+                            </div>
                           ) : (
                             String(displayVal ?? '0')
                           )}

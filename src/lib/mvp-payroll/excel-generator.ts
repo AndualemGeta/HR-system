@@ -28,7 +28,6 @@ function analyzeWorksheet(ws: ExcelJS.Worksheet): SheetMapEntry {
   let headerRow = 0
   let dataStartRow = 0
   let totalRow = 0
-  let titleRow = 1
   let approvalStartRow = 0
 
   for (let r = 1; r <= (ws.rowCount || 100); r++) {
@@ -44,13 +43,19 @@ function analyzeWorksheet(ws: ExcelJS.Worksheet): SheetMapEntry {
       dataStartRow = 0
       continue
     }
-    if (totalRow > 0 && cell2.startsWith('prepared') || cell2.startsWith('approved') || cell2.startsWith('authorized') || cell2.startsWith('signature') || cell2.startsWith('hr') || cell2.startsWith('finance') || cell2.startsWith('general manager') || cell2.startsWith('gm')) {
-      if (!approvalStartRow) approvalStartRow = r
+  }
+
+  if (totalRow > 0) {
+    for (let r = totalRow + 1; r <= (ws.rowCount || 100); r++) {
+      const cell2 = String(ws.getRow(r).getCell(2).value || '').trim().toLowerCase()
+      if (cell2.startsWith('prepared') || cell2.startsWith('approved') || cell2.startsWith('authorized') || cell2.startsWith('signature') || cell2.startsWith('hr') || cell2.startsWith('finance') || cell2.startsWith('general manager') || cell2.startsWith('gm')) {
+        if (!approvalStartRow) approvalStartRow = r
+        break
+      }
     }
   }
 
   if (!headerRow) headerRow = 3
-  if (!totalRow) totalRow = 0
 
   return { sheetName: ws.name, headerRow, dataStartRow: headerRow + 1, totalRow, titleRow: 1, approvalStartRow }
 }
@@ -139,19 +144,36 @@ function buildRowValues(row: Partial<MvpPayrollRow>, no: number): (string | numb
   ]
 }
 
-function copyRowStyle(source: ExcelJS.Row, target: ExcelJS.Row): void {
-  if (source.height) target.height = source.height
+interface CapturedStyle {
+  height?: number
+  cells: { numFmt?: string; font?: Record<string, unknown>; fill?: Record<string, unknown>; border?: Record<string, unknown>; alignment?: Record<string, unknown> }[]
+}
+
+function captureRowStyle(row: ExcelJS.Row): CapturedStyle {
+  const cells: CapturedStyle['cells'] = []
   for (let c = 1; c <= 19; c++) {
-    const srcCell = source.getCell(c)
-    const tgtCell = target.getCell(c)
-    if (srcCell.style) {
-      tgtCell.style = { ...srcCell.style }
-    }
-    if (srcCell.numFmt) tgtCell.numFmt = srcCell.numFmt
-    if (srcCell.font) tgtCell.font = { ...srcCell.font }
-    if (srcCell.fill) tgtCell.fill = { ...srcCell.fill }
-    if (srcCell.border) tgtCell.border = { ...srcCell.border }
-    if (srcCell.alignment) tgtCell.alignment = { ...srcCell.alignment }
+    const cell = row.getCell(c)
+    cells.push({
+      numFmt: cell.numFmt,
+      font: cell.font ? ({ ...cell.font } as Record<string, unknown>) : undefined,
+      fill: cell.fill ? ({ ...cell.fill } as Record<string, unknown>) : undefined,
+      border: cell.border ? ({ ...cell.border } as Record<string, unknown>) : undefined,
+      alignment: cell.alignment ? ({ ...cell.alignment } as Record<string, unknown>) : undefined,
+    })
+  }
+  return { height: row.height, cells }
+}
+
+function applyCapturedStyle(target: ExcelJS.Row, style: CapturedStyle): void {
+  if (style.height) target.height = style.height
+  for (let c = 0; c < style.cells.length && c < 19; c++) {
+    const cell = target.getCell(c + 1)
+    const src = style.cells[c]
+    if (src.numFmt) cell.numFmt = src.numFmt
+    if (src.font) cell.font = src.font as unknown as ExcelJS.Font
+    if (src.fill) cell.fill = src.fill as unknown as ExcelJS.Fill
+    if (src.border) cell.border = src.border as unknown as Partial<ExcelJS.Borders>
+    if (src.alignment) cell.alignment = src.alignment as unknown as Partial<ExcelJS.Alignment>
   }
 }
 
@@ -190,76 +212,131 @@ function verifyTemplate(wb: ExcelJS.Workbook): void {
 
 function buildSupportingSheets(wb: ExcelJS.Workbook, rows: Partial<MvpPayrollRow>[], periodLabel: string): void {
   const summary = wb.getWorksheet(SUMMARY_SHEET)
-  const overtime = wb.getWorksheet(OVERTIME_SHEET)
-
   if (summary) {
-    summary.spliceRows(1, summary.rowCount)
+    const headerStyle = captureRowStyle(summary.getRow(1))
 
     summary.getRow(1).getCell(1).value = `Performance Summary - ${periodLabel}`
-    summary.getRow(1).getCell(1).font = { bold: true, size: 14 }
+    applyCapturedStyle(summary.getRow(1), headerStyle)
 
-    summary.getRow(3).getCell(1).value = 'Employee Name'
-    summary.getRow(3).getCell(2).value = 'Payroll Group'
-    summary.getRow(3).getCell(3).value = 'Gross Salary'
-    summary.getRow(3).getCell(4).value = 'Total Deduction'
-    summary.getRow(3).getCell(5).value = 'Net Pay'
-    summary.getRow(3).font = { bold: true }
+    const dataStyle = captureRowStyle(summary.getRow(3))
 
-    let r = 4
+    const dataRows: { name: string; group: string; gross: number; ded: number; net: number }[] = []
     for (const row of rows) {
-      summary.getRow(r).getCell(1).value = row.employeeName || ''
-      summary.getRow(r).getCell(2).value = row.payrollGroup || ''
-      summary.getRow(r).getCell(3).value = Number(row.grossSalary || 0)
-      summary.getRow(r).getCell(4).value = Number(row.totalDeduction || 0)
-      summary.getRow(r).getCell(5).value = Number(row.netSalary || 0)
-      for (let c = 3; c <= 5; c++) {
-        summary.getRow(r).getCell(c).numFmt = '#,##0.00'
-      }
+      dataRows.push({
+        name: row.employeeName || '',
+        group: row.payrollGroup || '',
+        gross: Number(row.grossSalary || 0),
+        ded: Number(row.totalDeduction || 0),
+        net: Number(row.netSalary || 0),
+      })
+    }
+
+    const existingDataEnd = summary.rowCount
+    const dataStart = 3
+    const rowsToRemove = existingDataEnd - dataStart + 1
+    if (rowsToRemove > 0) summary.spliceRows(dataStart, rowsToRemove)
+
+    let r = dataStart
+    for (const d of dataRows) {
+      const row = summary.getRow(r)
+      applyCapturedStyle(row, dataStyle)
+      row.getCell(1).value = d.name
+      row.getCell(2).value = d.group
+      row.getCell(3).value = d.gross
+      row.getCell(4).value = d.ded
+      row.getCell(5).value = d.net
+      for (let c = 3; c <= 5; c++) row.getCell(c).numFmt = '#,##0.00'
       r++
     }
 
     const totalRow = summary.getRow(r)
+    applyCapturedStyle(totalRow, dataStyle)
     totalRow.getCell(1).value = 'TOTAL'
     totalRow.getCell(1).font = { bold: true }
-    totalRow.getCell(3).value = { formula: `SUM(C4:C${r - 1})` }
-    totalRow.getCell(4).value = { formula: `SUM(D4:D${r - 1})` }
-    totalRow.getCell(5).value = { formula: `SUM(E4:E${r - 1})` }
+    if (dataRows.length > 0) {
+      totalRow.getCell(3).value = { formula: `SUM(C${dataStart}:C${r - 1})` }
+      totalRow.getCell(4).value = { formula: `SUM(D${dataStart}:D${r - 1})` }
+      totalRow.getCell(5).value = { formula: `SUM(E${dataStart}:E${r - 1})` }
+    } else {
+      totalRow.getCell(3).value = 0
+      totalRow.getCell(4).value = 0
+      totalRow.getCell(5).value = 0
+    }
     for (let c = 3; c <= 5; c++) {
       totalRow.getCell(c).numFmt = '#,##0.00'
       totalRow.getCell(c).font = { bold: true }
     }
   }
 
+  const overtime = wb.getWorksheet(OVERTIME_SHEET)
   if (overtime) {
-    overtime.spliceRows(1, overtime.rowCount)
+    const headerStyle = captureRowStyle(overtime.getRow(1))
 
     overtime.getRow(1).getCell(1).value = `Overtime Report - ${periodLabel}`
-    overtime.getRow(1).getCell(1).font = { bold: true, size: 14 }
+    applyCapturedStyle(overtime.getRow(1), headerStyle)
 
-    overtime.getRow(3).getCell(1).value = 'Employee Name'
-    overtime.getRow(3).getCell(2).value = 'Payroll Group'
-    overtime.getRow(3).getCell(3).value = 'Overtime Hours'
-    overtime.getRow(3).getCell(4).value = 'Overtime Amount'
-    overtime.getRow(3).font = { bold: true }
+    const dataStyle = captureRowStyle(overtime.getRow(3))
 
-    let r = 4
+    const otRows: { name: string; group: string; hours: number; amount: number }[] = []
     for (const row of rows) {
       const otValue = Number(row.overtime || 0)
-      overtime.getRow(r).getCell(1).value = row.employeeName || ''
-      overtime.getRow(r).getCell(2).value = row.payrollGroup || ''
-      overtime.getRow(r).getCell(3).value = otValue > 0 ? otValue / (Number(row.basicSalary || 1) / 30 / 8) : 0
-      overtime.getRow(r).getCell(4).value = otValue
-      overtime.getRow(r).getCell(4).numFmt = '#,##0.00'
+      otRows.push({
+        name: row.employeeName || '',
+        group: row.payrollGroup || '',
+        hours: otValue > 0 ? otValue / (Number(row.basicSalary || 1) / 30 / 8) : 0,
+        amount: otValue,
+      })
+    }
+
+    const existingDataEnd = overtime.rowCount
+    const dataStart = 3
+    const rowsToRemove = existingDataEnd - dataStart + 1
+    if (rowsToRemove > 0) overtime.spliceRows(dataStart, rowsToRemove)
+
+    let r = dataStart
+    for (const d of otRows) {
+      const row = overtime.getRow(r)
+      applyCapturedStyle(row, dataStyle)
+      row.getCell(1).value = d.name
+      row.getCell(2).value = d.group
+      row.getCell(3).value = d.hours
+      row.getCell(4).value = d.amount
+      row.getCell(4).numFmt = '#,##0.00'
       r++
     }
 
     const totalRow = overtime.getRow(r)
+    applyCapturedStyle(totalRow, dataStyle)
     totalRow.getCell(1).value = 'TOTAL'
     totalRow.getCell(1).font = { bold: true }
-    totalRow.getCell(4).value = { formula: `SUM(D4:D${r - 1})` }
+    if (otRows.length > 0) {
+      totalRow.getCell(4).value = { formula: `SUM(D${dataStart}:D${r - 1})` }
+    } else {
+      totalRow.getCell(4).value = 0
+    }
     totalRow.getCell(4).numFmt = '#,##0.00'
     totalRow.getCell(4).font = { bold: true }
   }
+}
+
+function captureMergedCells(ws: ExcelJS.Worksheet, startRow: number, endRow: number): string[] {
+  const ranges: string[] = []
+  try {
+    const mc = (ws as unknown as { model?: { merges?: { range: string }[] } }).model?.merges
+    if (mc) {
+      for (const m of mc) {
+        const match = m.range.match(/^(\$?[A-Z]+)\$?(\d+):(\$?[A-Z]+)\$?(\d+)$/)
+        if (match) {
+          const r1 = parseInt(match[2], 10)
+          const r2 = parseInt(match[4], 10)
+          if (r1 >= startRow && r2 <= endRow) ranges.push(m.range)
+        }
+      }
+    }
+  } catch {
+    // ignore
+  }
+  return ranges
 }
 
 export async function generateExcel(opts: GenerateExcelOptions): Promise<GenerateExcelResult> {
@@ -296,45 +373,46 @@ export async function generateExcel(opts: GenerateExcelOptions): Promise<Generat
     const referenceRowNum = sheetMap.dataStartRow
     const oldTotalRow = sheetMap.totalRow
 
-    let approvalSection: { startRow: number; endRow: number; rowData: { height?: number; cells: { value: ExcelJS.CellValue; style: Record<string, unknown> }[] }[] } | null = null
+    const refRow = ws.getRow(referenceRowNum)
+    const capturedEmployeeStyle = captureRowStyle(refRow)
 
-    if (sheetMap.approvalStartRow > 0 && oldTotalRow > 0 && oldTotalRow < sheetMap.approvalStartRow) {
-      approvalSection = {
-        startRow: sheetMap.approvalStartRow,
-        endRow: ws.rowCount,
-        rowData: [],
-      }
-      for (let r = sheetMap.approvalStartRow; r <= ws.rowCount; r++) {
-        const row = ws.getRow(r)
-        const cells: { value: ExcelJS.CellValue; style: Record<string, unknown> }[] = []
-        for (let c = 1; c <= 19; c++) {
-          const cell = row.getCell(c)
-          cells.push({ value: cell.value as ExcelJS.CellValue, style: cell.style as unknown as Record<string, unknown> })
-        }
-        approvalSection.rowData.push({
-          height: row.height,
-          cells,
-        })
-      }
-      approvalSection.endRow = approvalSection.startRow + approvalSection.rowData.length - 1
+    const mergedCellRanges: string[] = []
+    if (oldTotalRow > 0) {
+      const totalSectionMerged = captureMergedCells(ws, oldTotalRow, oldTotalRow)
+      mergedCellRanges.push(...totalSectionMerged)
+    }
+    if (sheetMap.approvalStartRow > 0) {
+      const approvalMerged = captureMergedCells(ws, sheetMap.approvalStartRow, ws.rowCount)
+      mergedCellRanges.push(...approvalMerged)
     }
 
-    const mergedCellsToPreserve: { tl: string; br: string }[] = []
+    const approvalSection: { startRow: number; rowData: CapturedStyle[] } | null =
+      (sheetMap.approvalStartRow > 0 && oldTotalRow > 0 && oldTotalRow < sheetMap.approvalStartRow)
+        ? {
+            startRow: sheetMap.approvalStartRow,
+            rowData: (() => {
+              const result: CapturedStyle[] = []
+              for (let r = sheetMap.approvalStartRow; r <= ws.rowCount; r++) {
+                result.push(captureRowStyle(ws.getRow(r)))
+              }
+              return result
+            })(),
+          }
+        : null
 
-    if (oldTotalRow >= sheetMap.dataStartRow) {
-      const removeCount = oldTotalRow - sheetMap.dataStartRow + 1
-      ws.spliceRows(sheetMap.dataStartRow, removeCount)
+    if (oldTotalRow >= referenceRowNum) {
+      const removeCount = oldTotalRow - referenceRowNum + 1
+      ws.spliceRows(referenceRowNum, removeCount)
     }
 
-    const insertPos = sheetMap.dataStartRow
-    const referenceRow = ws.getRow(referenceRowNum >= insertPos ? referenceRowNum : insertPos)
+    const insertPos = referenceRowNum
 
     let no = 1
     for (const row of dataRows) {
       const excelRow = ws.getRow(insertPos + (no - 1))
       const values = buildRowValues(row, no)
+      applyCapturedStyle(excelRow, capturedEmployeeStyle)
       values.forEach((v, i) => { excelRow.getCell(i + 1).value = v })
-      copyRowStyle(referenceRow, excelRow)
       excelRow.commit()
 
       manifest.push({
@@ -354,10 +432,9 @@ export async function generateExcel(opts: GenerateExcelOptions): Promise<Generat
     const totalRowNum = dataEndActual + 1
 
     const totalRow = ws.getRow(totalRowNum)
-    copyRowStyle(referenceRow, totalRow)
-    const totalLabel = totalRow.getCell(2)
-    totalLabel.value = `Total (${dataRows.length} employees)`
-    totalLabel.font = { bold: true }
+    applyCapturedStyle(totalRow, capturedEmployeeStyle)
+    totalRow.getCell(2).value = `Total (${dataRows.length} employees)`
+    totalRow.getCell(2).font = { bold: true }
 
     const totalCols = [5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18]
     for (const col of totalCols) {
@@ -373,19 +450,18 @@ export async function generateExcel(opts: GenerateExcelOptions): Promise<Generat
 
     if (approvalSection) {
       const afterTotal = totalRowNum + 1
-      const neededRows = approvalSection.rowData.length
-      for (let i = 0; i < neededRows; i++) {
+      for (let i = 0; i < approvalSection.rowData.length; i++) {
         const targetRow = ws.getRow(afterTotal + i)
-        const src = approvalSection.rowData[i]
-        if (src.height) targetRow.height = src.height
-        for (let c = 0; c < src.cells.length; c++) {
-          const cell = targetRow.getCell(c + 1)
-          cell.value = src.cells[c].value as ExcelJS.CellValue
-          if (src.cells[c].style) {
-            try { cell.style = src.cells[c].style as unknown as ExcelJS.Style } catch { /* ignore style errors */ }
-          }
-        }
+        applyCapturedStyle(targetRow, approvalSection.rowData[i])
         targetRow.commit()
+      }
+    }
+
+    for (const rangeStr of mergedCellRanges) {
+      try {
+        ws.mergeCells(rangeStr)
+      } catch {
+        // ignore invalid merge ranges
       }
     }
 

@@ -49,7 +49,11 @@ export function validateRow(
     if (!row.bankAccountNumber) warnings.push('BANK payment selected but bank account number is missing')
   } else if (pm === 'MPESA') {
     if (!row.mpesaAccount) warnings.push('MPESA payment selected but M-PESA account is missing')
-  } else if (pm !== 'CASH') {
+  } else if (pm === 'MANUAL' || pm === 'CASH') {
+    // MANUAL/CASH — no account warning
+  } else if (pm === 'HOLD') {
+    warnings.push('HOLD payment selected — salary will be held and not disbursed')
+  } else {
     warnings.push(`Unknown payment method: ${pm}`)
   }
 

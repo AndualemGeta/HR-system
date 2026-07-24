@@ -62,9 +62,15 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     }
 
     const verification = await verifyExport(filePath, rows.map(r => ({
+      payrollRowId: r.id,
+      employeeId: r.employeeId,
       employeeCode: r.employeeCode,
       employeeName: r.employeeName,
       payrollGroup: r.payrollGroup as string | null,
+      position: r.role || '',
+      workplace: r.shop || r.location || r.department || '',
+      workingDays: Number(r.workingDays || 0),
+      basicSalary: Number(r.basicSalary || 0),
       grossSalary: Number(r.grossSalary || 0),
       totalDeduction: Number(r.totalDeduction || 0),
       netSalary: Number(r.netSalary || 0),
