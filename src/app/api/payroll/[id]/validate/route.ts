@@ -74,7 +74,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       if (Number(row.incomeTax) < 0) msgs.push('Income tax cannot be negative')
       if (!row.snapshotJson) msgs.push('Missing snapshot data — run Snapshot first')
 
-      const pm = row.paymentMethod
+      let pm = row.paymentMethod
+      if (pm === 'BANK_TRANSFER') pm = 'BANK'
+      else if (pm === 'MOBILE_MONEY') pm = 'MPESA'
       if (!pm) warns.push('No payment method set — will default to HOLD')
       else if (pm === 'BANK') {
         if (!row.bankName) warns.push('BANK payment selected but bank name is missing')

@@ -41,7 +41,9 @@ export function validateRow(
   if (Number(row.incomeTax) < 0) blockers.push('Income tax cannot be negative')
   if (!row.snapshotJson) blockers.push('Missing snapshot data — run Snapshot first')
 
-  const pm = row.paymentMethod
+  let pm = row.paymentMethod
+  if (pm === 'BANK_TRANSFER') pm = 'BANK'
+  else if (pm === 'MOBILE_MONEY') pm = 'MPESA'
   if (!pm) {
     warnings.push('No payment method set — will default to HOLD')
   } else if (pm === 'BANK') {

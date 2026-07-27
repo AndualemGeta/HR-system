@@ -8,6 +8,12 @@ import type { EmploymentStatus } from '@prisma/client'
 
 const SNAPSHOT_STATUSES: EmploymentStatus[] = ['ACTIVE', 'ON_PROBATION']
 
+function normalizePaymentMethod(pm: string | null | undefined): string | null | undefined {
+  if (pm === 'BANK_TRANSFER') return 'BANK'
+  if (pm === 'MOBILE_MONEY') return 'MPESA'
+  return pm
+}
+
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params
@@ -99,7 +105,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         hireDate,
         salaryEffectiveDate: emp.salaryEffectiveDate || null,
         pensionEligible,
-        paymentMethod: emp.payrollProfile?.paymentMethod || null,
+        paymentMethod: normalizePaymentMethod(emp.payrollProfile?.paymentMethod) || null,
         bankName: emp.payrollProfile?.bankName || null,
         bankAccountNumber: emp.payrollProfile?.bankAccountNumber || null,
         mpesaAccount: emp.payrollProfile?.mpesaAccount || null,
@@ -117,7 +123,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
           hireDate: hireDate?.toISOString(),
           salaryEffectiveDate: emp.salaryEffectiveDate?.toISOString(),
           pensionEligible,
-          paymentMethod: emp.payrollProfile?.paymentMethod,
+          paymentMethod: normalizePaymentMethod(emp.payrollProfile?.paymentMethod),
           bankName: emp.payrollProfile?.bankName,
           bankAccountNumber: emp.payrollProfile?.bankAccountNumber,
           mpesaAccount: emp.payrollProfile?.mpesaAccount,
