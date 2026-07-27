@@ -81,7 +81,13 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         if (!row.bankAccountNumber) warns.push('BANK payment selected but bank account number is missing')
       } else if (pm === 'MPESA') {
         if (!row.mpesaAccount) warns.push('MPESA payment selected but M-PESA account is missing')
-      } else if (pm !== 'CASH') warns.push(`Unknown payment method: ${pm}`)
+      } else if (pm === 'MANUAL' || pm === 'CASH') {
+        // MANUAL/CASH — no account warning
+      } else if (pm === 'HOLD') {
+        warns.push('HOLD payment selected — salary will be held and not disbursed')
+      } else {
+        warns.push(`Unknown payment method: ${pm}`)
+      }
 
       const taxId = row.taxId || (() => {
         try {

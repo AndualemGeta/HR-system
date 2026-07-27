@@ -254,9 +254,9 @@ function buildSupportingSheets(wb: ExcelJS.Workbook, rows: Partial<MvpPayrollRow
     totalRow.getCell(1).value = 'TOTAL'
     totalRow.getCell(1).font = { bold: true }
     if (dataRows.length > 0) {
-      totalRow.getCell(3).value = { formula: `SUM(C${dataStart}:C${r - 1})` }
-      totalRow.getCell(4).value = { formula: `SUM(D${dataStart}:D${r - 1})` }
-      totalRow.getCell(5).value = { formula: `SUM(E${dataStart}:E${r - 1})` }
+      totalRow.getCell(3).value = { formula: `SUM(C${dataStart}:C${r - 1})`, date1904: false }
+      totalRow.getCell(4).value = { formula: `SUM(D${dataStart}:D${r - 1})`, date1904: false }
+      totalRow.getCell(5).value = { formula: `SUM(E${dataStart}:E${r - 1})`, date1904: false }
     } else {
       totalRow.getCell(3).value = 0
       totalRow.getCell(4).value = 0
@@ -310,7 +310,7 @@ function buildSupportingSheets(wb: ExcelJS.Workbook, rows: Partial<MvpPayrollRow
     totalRow.getCell(1).value = 'TOTAL'
     totalRow.getCell(1).font = { bold: true }
     if (otRows.length > 0) {
-      totalRow.getCell(4).value = { formula: `SUM(D${dataStart}:D${r - 1})` }
+      totalRow.getCell(4).value = { formula: `SUM(D${dataStart}:D${r - 1})`, date1904: false }
     } else {
       totalRow.getCell(4).value = 0
     }
@@ -440,7 +440,7 @@ export async function generateExcel(opts: GenerateExcelOptions): Promise<Generat
     for (const col of totalCols) {
       const cell = totalRow.getCell(col)
       if (dataRows.length > 0) {
-        cell.value = { formula: `SUM(${colToLetter(col)}${dataStartActual}:${colToLetter(col)}${dataEndActual})` }
+        cell.value = { formula: `SUM(${colToLetter(col)}${dataStartActual}:${colToLetter(col)}${dataEndActual})`, date1904: false }
       } else {
         cell.value = 0
       }
