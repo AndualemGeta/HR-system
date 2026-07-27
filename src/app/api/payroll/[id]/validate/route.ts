@@ -107,7 +107,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       })()
       if (!pensionId) {
         if (row.pensionEligible === true) {
-          msgs.push('Pension ID is required — employee is eligible for pension')
+          warns.push('Pension ID is required — employee is eligible for pension')
         } else {
           const hireMonth = row.hireDate
             ? row.hireDate.getFullYear() * 12 + row.hireDate.getMonth()

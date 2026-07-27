@@ -63,7 +63,7 @@ export function validateRow(
 
   if (!row.pensionId) {
     if (row.pensionEligible === true) {
-      blockers.push('Pension ID is required — employee is eligible for pension')
+      warnings.push('Pension ID is required — employee is eligible for pension')
     } else {
       const hireMonth = row.hireDate
         ? row.hireDate.getFullYear() * 12 + row.hireDate.getMonth()
