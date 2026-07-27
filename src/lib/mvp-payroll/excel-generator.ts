@@ -358,8 +358,8 @@ function removeSharedFormulas(wb: ExcelJS.Workbook): void {
   for (const ws of wb.worksheets) {
     ws.eachRow({ includeEmpty: false }, (row) => {
       row.eachCell((cell) => {
-        const v = cell.value as Record<string, unknown> | null
-        if (!v || !('sharedFormula' in v)) return
+        const v = cell.value
+        if (!v || typeof v !== 'object' || !('sharedFormula' in v)) return
         if ('formula' in v) {
           cell.value = 'result' in v && v.result !== undefined
             ? { formula: v.formula, result: v.result } as any
