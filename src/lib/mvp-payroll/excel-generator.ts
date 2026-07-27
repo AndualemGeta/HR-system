@@ -354,6 +354,19 @@ function captureMergedCells(ws: ExcelJS.Worksheet, startRow: number, endRow: num
   return ranges
 }
 
+function removeSharedFormulas(wb: ExcelJS.Workbook): void {
+  for (const ws of wb.worksheets) {
+    ws.eachRow({ includeEmpty: false }, (row) => {
+      row.eachCell((cell) => {
+        const val = cell.value
+        if (val && typeof val === 'object' && 'sharedFormula' in val && !('formula' in val)) {
+          cell.value = 'result' in val ? (val as any).result ?? 0 : 0
+        }
+      })
+    })
+  }
+}
+
 export async function generateExcel(opts: GenerateExcelOptions): Promise<GenerateExcelResult> {
   const { rows, periodLabel, filePath } = opts
 
@@ -489,6 +502,7 @@ export async function generateExcel(opts: GenerateExcelOptions): Promise<Generat
 
   buildSupportingSheets(templateWb, rows, periodLabel)
 
+  removeSharedFormulas(templateWb)
   await templateWb.xlsx.writeFile(filePath)
 
   const fileBuffer = await fs.readFile(filePath)
