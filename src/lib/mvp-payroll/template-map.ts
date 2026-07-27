@@ -37,7 +37,7 @@ export const COLUMN_HEADERS_A_S = [
   'No.',
   'Name of Employees',
   'Position',
-  'Shop Name / Work Place',
+  'Shop Name',
   'Working days',
   'Basic Salary',
   'Monthly Salary',

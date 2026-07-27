@@ -186,12 +186,27 @@ function verifyHeaders(ws: ExcelJS.Worksheet): void {
     throw new Error(`Template sheet "${wsName}" has no identifiable header row — cannot verify headers`)
   }
 
+  const normalize = (s: string) =>
+    s.replace(/\s+/g, ' ').replace(/\s*\/\s*/g, ' / ').toLowerCase().trim()
+
   const headerRow = ws.getRow(map.headerRow)
+
+  const alternatives: Record<number, string[]> = {
+    3: ['work place'],
+  }
+
   for (let c = 0; c < COLUMN_HEADERS_A_S.length; c++) {
     const expectedHeader = COLUMN_HEADERS_A_S[c]
     const cellValue = String(headerRow.getCell(c + 1).value || '').trim()
-    if (cellValue !== expectedHeader) {
-      throw new Error(`Template sheet "${wsName}" header column ${colToLetter(c + 1)}: expected "${expectedHeader}", got "${cellValue || '(empty)'}"`)
+
+    const normalizedExpected = normalize(expectedHeader)
+    const normalizedActual = normalize(cellValue)
+
+    if (normalizedActual !== normalizedExpected) {
+      const accepted = [normalizedExpected, ...(alternatives[c] || [])]
+      if (!accepted.includes(normalizedActual)) {
+        throw new Error(`Template sheet "${wsName}" header column ${colToLetter(c + 1)}: expected "${expectedHeader}", got "${cellValue || '(empty)'}"`)
+      }
     }
   }
 }
