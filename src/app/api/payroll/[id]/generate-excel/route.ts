@@ -32,6 +32,19 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     })
     if (rows.length === 0) return badRequest('No rows to export')
 
+    // Fall back to live profile payrollGroup when row value is null
+    const liveProfiles = await prisma.employeePayrollProfile.findMany({
+      where: { employeeId: { in: rows.map(r => r.employeeId) } },
+      select: { employeeId: true, payrollGroup: true },
+    })
+    const profileMap = new Map(liveProfiles.map(p => [p.employeeId, p]))
+    for (const row of rows) {
+      if (!row.payrollGroup) {
+        const livePayrollGroup = profileMap.get(row.employeeId)?.payrollGroup || null
+        if (livePayrollGroup) (row as any).payrollGroup = livePayrollGroup
+      }
+    }
+
     const exportDir = getExportDir()
     await fs.mkdir(exportDir, { recursive: true })
 
