@@ -45,7 +45,11 @@ export default function PayrollDetailPage() {
   const [deptFilter, setDeptFilter] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
   const [snapshotLoading, setSnapshotLoading] = useState(false)
-  const [validationResult, setValidationResult] = useState<{ blockerCount: number; warningCount: number } | null>(null)
+  const [validationResult, setValidationResult] = useState<{
+    blockerCount: number; warningCount: number
+    blockers: string[]; warnings: string[]
+    employees: Record<string, { employeeName: string; blockers: string[]; warnings: string[] }>
+  } | null>(null)
   const [reopenModal, setReopenModal] = useState(false)
   const [reopenReason, setReopenReason] = useState('')
   const [reopenLoading, setReopenLoading] = useState(false)
@@ -56,6 +60,7 @@ export default function PayrollDetailPage() {
   const [bulkModal, setBulkModal] = useState(false)
   const [savingFields, setSavingFields] = useState<Record<string, 'saving' | 'saved' | 'error'>>({})
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
+  const [expandedRow, setExpandedRow] = useState<string | null>(null)
   const rowValuesRef = useRef<Record<string, Record<string, string>>>({})
 
   const loadData = useCallback(async () => {
@@ -151,7 +156,13 @@ export default function PayrollDetailPage() {
       const json = await res.json()
       if (!res.ok) { setError(json.error || 'Validation failed'); return }
       setRows(json.data.rows)
-      setValidationResult({ blockerCount: json.data.blockerCount, warningCount: json.data.warningCount })
+      setValidationResult({
+        blockerCount: json.data.blockerCount,
+        warningCount: json.data.warningCount,
+        blockers: json.data.blockers || [],
+        warnings: json.data.warnings || [],
+        employees: json.data.employees || {},
+      })
       setSuccessMsg(`Validation complete: ${json.data.blockerCount} blockers, ${json.data.warningCount} warnings`)
     } catch { setError('Network error') }
     finally { setSaving(false) }
@@ -276,6 +287,22 @@ export default function PayrollDetailPage() {
     finally { setExporting(false) }
   }
 
+  function renderEmployeeMessages(emp: { employeeName: string; blockers: string[]; warnings: string[] }) {
+    const items: { text: string; type: 'blocker' | 'warning' }[] = []
+    if (emp.blockers) emp.blockers.forEach(b => items.push({ text: b, type: 'blocker' }))
+    if (emp.warnings) emp.warnings.forEach(w => items.push({ text: w, type: 'warning' }))
+    if (items.length === 0) return <span style={{ color: '#16a34a' }}>No issues</span>
+    return (
+      <ul style={{ margin: 0, padding: 0, listStyle: 'none' }}>
+        {items.map((m, i) => (
+          <li key={i} style={{ color: m.type === 'blocker' ? '#dc2626' : '#f59e0b', marginBottom: '0.15rem' }}>
+            {m.type === 'blocker' ? '\u2716 ' : '\u26A0 '}{m.text}
+          </li>
+        ))}
+      </ul>
+    )
+  }
+
   const statusColor: Record<string, string> = {
     DRAFT: '#fef3c7', READY: '#dbeafe', LOCKED: '#d1fae5', CANCELLED: '#fee2e2',
   }
@@ -357,13 +384,35 @@ export default function PayrollDetailPage() {
       </div>
 
       {validationResult && (
-        <div style={{ display: 'flex', gap: '1rem', marginBottom: '1rem', padding: '0.5rem', background: validationResult.blockerCount > 0 ? '#fee' : '#f0fdf4', borderRadius: 4 }}>
-          <span style={{ fontSize: '0.9rem', fontWeight: 600, color: validationResult.blockerCount > 0 ? '#dc2626' : '#16a34a' }}>
-            Blockers: {validationResult.blockerCount}
-          </span>
-          <span style={{ fontSize: '0.9rem', fontWeight: 600, color: '#f59e0b' }}>
-            Warnings: {validationResult.warningCount}
-          </span>
+        <div style={{ marginBottom: '0.75rem' }}>
+          <div style={{ display: 'flex', gap: '1rem', padding: '0.5rem', background: validationResult.blockerCount > 0 ? '#fee' : '#f0fdf4', borderRadius: 4 }}>
+            <span style={{ fontSize: '0.9rem', fontWeight: 600, color: validationResult.blockerCount > 0 ? '#dc2626' : '#16a34a' }}>
+              Blockers: {validationResult.blockerCount}
+            </span>
+            <span style={{ fontSize: '0.9rem', fontWeight: 600, color: '#f59e0b' }}>
+              Warnings: {validationResult.warningCount}
+            </span>
+          </div>
+          {(validationResult.blockers.length > 0 || validationResult.warnings.length > 0) && (
+            <div style={{ marginTop: '0.5rem', padding: '0.5rem 0.75rem', background: '#f9fafb', borderRadius: 4, fontSize: '0.8rem' }}>
+              {validationResult.blockers.length > 0 && (
+                <div style={{ marginBottom: '0.25rem' }}>
+                  <strong style={{ color: '#dc2626' }}>Blockers:</strong>
+                  <ul style={{ margin: '0.25rem 0 0 1.25rem', padding: 0 }}>
+                    {[...new Set(validationResult.blockers)].map((b, i) => <li key={i} style={{ color: '#dc2626' }}>{b}</li>)}
+                  </ul>
+                </div>
+              )}
+              {validationResult.warnings.length > 0 && (
+                <div>
+                  <strong style={{ color: '#f59e0b' }}>Warnings:</strong>
+                  <ul style={{ margin: '0.25rem 0 0 1.25rem', padding: 0 }}>
+                    {[...new Set(validationResult.warnings)].map((w, i) => <li key={i} style={{ color: '#f59e0b' }}>{w}</li>)}
+                  </ul>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
 
@@ -424,7 +473,9 @@ export default function PayrollDetailPage() {
                 const valStatus = row.validationStatus
                 const statusBg = valStatus === 'ERROR' ? '#fee' : valStatus === 'WARNING' ? '#fef3c7' : valStatus === 'VALID' ? '#f0fdf4' : 'transparent'
                 const monthlySalary = Number(row.monthlySalary || 0)
+                const empMsgs = validationResult && validationResult.employees && validationResult.employees[row.id]
                 return (
+                  <>
                   <tr key={row.id} style={{ background: statusBg, borderBottom: '1px solid #f3f4f6' }}>
                     <td style={tdStyle}>{row.employeeCode}</td>
                     <td style={tdStyle}>{row.employeeName}</td>
@@ -467,13 +518,21 @@ export default function PayrollDetailPage() {
                     <td style={tdStyle}>{row.totalDeduction?.toLocaleString() || '—'}</td>
                     <td style={{ ...tdStyle, fontWeight: 600, color: (row.netSalary || 0) >= 0 ? '#16a34a' : '#dc2626' }}>{row.netSalary?.toLocaleString() || '—'}</td>
                     <td style={tdStyle}>
-                      <span style={{
-                        padding: '2px 6px', borderRadius: 3, fontSize: '0.75rem', fontWeight: 600,
+                      <span onClick={() => setExpandedRow(expandedRow === row.id ? null : row.id)} style={{
+                        padding: '2px 6px', borderRadius: 3, fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer',
                         background: valStatus === 'ERROR' ? '#fee' : valStatus === 'WARNING' ? '#fef3c7' : valStatus === 'VALID' ? '#f0fdf4' : '#f3f4f6',
                       }}>{valStatus}</span>
                     </td>
                     <td style={tdStyle}>{row.notes || '—'}</td>
                   </tr>
+                  {empMsgs && expandedRow === row.id ? (
+                    <tr key={`${row.id}_msgs`} style={{ background: '#f9fafb' }}>
+                      <td colSpan={17} style={{ padding: '0.5rem 0.75rem', fontSize: '0.8rem' }}>
+                        {renderEmployeeMessages(validationResult!.employees[row.id])}
+                      </td>
+                    </tr>
+                  ) : null}
+                  </>
                 )
               })}
             </tbody>
