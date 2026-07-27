@@ -101,6 +101,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         location,
         basicSalary: emp.basicSalary,
         workingDays: 30,
+        incentive: kpiAssignments.get(emp.id) || null,
         payrollGroup: emp.payrollProfile?.payrollGroup || null,
         hireDate,
         salaryEffectiveDate: emp.salaryEffectiveDate || null,
@@ -114,6 +115,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         snapshotJson: JSON.stringify({
           basicSalary: emp.basicSalary?.toString(),
           workingDays: 30,
+          incentive: kpiAssignments.get(emp.id) || null,
           department: deptName,
           region: regionName,
           area: areaName,
@@ -131,6 +133,21 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
           pensionId: emp.payrollProfile?.pensionId,
         }),
       }
+    }
+
+    // Fetch KPI assignments for all eligible employees
+    const kpiComponent = await prisma.payComponent.findUnique({ where: { code: 'KPI_ALLOWANCE' } })
+    let kpiAssignments: Map<string, number> = new Map()
+    if (kpiComponent) {
+      const assignments = await prisma.employeePayComponentAssignment.findMany({
+        where: {
+          payComponentId: kpiComponent.id,
+          isActive: true,
+          effectiveFrom: { lte: period.periodStart },
+          OR: [{ effectiveTo: null }, { effectiveTo: { gte: period.periodStart } }],
+        },
+      })
+      kpiAssignments = new Map(assignments.map(a => [a.employeeId, Number(a.defaultAmount)]))
     }
 
     const employees = await prisma.employee.findMany({
