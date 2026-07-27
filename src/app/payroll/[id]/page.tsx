@@ -456,7 +456,7 @@ export default function PayrollDetailPage() {
                 <th style={thStyle}>Shop/Location</th>
                 {editableFields.map(f => (
                   <th key={f} style={{ ...thStyle, minWidth: 85, position: 'relative' }}>
-                    {f === 'workingDays' ? 'Days' : f === 'commission' ? 'Commission' : f === 'overtime' ? 'Overtime' : f === 'incentive' ? 'KPI' : f === 'otherDeduction' ? 'Loan' : f === 'allowance' ? 'Allow' : f}
+                    {f === 'workingDays' ? 'Days' : f === 'commission' ? 'Commission' : f === 'overtime' ? 'Overtime' : f === 'incentive' ? 'KPI (Net)' : f === 'otherDeduction' ? 'Loan' : f === 'allowance' ? 'Allow' : f}
                     {canEdit && isDraft && (
                       <button onClick={() => { setBulkField(f); setBulkValue(''); setBulkModal(true) }}
                         style={{ marginLeft: 2, padding: '0 4px', fontSize: '0.7rem', border: '1px solid #ccc', borderRadius: 2, background: '#fff', cursor: 'pointer' }}

@@ -30,6 +30,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         allowance: Number(row.allowance || 0),
         otherDeduction: Number(row.otherDeduction || 0),
         pensionEligible: row.pensionEligible === true,
+        isNetIncentive: true,
       })
 
       await prisma.mvpPayrollRow.update({

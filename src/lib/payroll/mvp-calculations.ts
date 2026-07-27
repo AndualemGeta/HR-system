@@ -36,12 +36,35 @@ export function calcIncomeTax(taxableIncome: Decimal): Decimal {
   return taxableIncome.mul(0.35).minus(2050)
 }
 
-export function computePayroll(input: PayrollInput): PayrollOutput {
+export function grossUpNetIncentive(netIncentive: Decimal, baseTaxableIncome: Decimal): Decimal {
+  if (netIncentive.isZero()) return netIncentive
+
+  let grossKpi = netIncentive
+  let prevGross = new Decimal(-1)
+
+  for (let i = 0; i < 30; i++) {
+    if (grossKpi.equals(prevGross)) break
+    prevGross = grossKpi
+
+    const totalTaxable = baseTaxableIncome.plus(grossKpi)
+    const taxWithoutKpi = calcIncomeTax(baseTaxableIncome)
+    const taxWithKpi = calcIncomeTax(totalTaxable)
+    const taxOnKpi = taxWithKpi.minus(taxWithoutKpi)
+    const netFromKpi = grossKpi.minus(taxOnKpi)
+
+    if (netFromKpi.equals(netIncentive)) break
+    grossKpi = netIncentive.plus(taxOnKpi)
+  }
+
+  return Decimal.max(grossKpi, netIncentive)
+}
+
+export function computePayroll(input: PayrollInput & { isNetIncentive?: boolean }): PayrollOutput {
   const basic = new Decimal(input.basicSalary)
   const workingDays = new Decimal(input.workingDays)
   const commission = new Decimal(input.commission)
   const overtime = new Decimal(input.overtime)
-  const incentive = new Decimal(input.incentive)
+  const netIncentive = new Decimal(input.incentive)
   const allowance = new Decimal(input.allowance)
   const shortageLoan = new Decimal(input.otherDeduction)
 
@@ -51,8 +74,14 @@ export function computePayroll(input: PayrollInput): PayrollOutput {
   // Commission/OT combined (for export column H)
   const commissionOt = commission.plus(overtime)
 
+  // Base taxable income without KPI
+  const baseTaxable = monthlySalary.plus(commission).plus(overtime)
+
+  // Gross up net KPI to its pre-tax equivalent
+  const incentive = input.isNetIncentive ? grossUpNetIncentive(netIncentive, baseTaxable) : netIncentive
+
   // Gross = Monthly + Commission + Overtime + KPI
-  const grossSalary = monthlySalary.plus(commission).plus(overtime).plus(incentive)
+  const grossSalary = baseTaxable.plus(incentive)
 
   // Taxable income = Gross salary
   const taxableIncome = grossSalary
