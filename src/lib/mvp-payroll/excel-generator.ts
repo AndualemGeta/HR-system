@@ -355,20 +355,21 @@ function captureMergedCells(ws: ExcelJS.Worksheet, startRow: number, endRow: num
 }
 
 function removeSharedFormulas(wb: ExcelJS.Workbook): void {
+  // Walk every cell in every worksheet via the internal model to
+  // strip sharedFormula from master and clone cells alike, so that
+  // the export verifier's hasExternalLink check does not flag them.
   for (const ws of wb.worksheets) {
-    ws.eachRow({ includeEmpty: false }, (row) => {
-      row.eachCell((cell) => {
-        const v = cell.value
-        if (!v || typeof v !== 'object' || !('sharedFormula' in v)) return
-        if ('formula' in v) {
-          cell.value = 'result' in v && v.result !== undefined
-            ? { formula: v.formula, result: v.result } as any
-            : { formula: v.formula } as any
-        } else {
-          cell.value = ('result' in v ? (v.result ?? 0) : 0) as any
-        }
-      })
-    })
+    const wsModel = (ws as any).model
+    if (!wsModel || !wsModel.rows) continue
+    for (const row of wsModel.rows) {
+      if (!row || !row.cells) continue
+      for (const cell of row.cells) {
+        if (!cell || cell.type !== 4) continue // 4 = Formula
+        delete cell.sharedFormula
+        delete cell.shareType
+        delete cell.ref
+      }
+    }
   }
 }
 
