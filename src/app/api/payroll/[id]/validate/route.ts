@@ -20,6 +20,13 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const rows = await prisma.mvpPayrollRow.findMany({ where: { payrollPeriodId: id } })
     if (rows.length === 0) return badRequest('No rows to validate')
 
+    // Fetch current employee profiles for fallback when row data is stale
+    const empIds = rows.map(r => r.employeeId).filter(Boolean)
+    const currentProfiles = await prisma.employeePayrollProfile.findMany({
+      where: { employeeId: { in: empIds } },
+    })
+    const profileMap = new Map(currentProfiles.map(p => [p.employeeId, p]))
+
     const periodStart = period.periodStart
 
     const dupSet = new Set<string>()
@@ -65,7 +72,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
       if (!row.employeeCode) msgs.push('Missing employee code')
       if (!row.employeeName) msgs.push('Missing employee name')
-      if (!row.payrollGroup) msgs.push('MISSING_PAYROLL_GROUP: Employee has no assigned payroll group')
+
+      const liveProfile = profileMap.get(row.employeeId)
+      const livePayrollGroup = liveProfile?.payrollGroup || null
+      if (!row.payrollGroup && !livePayrollGroup) msgs.push('MISSING_PAYROLL_GROUP: Employee has no assigned payroll group')
+
       if (!row.hireDate) msgs.push('MISSING_PENSION_ELIGIBILITY_DATE: No hire/registration date for employee')
       if (basic <= 0) msgs.push('Basic salary must be greater than zero')
       if (workingDays <= 0 || workingDays > 31) msgs.push('Working days must be between 1 and 31')
@@ -74,15 +85,18 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       if (Number(row.incomeTax) < 0) msgs.push('Income tax cannot be negative')
       if (!row.snapshotJson) msgs.push('Missing snapshot data — run Snapshot first')
 
-      let pm = row.paymentMethod
+      let pm = row.paymentMethod || liveProfile?.paymentMethod || null
       if (pm === 'BANK_TRANSFER') pm = 'BANK'
       else if (pm === 'MOBILE_MONEY') pm = 'MPESA'
       if (!pm) warns.push('No payment method set — will default to HOLD')
       else if (pm === 'BANK') {
-        if (!row.bankName) warns.push('BANK payment selected but bank name is missing')
-        if (!row.bankAccountNumber) warns.push('BANK payment selected but bank account number is missing')
+        const bankName = row.bankName || liveProfile?.bankName || null
+        const bankAccountNumber = row.bankAccountNumber || liveProfile?.bankAccountNumber || null
+        if (!bankName) warns.push('BANK payment selected but bank name is missing')
+        if (!bankAccountNumber) warns.push('BANK payment selected but bank account number is missing')
       } else if (pm === 'MPESA') {
-        if (!row.mpesaAccount) warns.push('MPESA payment selected but M-PESA account is missing')
+        const mpesa = row.mpesaAccount || liveProfile?.mpesaAccount || null
+        if (!mpesa) warns.push('MPESA payment selected but M-PESA account is missing')
       } else if (pm === 'MANUAL' || pm === 'CASH') {
         // MANUAL/CASH — no account warning
       } else if (pm === 'HOLD') {
@@ -96,7 +110,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
           const snap = typeof row.snapshotJson === 'string' ? JSON.parse(row.snapshotJson) : row.snapshotJson
           return snap?.taxId || null
         } catch { return null }
-      })()
+      })() || liveProfile?.taxId || null
       if (!taxId) warns.push('No tax ID on file for employee')
 
       const pensionId = row.pensionId || (() => {
@@ -104,7 +118,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
           const snap = typeof row.snapshotJson === 'string' ? JSON.parse(row.snapshotJson) : row.snapshotJson
           return snap?.pensionId || null
         } catch { return null }
-      })()
+      })() || liveProfile?.pensionId || null
       if (!pensionId) {
         if (row.pensionEligible === true) {
           warns.push('Pension ID is required — employee is eligible for pension')
