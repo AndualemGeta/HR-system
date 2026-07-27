@@ -354,22 +354,26 @@ function captureMergedCells(ws: ExcelJS.Worksheet, startRow: number, endRow: num
   return ranges
 }
 
-function removeSharedFormulas(wb: ExcelJS.Workbook): void {
-  // Walk every cell in every worksheet via the internal model to
-  // strip sharedFormula from master and clone cells alike, so that
-  // the export verifier's hasExternalLink check does not flag them.
+function stripSharedFormulas(wb: ExcelJS.Workbook): void {
+  // Convert all shared-formula cells to regular formula cells or
+  // static values BEFORE any row splicing, so that spliceRows
+  // copies clean formula objects that won't trigger the exceljs
+  // "Shared Formula master must exist above/left of clone" error.
   for (const ws of wb.worksheets) {
-    const wsModel = (ws as any).model
-    if (!wsModel || !wsModel.rows) continue
-    for (const row of wsModel.rows) {
-      if (!row || !row.cells) continue
-      for (const cell of row.cells) {
-        if (!cell || cell.type !== 4) continue // 4 = Formula
-        delete cell.sharedFormula
-        delete cell.shareType
-        delete cell.ref
-      }
-    }
+    ws.eachRow({ includeEmpty: true }, (row) => {
+      row.eachCell({ includeEmpty: true }, (cell) => {
+        const v = cell.value as Record<string, unknown> | null | undefined
+        if (!v || typeof v !== 'object') return
+        if (!('sharedFormula' in v)) return
+        if ('formula' in v) {
+          // Master cell — keep the formula, drop sharedFormula
+          cell.value = ('result' in v ? { formula: v.formula, result: v.result } : { formula: v.formula }) as any
+        } else {
+          // Clone cell — use the cached result value
+          cell.value = ('result' in v ? (v.result ?? 0) : 0) as any
+        }
+      })
+    })
   }
 }
 
@@ -383,6 +387,7 @@ export async function generateExcel(opts: GenerateExcelOptions): Promise<Generat
     throw new Error(`Cannot read company payroll template at ${TEMPLATE_PATH}. Export failed: ${err instanceof Error ? err.message : String(err)}`)
   }
 
+  stripSharedFormulas(templateWb)
   verifyTemplate(templateWb)
 
   const sheetGroups: Record<string, typeof rows> = {}
@@ -508,7 +513,6 @@ export async function generateExcel(opts: GenerateExcelOptions): Promise<Generat
 
   buildSupportingSheets(templateWb, rows, periodLabel)
 
-  removeSharedFormulas(templateWb)
   await templateWb.xlsx.writeFile(filePath)
 
   const fileBuffer = await fs.readFile(filePath)
