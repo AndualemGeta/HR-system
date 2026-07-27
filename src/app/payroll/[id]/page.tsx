@@ -253,6 +253,12 @@ export default function PayrollDetailPage() {
       if (res.ok) {
         setSavingFields(prev => ({ ...prev, [fieldKey]: 'saved' }))
         setTimeout(() => setSavingFields(prev => { const n = { ...prev }; delete n[fieldKey]; return n }), 2000)
+        // Auto-recalculate after saving an editable field
+        const calcRes = await fetch(`/api/payroll/${params.id}/calculate`, { method: 'POST' })
+        if (calcRes.ok) {
+          const calcJson = await calcRes.json()
+          if (calcJson.data?.rows) setRows(calcJson.data.rows)
+        }
       } else {
         const json = await res.json()
         setFieldErrors(prev => ({ ...prev, [fieldKey]: json.error || 'Save failed' }))
