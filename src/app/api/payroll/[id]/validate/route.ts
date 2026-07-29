@@ -135,6 +135,13 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         }
       }
 
+      // Warn for on-leave or suspended employees
+      try {
+        const snap = typeof row.snapshotJson === 'string' ? JSON.parse(row.snapshotJson) : row.snapshotJson
+        if (snap?.employmentStatus === 'ON_LEAVE') warns.push('Employee currently on leave — review KPI and allowance values')
+        else if (snap?.employmentStatus === 'SUSPENDED') warns.push('Employee currently suspended — review KPI and allowance values')
+      } catch {}
+
       const expected = computePayroll({
         basicSalary: basic, workingDays, commission, overtime,
         incentive, allowance, otherDeduction: shortageLoan,

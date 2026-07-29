@@ -6,7 +6,7 @@ import { notFound, success, badRequest, unauthorized, forbidden, internalError }
 import { createAuditLog } from '@/lib/audit'
 import type { EmploymentStatus } from '@prisma/client'
 
-const SNAPSHOT_STATUSES: EmploymentStatus[] = ['ACTIVE', 'ON_PROBATION']
+const SNAPSHOT_STATUSES: EmploymentStatus[] = ['ACTIVE', 'ON_PROBATION', 'ON_LEAVE', 'SUSPENDED']
 
 function normalizePaymentMethod(pm: string | null | undefined): string | null | undefined {
   if (pm === 'BANK_TRANSFER') return 'BANK'
@@ -54,6 +54,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         id: string
         employeeId: string
         fullName: string
+        employmentStatus: string
         currentRole: string | null
         currentDepartmentId: string | null
         currentRegionId: string | null
@@ -115,6 +116,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         snapshotJson: JSON.stringify({
           basicSalary: emp.basicSalary?.toString(),
           workingDays: 30,
+          employmentStatus: emp.employmentStatus,
           incentive: kpiAssignments.get(emp.id) || null,
           department: deptName,
           region: regionName,
