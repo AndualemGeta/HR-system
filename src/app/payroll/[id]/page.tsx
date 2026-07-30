@@ -468,6 +468,7 @@ export default function PayrollDetailPage() {
                 <th style={thStyle}>Gross</th>
                 <th style={thStyle}>Tax</th>
                 <th style={thStyle}>Pension</th>
+                <th style={thStyle}>Emp Pen</th>
                 <th style={thStyle}>Total Ded</th>
                 <th style={thStyle}>Net</th>
                 <th style={thStyle}>Status</th>
@@ -521,6 +522,11 @@ export default function PayrollDetailPage() {
                         ? <span style={{ color: '#9ca3af', fontSize: '0.8rem' }}>Not yet eligible</span>
                         : Number(row.employeePension || 0).toLocaleString()}
                     </td>
+                    <td style={{ ...tdStyle, color: '#6b7280' }}>
+                      {row.pensionEligible === false
+                        ? <span style={{ color: '#9ca3af', fontSize: '0.8rem' }}>—</span>
+                        : Number(row.employerPension || 0).toLocaleString()}
+                    </td>
                     <td style={tdStyle}>{row.totalDeduction?.toLocaleString() || '—'}</td>
                     <td style={{ ...tdStyle, fontWeight: 600, color: (row.netSalary || 0) >= 0 ? '#16a34a' : '#dc2626' }}>{row.netSalary?.toLocaleString() || '—'}</td>
                     <td style={tdStyle}>
@@ -533,7 +539,7 @@ export default function PayrollDetailPage() {
                   </tr>
                   {empMsgs && expandedRow === row.id ? (
                     <tr key={`${row.id}_msgs`} style={{ background: '#f9fafb' }}>
-                      <td colSpan={17} style={{ padding: '0.5rem 0.75rem', fontSize: '0.8rem' }}>
+                      <td colSpan={18} style={{ padding: '0.5rem 0.75rem', fontSize: '0.8rem' }}>
                         {renderEmployeeMessages(validationResult!.employees[row.id])}
                       </td>
                     </tr>
@@ -555,6 +561,7 @@ export default function PayrollDetailPage() {
                 <td style={tdStyle}>{totals.grossSalary.toLocaleString()}</td>
                 <td style={tdStyle}>{totals.incomeTax.toLocaleString()}</td>
                 <td style={tdStyle}>{totals.employeePension.toLocaleString()}</td>
+                <td style={{ ...tdStyle, color: '#6b7280' }}>{totals.employerPension.toLocaleString()}</td>
                 <td style={tdStyle}>{totals.totalDeduction.toLocaleString()}</td>
                 <td style={tdStyle}>{totals.netSalary.toLocaleString()}</td>
                 <td style={tdStyle}></td>
