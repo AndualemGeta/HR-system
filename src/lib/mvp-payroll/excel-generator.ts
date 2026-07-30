@@ -48,7 +48,7 @@ function analyzeWorksheet(ws: ExcelJS.Worksheet): SheetMapEntry {
   if (totalRow > 0) {
     for (let r = totalRow + 1; r <= (ws.rowCount || 100); r++) {
       const cell2 = String(ws.getRow(r).getCell(2).value || '').trim().toLowerCase()
-      if (cell2.startsWith('prepared') || cell2.startsWith('approved') || cell2.startsWith('authorized') || cell2.startsWith('signature') || cell2.startsWith('hr') || cell2.startsWith('finance') || cell2.startsWith('general manager') || cell2.startsWith('gm')) {
+      if (cell2.startsWith('prep') || cell2.startsWith('approved') || cell2.startsWith('authorized') || cell2.startsWith('signature') || cell2.startsWith('hr') || cell2.startsWith('finance') || cell2.startsWith('general manager') || cell2.startsWith('gm')) {
         if (!approvalStartRow) approvalStartRow = r
         break
       }
@@ -409,42 +409,52 @@ export async function generateExcel(opts: GenerateExcelOptions): Promise<Generat
     const sheetMap = analyzeWorksheet(ws)
     const dataRows = sheetGroups[name] || []
 
-    const referenceRowNum = sheetMap.dataStartRow
-    const oldTotalRow = sheetMap.totalRow
+    const headerRow = sheetMap.headerRow
+    const dataStartRow = headerRow + 1
 
-    const refRow = ws.getRow(referenceRowNum)
-    const capturedEmployeeStyle = captureRowStyle(refRow)
+    // Capture data-row style from the template's first data row
+    const capturedEmployeeStyle = captureRowStyle(ws.getRow(dataStartRow))
 
-    const mergedCellRanges: string[] = []
-    if (oldTotalRow > 0) {
-      const totalSectionMerged = captureMergedCells(ws, oldTotalRow, oldTotalRow)
-      mergedCellRanges.push(...totalSectionMerged)
-    }
+    // Capture approval section rows (styles + values) before clearing
+    const approvalRows: { style: CapturedStyle; values: unknown[] }[] = []
+    const approvalMergedRanges = sheetMap.approvalStartRow > 0
+      ? captureMergedCells(ws, sheetMap.approvalStartRow, ws.rowCount)
+      : []
     if (sheetMap.approvalStartRow > 0) {
-      const approvalMerged = captureMergedCells(ws, sheetMap.approvalStartRow, ws.rowCount)
-      mergedCellRanges.push(...approvalMerged)
-    }
-
-    const approvalSection: { startRow: number; rowData: CapturedStyle[] } | null =
-      (sheetMap.approvalStartRow > 0 && oldTotalRow > 0 && oldTotalRow < sheetMap.approvalStartRow)
-        ? {
-            startRow: sheetMap.approvalStartRow,
-            rowData: (() => {
-              const result: CapturedStyle[] = []
-              for (let r = sheetMap.approvalStartRow; r <= ws.rowCount; r++) {
-                result.push(captureRowStyle(ws.getRow(r)))
-              }
-              return result
-            })(),
+      for (let r = sheetMap.approvalStartRow; r <= ws.rowCount; r++) {
+        const row = ws.getRow(r)
+        const rowValues: unknown[] = []
+        for (let c = 1; c <= 19; c++) {
+          const cell = row.getCell(c)
+          const v = cell.value
+          if (v === null || v === undefined) {
+            rowValues.push(null)
+          } else if (typeof v === 'object') {
+            const vo = v as unknown as Record<string, unknown>
+            if ('sharedFormula' in vo) {
+              rowValues.push(vo.result ?? null)
+            } else if ('formula' in vo) {
+              rowValues.push(vo.result ?? null)
+            } else if ('richText' in vo) {
+              rowValues.push((vo as any).text ?? null)
+            } else if (Array.isArray(v)) {
+              rowValues.push(null)
+            } else {
+              rowValues.push(String(v))
+            }
+          } else {
+            rowValues.push(v)
           }
-        : null
-
-    if (oldTotalRow >= referenceRowNum) {
-      const removeCount = oldTotalRow - referenceRowNum + 1
-      ws.spliceRows(referenceRowNum, removeCount)
+        }
+        approvalRows.push({ style: captureRowStyle(row), values: rowValues })
+      }
     }
 
-    const insertPos = referenceRowNum
+    // Remove ALL template content below the header row
+    const removeCount = Math.max(0, ws.rowCount - headerRow)
+    if (removeCount > 0) ws.spliceRows(dataStartRow, removeCount)
+
+    const insertPos = dataStartRow
 
     let no = 1
     for (const row of dataRows) {
@@ -487,21 +497,22 @@ export async function generateExcel(opts: GenerateExcelOptions): Promise<Generat
       cell.font = { bold: true }
     }
 
-    if (approvalSection) {
-      const afterTotal = totalRowNum + 1
-      for (let i = 0; i < approvalSection.rowData.length; i++) {
-        const targetRow = ws.getRow(afterTotal + i)
-        applyCapturedStyle(targetRow, approvalSection.rowData[i])
+    // Re-create approval section rows after the total row
+    if (approvalRows.length > 0) {
+      for (let i = 0; i < approvalRows.length; i++) {
+        const targetRow = ws.getRow(totalRowNum + 1 + i)
+        applyCapturedStyle(targetRow, approvalRows[i].style)
+        for (let c = 0; c < approvalRows[i].values.length; c++) {
+          if (approvalRows[i].values[c] !== null && approvalRows[i].values[c] !== undefined) {
+            targetRow.getCell(c + 1).value = approvalRows[i].values[c] as any
+          }
+        }
         targetRow.commit()
       }
     }
 
-    for (const rangeStr of mergedCellRanges) {
-      try {
-        ws.mergeCells(rangeStr)
-      } catch {
-        // ignore invalid merge ranges
-      }
+    for (const rangeStr of approvalMergedRanges) {
+      try { ws.mergeCells(rangeStr) } catch { /* ignore invalid merge ranges */ }
     }
 
     const titleRow = ws.getRow(1)
