@@ -146,6 +146,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         basicSalary: basic, workingDays, commission, overtime,
         incentive, allowance, otherDeduction: shortageLoan,
         pensionEligible: row.pensionEligible === true,
+        isNetIncentive: true,
       })
 
       if (monthlySalary > 0 && Math.abs(monthlySalary - expected.monthlySalary) > 1) {
