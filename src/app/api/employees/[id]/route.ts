@@ -168,6 +168,8 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     }
     if (data.dateOfBirth !== undefined) updateData.dateOfBirth = data.dateOfBirth ? new Date(data.dateOfBirth) : null
     if (data.hireDate !== undefined) updateData.hireDate = data.hireDate ? new Date(data.hireDate) : null
+    if (data.basicSalary !== undefined) updateData.basicSalary = data.basicSalary
+    if (data.salaryEffectiveDate !== undefined) updateData.salaryEffectiveDate = data.salaryEffectiveDate ? new Date(data.salaryEffectiveDate) : null
 
     if (data.firstName !== undefined || data.lastName !== undefined || data.middleName !== undefined) {
       updateData.fullName = [data.firstName ?? existing.firstName, data.middleName ?? existing.middleName, data.lastName ?? existing.lastName].filter(Boolean).join(' ')
@@ -188,6 +190,19 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     }
 
     updateData.updatedById = session.userId
+
+    // Create salary history record when basicSalary changes
+    if (data.basicSalary !== undefined && Number(data.basicSalary) !== Number(existing.basicSalary || 0)) {
+      await prisma.employeeSalary.create({
+        data: {
+          employeeId: id,
+          basicSalary: data.basicSalary,
+          effectiveDate: data.salaryEffectiveDate ? new Date(data.salaryEffectiveDate) : new Date(),
+          reason: 'Updated via profile edit',
+          createdById: session.userId,
+        },
+      })
+    }
 
     const employee = await prisma.employee.update({ where: { id }, data: updateData })
 
