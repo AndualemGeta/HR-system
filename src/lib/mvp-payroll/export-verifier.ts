@@ -67,10 +67,14 @@ function analyzeSheet(ws: ExcelJS.Worksheet): SheetLayout {
 function hasExternalLink(cell: ExcelJS.Cell): boolean {
   if (!cell.value) return false
   if (typeof cell.value === 'object' && 'sharedFormula' in cell.value) return true
-  if (cell.text && /\[[\d]+\]/.test(cell.text)) return true
+  // text containing [digits] is not an external link; skip
   if (typeof cell.value === 'object' && cell.value !== null) {
     const v = cell.value as unknown as Record<string, unknown>
-    if (typeof v.formula === 'string' && /\[.*?\]/.test(v.formula)) return true
+    if (typeof v.formula === 'string') {
+      // Internal sheet index refs like [1], [2] are NOT external links
+      // External links contain a filename or path in brackets
+      if (/\[[^\]]*[^\d\]]+\]/.test(v.formula)) return true
+    }
   }
   return false
 }
