@@ -70,6 +70,21 @@ function colToLetter(col: number): string {
   return s
 }
 
+function colToNumber(col: string): number {
+  let n = 0
+  for (const ch of col) {
+    n = n * 26 + (ch.charCodeAt(0) - 64)
+  }
+  return n
+}
+
+function removeRowsBelow(ws: ExcelJS.Worksheet, keepRowCount: number): void {
+  const anyWs = ws as unknown as { _rows?: unknown[]; _merges?: Record<string, unknown> }
+  const rows = anyWs._rows
+  if (Array.isArray(rows)) rows.length = keepRowCount
+  anyWs._merges = {}
+}
+
 export interface ManifestEntry {
   payrollRowId: string
   employeeId: string
@@ -246,10 +261,8 @@ function buildSupportingSheets(wb: ExcelJS.Workbook, rows: Partial<MvpPayrollRow
       })
     }
 
-    const existingDataEnd = summary.rowCount
     const dataStart = 3
-    const rowsToRemove = existingDataEnd - dataStart + 1
-    if (rowsToRemove > 0) summary.spliceRows(dataStart, rowsToRemove)
+    removeRowsBelow(summary, dataStart - 1)
 
     let r = dataStart
     for (const d of dataRows) {
@@ -303,10 +316,8 @@ function buildSupportingSheets(wb: ExcelJS.Workbook, rows: Partial<MvpPayrollRow
       })
     }
 
-    const existingDataEnd = overtime.rowCount
     const dataStart = 3
-    const rowsToRemove = existingDataEnd - dataStart + 1
-    if (rowsToRemove > 0) overtime.spliceRows(dataStart, rowsToRemove)
+    removeRowsBelow(overtime, dataStart - 1)
 
     let r = dataStart
     for (const d of otRows) {
@@ -337,14 +348,16 @@ function buildSupportingSheets(wb: ExcelJS.Workbook, rows: Partial<MvpPayrollRow
 function captureMergedCells(ws: ExcelJS.Worksheet, startRow: number, endRow: number): string[] {
   const ranges: string[] = []
   try {
-    const mc = (ws as unknown as { model?: { merges?: { range: string }[] } }).model?.merges
+    const mc = (ws as unknown as { model?: { merges?: unknown[] } }).model?.merges
     if (mc) {
       for (const m of mc) {
-        const match = m.range.match(/^(\$?[A-Z]+)\$?(\d+):(\$?[A-Z]+)\$?(\d+)$/)
+        const rangeStr = typeof m === 'string' ? m : (m as { range?: string }).range
+        if (!rangeStr) continue
+        const match = rangeStr.match(/^(\$?[A-Z]+)\$?(\d+):(\$?[A-Z]+)\$?(\d+)$/)
         if (match) {
           const r1 = parseInt(match[2], 10)
           const r2 = parseInt(match[4], 10)
-          if (r1 >= startRow && r2 <= endRow) ranges.push(m.range)
+          if (r1 >= startRow && r2 <= endRow) ranges.push(rangeStr)
         }
       }
     }
@@ -417,11 +430,28 @@ export async function generateExcel(opts: GenerateExcelOptions): Promise<Generat
 
     // Capture approval section rows (styles + values) before clearing
     const approvalRows: { style: CapturedStyle; values: unknown[] }[] = []
-    const approvalMergedRanges = sheetMap.approvalStartRow > 0
-      ? captureMergedCells(ws, sheetMap.approvalStartRow, ws.rowCount)
-      : []
-    if (sheetMap.approvalStartRow > 0) {
-      for (let r = sheetMap.approvalStartRow; r <= ws.rowCount; r++) {
+    const approvalMerges: { col1: number; rowOffset1: number; col2: number; rowOffset2: number }[] = []
+    const approvalFollowerCells = new Set<string>() // `${col}:${rowOffset}` merged non-master cells
+    const approvalStart = sheetMap.approvalStartRow
+    if (approvalStart > 0) {
+      const ranges = captureMergedCells(ws, approvalStart, ws.rowCount)
+      for (const range of ranges) {
+        const match = range.match(/^(\$?[A-Z]+)\$?(\d+):(\$?[A-Z]+)\$?(\d+)$/)
+        if (!match) continue
+        const col1 = colToNumber(match[1].replace('$', ''))
+        const col2 = colToNumber(match[3].replace('$', ''))
+        const rowOffset1 = parseInt(match[2], 10) - approvalStart
+        const rowOffset2 = parseInt(match[4], 10) - approvalStart
+        approvalMerges.push({ col1, rowOffset1, col2, rowOffset2 })
+        for (let rr = rowOffset1; rr <= rowOffset2; rr++) {
+          for (let cc = col1; cc <= col2; cc++) {
+            if (cc === col1 && rr === rowOffset1) continue // master keeps the value
+            approvalFollowerCells.add(`${cc}:${rr}`)
+          }
+        }
+      }
+
+      for (let r = approvalStart; r <= ws.rowCount; r++) {
         const row = ws.getRow(r)
         const rowValues: unknown[] = []
         for (let c = 1; c <= 19; c++) {
@@ -446,13 +476,14 @@ export async function generateExcel(opts: GenerateExcelOptions): Promise<Generat
             rowValues.push(v)
           }
         }
+        const hasContent = rowValues.some(v => v !== null && v !== undefined)
+        if (!hasContent) break
         approvalRows.push({ style: captureRowStyle(row), values: rowValues })
       }
     }
 
     // Remove ALL template content below the header row
-    const removeCount = Math.max(0, ws.rowCount - headerRow)
-    if (removeCount > 0) ws.spliceRows(dataStartRow, removeCount)
+    removeRowsBelow(ws, headerRow)
 
     const insertPos = dataStartRow
 
@@ -503,16 +534,20 @@ export async function generateExcel(opts: GenerateExcelOptions): Promise<Generat
         const targetRow = ws.getRow(totalRowNum + 1 + i)
         applyCapturedStyle(targetRow, approvalRows[i].style)
         for (let c = 0; c < approvalRows[i].values.length; c++) {
-          if (approvalRows[i].values[c] !== null && approvalRows[i].values[c] !== undefined) {
-            targetRow.getCell(c + 1).value = approvalRows[i].values[c] as any
-          }
+          const v = approvalRows[i].values[c]
+          if (v === null || v === undefined) continue
+          if (approvalFollowerCells.has(`${c + 1}:${i}`)) continue // merged follower, skip
+          targetRow.getCell(c + 1).value = v as any
         }
         targetRow.commit()
       }
-    }
 
-    for (const rangeStr of approvalMergedRanges) {
-      try { ws.mergeCells(rangeStr) } catch { /* ignore invalid merge ranges */ }
+      // Re-apply approval merges at the new position
+      for (const m of approvalMerges) {
+        const startRow = totalRowNum + 1 + m.rowOffset1
+        const endRow = totalRowNum + 1 + m.rowOffset2
+        try { ws.mergeCells(`${colToLetter(m.col1)}${startRow}:${colToLetter(m.col2)}${endRow}`) } catch { /* ignore */ }
+      }
     }
 
     const titleRow = ws.getRow(1)
